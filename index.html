@@ -3,7 +3,7 @@
 <title>Bloom: Blight</title>
 <style>html,body{margin:0;height:100%;overflow:hidden;background:#06050d;touch-action:none;
 font-family:ui-rounded,"SF Pro Rounded",system-ui,sans-serif;-webkit-user-select:none;user-select:none;cursor:crosshair}
-canvas{display:block;position:fixed;inset:0}</style></head><body><canvas id="c"></canvas><script>
+canvas{display:block;position:fixed;inset:0;width:100%;height:100%;pointer-events:auto;-webkit-tap-highlight-color:transparent}</style></head><body><canvas id="c"></canvas><script>
 const cv=c,ctx=cv.getContext('2d');let W,H;
 function resize(){const d=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;
  cv.width=W*d;cv.height=H*d;ctx.setTransform(d,0,0,d,0,0)}
@@ -17,7 +17,7 @@ function spot(pad){for(let i=0;i<100;i++){const x=40+Math.random()*(W-80),y=T0()
  if([...ems,...buds,...blights].every(o=>Math.hypot(o.x-x,o.y-y)>(pad||72)))return{x,y}}return null}
 function obt(){const s=new Set(ems.map(e=>e.c));for(const a of ems)for(const b of ems)if(a!==b)s.add(mix(a.c,b.c));return s}
 function mixable(){const s=new Set;for(const a of ems)for(const b of ems)if(a!==b&&a.c!==b.c)s.add(mix(a.c,b.c));return s}
-let AC;function beep(f,d,ty,v){try{AC=AC||new(AudioContext||webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();
+let AC;function beep(f,d,ty,v){try{const A=window.AudioContext||window.webkitAudioContext;if(!A)return;AC=AC||new A();const o=AC.createOscillator(),g=AC.createGain();
  o.type=ty||'sine';o.frequency.value=f;g.gain.value=v||.06;o.connect(g);g.connect(AC.destination);o.start();
  g.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+(d||.3));o.stop(AC.currentTime+(d||.3)+.02)}catch(e){}}
 function burst(x,y,c,n){for(let i=0;i<(n||18);i++){const a=Math.random()*6.283,s=40+Math.random()*170;
@@ -50,13 +50,23 @@ function fire(a,b,tau){const tA=now+Math.max(0,-tau),tB=now+Math.max(0,tau);
  shots.push({rings:[{x:a.x,y:a.y,c:a.c,t0:tA},{x:b.x,y:b.y,c:b.c,t0:tB}],cm:mix(a.c,b.c),trueMix:a.c!==b.c});
  a.cd=b.cd=CD;beep(150+a.c*30,.22,'triangle');setTimeout(()=>beep(150+b.c*30,.22,'triangle'),Math.abs(tau)*1000)}
 function fireOne(a){shots.push({rings:[{x:a.x,y:a.y,c:a.c,t0:now}],cm:a.c,trueMix:false});a.cd=CD*.55;beep(170+a.c*30,.22,'triangle')}
-function at(x,y){return ems.find(e=>Math.hypot(e.x-x,e.y-y)<24)}
+function at(x,y){return ems.find(e=>Math.hypot(e.x-x,e.y-y)<32)}
 function tap(x,y){const e=at(x,y);if(aim){fire(aim.a,aim.b,aim.tau);aim=null;sel=null;return}if(!e){sel=null;return}
  if(e.cd>0){beep(90,.12,'square',.03);return}if(!sel){sel=e;beep(520,.1,'sine',.04);return}
  if(e===sel){fireOne(e);sel=null;return}aim={a:sel,b:e,tau:tauFrom(sel,e,px,py)};beep(620,.12)}
-cv.addEventListener('pointerdown',e=>{kb=false;px=e.clientX;py=e.clientY;down={x:px,y:py,moved:0};tap(px,py)});
-cv.addEventListener('pointermove',e=>{px=e.clientX;py=e.clientY;if(down)down.moved=Math.max(down.moved,Math.hypot(px-down.x,py-down.y));if(aim)aim.tau=tauFrom(aim.a,aim.b,px,py)});
-cv.addEventListener('pointerup',()=>{if(aim&&down&&down.moved>14){fire(aim.a,aim.b,aim.tau);aim=null;sel=null}down=null});
+function pos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}}
+function press(e){e.preventDefault();kb=false;const p=pos(e);px=p.x;py=p.y;down={x:px,y:py,moved:0};tap(px,py)}
+function move(e){if(!down&&!aim)return;e.preventDefault();const p=pos(e);px=p.x;py=p.y;if(down)down.moved=Math.max(down.moved,Math.hypot(px-down.x,py-down.y));if(aim)aim.tau=tauFrom(aim.a,aim.b,px,py)}
+function release(e){if(e)e.preventDefault();if(aim&&down&&down.moved>14){fire(aim.a,aim.b,aim.tau);aim=null;sel=null}down=null}
+if(window.PointerEvent){
+ cv.addEventListener('pointerdown',e=>{try{cv.setPointerCapture(e.pointerId)}catch(_){}press(e)},{passive:false});
+ cv.addEventListener('pointermove',move,{passive:false});cv.addEventListener('pointerup',release,{passive:false});cv.addEventListener('pointercancel',release,{passive:false});
+}else{
+ cv.addEventListener('mousedown',press);addEventListener('mousemove',move);addEventListener('mouseup',release);
+ cv.addEventListener('touchstart',e=>press(e.changedTouches[0]),{passive:false});
+ cv.addEventListener('touchmove',e=>move(e.changedTouches[0]),{passive:false});
+ cv.addEventListener('touchend',e=>release(e.changedTouches[0]),{passive:false});
+}
 addEventListener('keydown',e=>{const k=e.key;if(k==='Escape'){aim=null;sel=null;return}
  if(k.startsWith('Arrow')){if(!kb){kb=true;kx=W/2;ky=(T0()+B0())/2}else if(aim)aim.tau+=((k==='ArrowRight')-(k==='ArrowLeft')+(k==='ArrowDown')-(k==='ArrowUp'))*.06;
   else{const d=e.shiftKey?9:28;kx+=((k==='ArrowRight')-(k==='ArrowLeft'))*d;ky+=((k==='ArrowDown')-(k==='ArrowUp'))*d;kx=Math.max(8,Math.min(W-8,kx));ky=Math.max(T0(),Math.min(B0(),ky))}e.preventDefault();return}
@@ -88,7 +98,7 @@ function draw(){ctx.save();if(shake>0)ctx.translate((Math.random()-.5)*shake,(Ma
  if(aim){const pts=path(aim.a,aim.b,aim.tau),cm=mix(aim.a.c,aim.b.c),col=COLS[cm];ctx.globalAlpha=.5;ctx.strokeStyle=col;ctx.lineWidth=1.6;ctx.setLineDash([2,5]);
   for(const key of['1','2']){ctx.beginPath();pts.forEach((p,i)=>{const X=p['x'+key],Y=p['y'+key];i?ctx.lineTo(X,Y):ctx.moveTo(X,Y)});ctx.stroke()}ctx.setLineDash([]);
   let nt=TICK;for(const p of pts){if(p.t<nt)continue;nt+=TICK;ctx.globalAlpha=.85;ctx.fillStyle=col;for(const key of['1','2']){ctx.beginPath();ctx.arc(p['x'+key],p['y'+key],2.6,0,6.29);ctx.fill()}}
-  for(const b of buds)if(b.c===cm){ctx.strokeStyle=COLS[b.c];for(let t=TICK;t<Math.min(6,(pts.at(-1)||{t:0}).t);t+=TICK){const gp=drift(b,t);ctx.globalAlpha=.35*(1-t/6);ctx.beginPath();ctx.arc(gp.x,gp.y,b.rare?10:7,0,6.29);ctx.stroke()}}
+  for(const b of buds)if(b.c===cm){ctx.strokeStyle=COLS[b.c];for(let t=TICK;t<Math.min(6,(pts.length?pts[pts.length-1]:{t:0}).t);t+=TICK){const gp=drift(b,t);ctx.globalAlpha=.35*(1-t/6);ctx.beginPath();ctx.arc(gp.x,gp.y,b.rare?10:7,0,6.29);ctx.stroke()}}
   ctx.globalAlpha=.28;ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(aim.a.x,aim.a.y);ctx.lineTo(aim.b.x,aim.b.y);ctx.stroke()}
  for(const b of buds){const c=COLS[b.c],got=b.rare?m.has(b.c):o.has(b.c),k=b.born,p=1+Math.sin(T*2.4+b.ph)*.06;ctx.globalAlpha=(got?.9:.28)*k;ctx.strokeStyle=c;ctx.lineWidth=got?2.4:1.5;
   if(b.rare){ctx.save();ctx.translate(b.x,b.y);ctx.rotate(T*.35+b.ph);ctx.setLineDash(got?[]:[3,6]);diamond(0,0,15*k*p);ctx.stroke();ctx.setLineDash([]);ctx.rotate(-T*.7-b.ph*2);ctx.globalAlpha*=.65;diamond(0,0,9*k);ctx.stroke();ctx.restore()}
