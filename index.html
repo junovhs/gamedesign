@@ -2,1385 +2,805 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>PACKHOUSE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>PACKHOUSE — Juicy Shift</title>
 <style>
-  html,body{margin:0;padding:0;height:100%;background:#1a120b;overflow:hidden;
-    -webkit-tap-highlight-color:transparent;touch-action:none;overscroll-behavior:none;}
-  canvas{display:block;width:100%;height:100%;}
-  *{user-select:none;-webkit-user-select:none;}
+  html,body{margin:0;height:100%;overflow:hidden;background:#07142c;touch-action:none;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+  canvas{display:block;width:100%;height:100%}
+  *{box-sizing:border-box;user-select:none;-webkit-user-select:none}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c" aria-label="PACKHOUSE produce packing puzzle"></canvas>
 <script>
 "use strict";
+
 /* ============================================================
-   PACKHOUSE — a produce-packing puzzle toy
-   One gesture: tap matching produce to pack it into baskets, crates, and trucks.
+   PACKHOUSE V2 — controlled packing puzzle
+
+   Design commitments:
+   1. The tapped cell is the package landing choice.
+   2. Automatic chains use only the committed board state.
+      New supply never joins the current chain.
+   3. Every stage is deterministic and always remains playable.
+   4. There is no move-limit failure state.
+   5. Internal names use the same grounded language as the UI.
    ============================================================ */
 
-const cv = document.getElementById('c');
-const ctx = cv.getContext('2d');
-let W=0,H=0,DPR=1;
+const cv=document.getElementById('c');
+const ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1,SAFE_TOP=0,SAFE_BOTTOM=0;
+const COLS=7,ROWS=8;
+let cell=48,bx=0,by=0,bw=0,bh=0,topH=122,bottomH=94;
 
-const COLS=7, ROWS=8;
-let cell=48, bx=0, by=0, bw=0, bh=0, topH=110, botH=92;
-let ST=0, SB=0; // safe-area insets (notch / home indicator)
 function measureSafeArea(){
-  try{
-    const d=document.createElement('div');
-    d.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;visibility:hidden;'+
-      'padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);';
-    document.body.appendChild(d);
-    const cs=getComputedStyle(d);
-    ST=parseFloat(cs.paddingTop)||0; SB=parseFloat(cs.paddingBottom)||0;
-    d.remove();
-  }catch(e){ ST=0; SB=0; }
+  const d=document.createElement('div');
+  d.style.cssText='position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+  document.body.appendChild(d);
+  const cs=getComputedStyle(d);
+  SAFE_TOP=parseFloat(cs.paddingTop)||0;
+  SAFE_BOTTOM=parseFloat(cs.paddingBottom)||0;
+  d.remove();
 }
-
 function layout(){
-  topH = Math.max(88, Math.min(126, H*0.155)) + ST;
-  botH = Math.max(74, Math.min(104, H*0.13)) + SB;
-  const availW = W-22, availH = H-topH-botH-16;
-  cell = Math.floor(Math.min(availW/COLS, availH/ROWS));
-  bw = cell*COLS; bh = cell*ROWS;
-  bx = Math.round((W-bw)/2);
-  by = Math.round(topH + (availH-bh)/2 + 4);
+  topH=Math.max(106,Math.min(144,H*.17))+SAFE_TOP;
+  bottomH=Math.max(82,Math.min(112,H*.14))+SAFE_BOTTOM;
+  const aw=W-20, ah=H-topH-bottomH-12;
+  cell=Math.floor(Math.min(aw/COLS,ah/ROWS));
+  bw=cell*COLS; bh=cell*ROWS;
+  bx=Math.round((W-bw)/2); by=Math.round(topH+(ah-bh)/2);
 }
 function resize(){
-  DPR = Math.min(2, window.devicePixelRatio||1);
-  W = window.innerWidth; H = window.innerHeight;
-  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=innerWidth; H=innerHeight;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
   cv.style.width=W+'px'; cv.style.height=H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
   layout();
 }
-window.addEventListener('resize', resize);
+addEventListener('resize',resize);
 
-/* ---------------- palette ---------------- */
-const COLORS = [
-  {c:'#e94f45', d:'#9f251f', g:'rgba(233,79,69,',   name:'apples'},
-  {c:'#f29b38', d:'#ad5a16', g:'rgba(242,155,56,',  name:'oranges'},
-  {c:'#79b84a', d:'#3f7726', g:'rgba(121,184,74,',  name:'pears'},
-  {c:'#7857b8', d:'#432b78', g:'rgba(120,87,184,',  name:'berries'}
+/* ---------- vivid produce palette ---------- */
+const PRODUCE=[
+  {name:'apple', plural:'apples', main:'#ff3f66', dark:'#a90e3c', light:'#ff9db2', leaf:'#64e572'},
+  {name:'orange',plural:'oranges',main:'#ff9b1c',dark:'#c54a08',light:'#ffd26f',leaf:'#72df62'},
+  {name:'pear',plural:'pears',main:'#8fe23c',dark:'#328f29',light:'#d7ff7e',leaf:'#34c96b'},
+  {name:'berry',plural:'berries',main:'#995cff',dark:'#4d20a9',light:'#dabdff',leaf:'#5de28e'}
 ];
-const INK='#fff8e8', INK_DIM='rgba(255,248,232,0.65)', INK_FAINT='rgba(255,248,232,0.32)';
-const GLASS='#ffd38a';
+const INK='#f8fbff',DIM='rgba(238,247,255,.68)',FAINT='rgba(238,247,255,.34)';
+const CYAN='#66e8ff',GOLD='#ffd36b',MINT='#79ffc7';
 
-/* ---------------- audio ---------------- */
-let AC=null, master=null, droneGain=null, droneFilter=null, muted=false;
-function initAudio(){
-  if(AC) return;
-  try{
-    AC = new (window.AudioContext||window.webkitAudioContext)();
-    master = AC.createGain(); master.gain.value = 0.5; master.connect(AC.destination);
-    droneGain = AC.createGain(); droneGain.gain.value = 0.0; droneGain.connect(master);
-    droneFilter = AC.createBiquadFilter(); droneFilter.type='lowpass';
-    droneFilter.frequency.value=420; droneFilter.Q.value=2; droneFilter.connect(droneGain);
-    [55, 82.41, 110.0, 164.81].forEach((f,i)=>{
-      const o=AC.createOscillator(); o.type = i===3?'triangle':'sine';
-      o.frequency.value=f*(1+ (i%2?0.004:-0.003));
-      const g=AC.createGain(); g.gain.value = i===3?0.10:0.22;
-      o.connect(g); g.connect(droneFilter); o.start();
-    });
-    setDrone(0.05);
-  }catch(e){ AC=null; }
+/* ---------- deterministic supply ---------- */
+function mulberry32(seed){
+  return function(){
+    seed|=0; seed=seed+0x6D2B79F5|0;
+    let t=Math.imul(seed^seed>>>15,1|seed);
+    t=t+Math.imul(t^t>>>7,61|t)^t;
+    return ((t^t>>>14)>>>0)/4294967296;
+  };
 }
-function setDrone(v){
-  if(!AC||!droneGain) return;
-  const t=AC.currentTime;
-  droneGain.gain.cancelScheduledValues(t);
-  droneGain.gain.linearRampToValueAtTime(muted?0:v, t+0.25);
-  droneFilter.frequency.linearRampToValueAtTime(340 + v*2600, t+0.3);
+function shuffleWithRng(a,rng){
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
 }
-function tone(freq, dur=0.16, type='sine', vol=0.18, slide=0, delay=0){
-  if(!AC||muted) return;
-  const t=AC.currentTime+delay;
-  const o=AC.createOscillator(), g=AC.createGain();
-  o.type=type; o.frequency.setValueAtTime(freq,t);
-  if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(28,freq*slide), t+dur);
-  g.gain.setValueAtTime(0.0001,t);
-  g.gain.exponentialRampToValueAtTime(vol,t+0.012);
-  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
-  o.connect(g); g.connect(master); o.start(t); o.stop(t+dur+0.03);
-}
-function noise(dur=0.4, vol=0.22, freq=900, sweep=0.15){
-  if(!AC||muted) return;
-  const t=AC.currentTime;
-  const n = AC.createBufferSource();
-  const len = Math.floor(AC.sampleRate*dur);
-  const buf = AC.createBuffer(1,len,AC.sampleRate);
-  const d = buf.getChannelData(0);
-  for(let i=0;i<len;i++) d[i] = (Math.random()*2-1)*(1-i/len);
-  n.buffer=buf;
-  const f=AC.createBiquadFilter(); f.type='bandpass'; f.frequency.setValueAtTime(freq,t);
-  f.frequency.exponentialRampToValueAtTime(Math.max(80,freq*sweep), t+dur);
-  f.Q.value=1.1;
-  const g=AC.createGain(); g.gain.value=vol;
-  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
-  n.connect(f); f.connect(g); g.connect(master); n.start(t); n.stop(t+dur);
-}
-const SCALE=[0,2,4,7,9,12,14,16,19,21,24,26,28];
-function noteHz(i){ return 220*Math.pow(2, SCALE[Math.max(0,Math.min(SCALE.length-1,i))]/12); }
-function sfxTap(){ tone(520,0.06,'sine',0.10); }
-function sfxBad(){ tone(120,0.14,'square',0.07,0.7); }
-function sfxMerge(tier,chain){
-  const base = (tier-1)*2 + Math.min(8,chain-1);
-  tone(noteHz(base+2),0.20,'triangle',0.20);
-  tone(noteHz(base+5),0.28,'sine',0.13,1,0.04);
-  if(chain>1) tone(noteHz(base+9),0.32,'sine',0.09,1,0.09);
-}
-function sfxSpawn(){ tone(880,0.05,'sine',0.05); }
-function sfxPrism(){
-  tone(noteHz(9),0.6,'triangle',0.22,2.0);
-  tone(noteHz(12),0.5,'sine',0.14,2.0,0.03);
-}
-function sfxBoom(){ noise(0.7,0.28,1600,0.06); tone(70,0.7,'sine',0.25,0.4); }
-function sfxGlass(){
-  noise(0.35,0.16,4200,0.3);
-  [12,16,19,24].forEach((n,i)=>tone(noteHz(n),0.5,'sine',0.12,1,i*0.045));
-}
-function sfxFizzle(){ tone(300,0.5,'sawtooth',0.10,0.25); }
-function sfxUI(){ tone(660,0.07,'triangle',0.10); }
-function sfxWin(){ [0,4,7,11,14].forEach((n,i)=>tone(noteHz(n+4),0.6,'triangle',0.16,1,i*0.09)); }
-function sfxLose(){ [10,7,4,0].forEach((n,i)=>tone(noteHz(n),0.5,'sine',0.13,0.9,i*0.11)); }
 
-/* ---------------- run + stage data ---------------- */
-const STAGES = [
-  { name:"Morning Sort", sub:"the first carts have arrived",
-    moves:14, colors:3, stones:0, relics:0, goal:{b2:5},
-    hint:"Tap two or more matching loose fruits. They pack into a basket." },
-  { name:"Crate Orders", sub:"the farm stand needs larger loads",
-    moves:16, colors:3, stones:0, relics:0, goal:{b3:3},
-    hint:"Matching baskets pack into a crate. Choose where the crate lands." },
-  { name:"Delivery Day", sub:"a truck is due before closing",
-    moves:18, colors:3, stones:0, relics:1, goal:{prism:1},
-    hint:"Pack crates into a truck, then tap the truck to ship that produce." },
-  { name:"Crowded Floor", sub:"broken pallets block the packing lanes",
-    moves:20, colors:3, stones:3, relics:1, goal:{relic:1},
-    hint:"A truck loads matching produce and anything directly beside its route." },
-  { name:"Market Rush", sub:"four crops, several equipment deliveries",
-    moves:22, colors:4, stones:4, relics:2, goal:{relic:2, prism:1},
-    hint:"Two trucks parked together can clear the entire loading floor." },
-  { name:"Closing Bell", sub:"fill every order before the doors shut",
-    moves:26, colors:4, stones:5, relics:3, goal:{relic:3},
-    hint:"Use everything you learned: pack, position, ship, and save time." }
+/* ---------- stage data ---------- */
+const STAGES=[
+  {name:'Fresh Sort',sub:'learn where the package lands',seed:1081,colors:3,bulk:false,pallets:0,equipment:0,goal:{baskets:5},
+   hint:'Tap a matching group. The package lands on the exact item you tap.'},
+  {name:'Crate Logic',sub:'use landing position to build chains',seed:2189,colors:3,bulk:false,pallets:0,equipment:0,goal:{crates:3},
+   hint:'A white sparkle marks a landing cell that will chain immediately.'},
+  {name:'Bulk Orders',sub:'large groups skip one package size',seed:3779,colors:3,bulk:true,pallets:0,equipment:0,goal:{crates:5},
+   hint:'Groups of five or more bulk-pack two sizes at once.'},
+  {name:'Dispatch Bay',sub:'park a truck where it matters',seed:4813,colors:3,bulk:true,pallets:2,equipment:1,goal:{trucks:1,equipment:1},
+   hint:'A truck delivers equipment only when parked directly beside its crate.'},
+  {name:'Market Rush',sub:'four crops and a crowded loading floor',seed:6397,colors:4,bulk:true,pallets:4,equipment:2,goal:{trucks:2,equipment:2},
+   hint:'A waiting truck leaves after three later actions. Dispatch now or build beside it.'},
+  {name:'Fleet Day',sub:'engineer two neighbouring trucks',seed:7919,colors:4,bulk:true,pallets:5,equipment:3,goal:{fleet:1,equipment:3},
+   hint:'Two neighbouring trucks coordinate a fleet pickup and clear the floor.'}
 ];
 
-const VERBS = [
-  {id:'shift',  name:'Handcart',   verb:'MOVE',    desc:"Move one item into a neighbouring space once each shift."},
-  {id:'ember',  name:'Crowbar',    verb:'CLEAR',   desc:"Remove one item or broken pallet once each shift."},
-  {id:'sight',  name:'Order Sheet',verb:'PLAN',    desc:"Highlight every packable group and show which move will chain."},
-  {id:'keep',   name:'Cold Room',  verb:'STORE',   desc:"Carry your best packed load into the next shift."}
+const TOOLS=[
+  {id:'handcart',name:'Handcart',verb:'MOVE',desc:'Move one item into a neighbouring space once each shift.'},
+  {id:'crowbar',name:'Crowbar',verb:'CLEAR',desc:'Remove one item or broken pallet once each shift.'},
+  {id:'orderSheet',name:'Order Sheet',verb:'PLAN',desc:'Show every packable group and the exact landing cells that chain.'},
+  {id:'coldRoom',name:'Cold Room',verb:'STORE',desc:'Carry your best surviving package into the next shift.'}
 ];
 
-const CODEX = [
-  {id:'bloom',  t:"Pack",        x:"Tap two or more touching items with the same produce and package size. They pack into the square you tapped."},
-  {id:'chain',  t:"Efficient run",x:"If the new package lands beside matching packages, the workers pack again automatically. Three packs in one run save a move."},
-  {id:'leap',   t:"Bulk pack",   x:"Five or more matching items fill two package sizes at once. A large pile can go straight into a crate."},
-  {id:'prism',  t:"Delivery truck",x:"Pack crates into a truck. Tap it to collect every remaining item of that produce and leave the loading floor."},
-  {id:'fuse',   t:"Departure time",x:"A truck waits for three moves. Ship it now, or risk waiting for a second truck before it leaves."},
-  {id:'nova',   t:"Fleet pickup",x:"Two trucks parked side by side can take every load on the floor in one coordinated pickup."},
-  {id:'stone',  t:"Broken pallet",x:"A broken pallet blocks a space. A nearby truck can carry it away, or a crowbar can clear it immediately."},
-  {id:'glass',  t:"Equipment crate",x:"Load an equipment crate beside a departing truck. Its tool is added permanently to the tool shed."}
-];
-
-let run = null;
-function newRun(){
-  run = { stage:0, relics:0, lumens:0, verbs:{}, codex:{}, keptPiece:null, best:{} };
+const SAVE_KEY='packhouse-v2-save';
+let run;
+function freshRun(){return {stage:0,totalReceipts:0,equipmentDelivered:0,tools:{},known:{},bestActions:{},stored:null};}
+function loadRun(){
+  try{const v=JSON.parse(localStorage.getItem(SAVE_KEY));run=Object.assign(freshRun(),v||{});}catch(e){run=freshRun();}
 }
-function unlockVerb(){
-  const idx = run.relics-1;
-  if(idx>=0 && idx<VERBS.length && !run.verbs[VERBS[idx].id]){
-    run.verbs[VERBS[idx].id]=true;
-    return VERBS[idx];
-  }
+function saveRun(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(run));}catch(e){}}
+function unlockNextTool(){
+  const index=run.equipmentDelivered-1;
+  const tool=TOOLS[index];
+  if(tool&&!run.tools[tool.id]){run.tools[tool.id]=true;saveRun();return tool;}
   return null;
 }
-function learn(id){
-  if(!run.codex[id]){ run.codex[id]=true; codexPulse=1.6; }
+function learn(id){run.known[id]=true;saveRun();}
+
+/* ---------- audio ---------- */
+let AC=null,master=null,muted=false;
+function initAudio(){
+  if(AC)return;
+  try{AC=new (AudioContext||webkitAudioContext)();master=AC.createGain();master.gain.value=.42;master.connect(AC.destination);}catch(e){AC=null;}
 }
-let codexPulse=0;
-
-/* ---------------- board state ---------------- */
-let grid=[];         // grid[r][c] = piece|null
-let flying=[];       // pieces animating into a merge, no longer on grid
-let particles=[];
-let rings=[];
-let floats=[];       // floating text
-let shake=0, chainGlow=0, whiteFlash=0;
-let busy=false;
-let chain=0, bestChain=0;
-let st=null;         // per-round state
-let uid=1;
-
-function makePiece(color, tier, kind){
-  return { id:uid++, color, tier:tier||1, kind:kind||'mote',
-           r:0,c:0, px:0,py:0, vx:0,vy:0, tr:null,tc:null,
-           scale:1, sv:0, pop:0, rot:Math.random()*6.28, spin:(Math.random()-0.5)*0.4,
-           flash:0, fuse:0, bornMove:-99, doomed:false, shrink:false, hint:0 };
+function tone(freq,dur=.14,type='sine',vol=.12,slide=1,delay=0){
+  if(!AC||muted)return;
+  const t=AC.currentTime+delay,o=AC.createOscillator(),g=AC.createGain();
+  o.type=type;o.frequency.setValueAtTime(freq,t);if(slide!==1)o.frequency.exponentialRampToValueAtTime(Math.max(30,freq*slide),t+dur);
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+.03);
 }
-function at(r,c){ return (r<0||c<0||r>=ROWS||c>=COLS)?null:grid[r][c]; }
+function noise(dur=.35,vol=.14,freq=1300){
+  if(!AC||muted)return;
+  const t=AC.currentTime,n=AC.createBufferSource(),len=Math.floor(AC.sampleRate*dur),buf=AC.createBuffer(1,len,AC.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*(1-i/len);
+  n.buffer=buf;const f=AC.createBiquadFilter(),g=AC.createGain();f.type='bandpass';f.frequency.value=freq;f.Q.value=1;g.gain.value=vol;g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  n.connect(f);f.connect(g);g.connect(master);n.start(t);n.stop(t+dur);
+}
+const SCALE=[0,2,4,7,9,12,14,16,19,21,24];
+const hz=i=>220*Math.pow(2,SCALE[Math.max(0,Math.min(SCALE.length-1,i))]/12);
+function sfxMerge(tier,chain){tone(hz(tier+chain),.18,'triangle',.16);tone(hz(tier+chain+3),.24,'sine',.10,1,0.04);}
+function sfxBad(){tone(120,.13,'square',.06,.72);}
+function sfxTap(){tone(620,.05,'sine',.08);}
+function sfxTruck(){noise(.55,.22,1500);tone(72,.6,'sine',.22,.45);}
+function sfxTool(){[5,8,10].forEach((n,i)=>tone(hz(n),.45,'triangle',.12,1,i*.06));}
+function sfxWin(){[2,5,8,10].forEach((n,i)=>tone(hz(n),.5,'triangle',.14,1,i*.08));}
 
-function randColor(){ return Math.floor(Math.random()*st.colors); }
+/* ---------- board state ---------- */
+let grid=[],flying=[],particles=[],rings=[],floaters=[];
+let uid=1,busy=false,chain=0,bestChain=0,shake=0,flash=0,t=0;
+let stageState=null,screen='title',previousScreen='play';
+let hintText='',hintTime=0;
+let uiButtons=[],pressedButton=null,pointerDown=null;
+let keyboardActive=false,keyRow=ROWS-1,keyCol=Math.floor(COLS/2);
+
+function makePiece(color,tier=1,kind='produce'){
+  return {id:uid++,color,tier,kind,r:0,c:0,px:0,py:0,vx:0,vy:0,pop:0,flash:0,hint:0,scale:1,targetR:null,targetC:null,shrinking:false,wait:0,bornAction:-1};
+}
+function at(r,c){return r<0||c<0||r>=ROWS||c>=COLS?null:grid[r][c];}
+function boardX(c){return bx+c*cell+cell/2;}
+function boardY(r){return by+r*cell+cell/2;}
+function tierName(t){return ['produce','basket','crate','truck'][Math.min(3,t-1)];}
+function hint(s,time=4){hintText=s;hintTime=time;}
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+function supplyFill(n=40){
+  while(stageState.supply.length<n){
+    const bag=[];
+    for(let repeat=0;repeat<3;repeat++)for(let c=0;c<stageState.colors;c++)bag.push(c);
+    shuffleWithRng(bag,stageState.rng);
+    stageState.supply.push(...bag);
+  }
+}
+function peekSupply(n=7){supplyFill(n);return stageState.supply.slice(0,n);}
+function takeSupply(){supplyFill(1);return stageState.supply.shift();}
+
+function openingColor(r,c){
+  // Fixed stage seed plus a structured stripe bias: deterministic, readable,
+  // and guaranteed to begin with several possible groups.
+  const stripe=(c+Math.floor(r/2)+stageState.index)%stageState.colors;
+  return stageState.rng()<.52?stripe:Math.floor(stageState.rng()*stageState.colors);
+}
 
 function buildBoard(){
-  grid=[]; flying=[]; particles=[]; rings=[]; floats=[];
-  for(let r=0;r<ROWS;r++){ grid.push(new Array(COLS).fill(null)); }
-  for(let c=0;c<COLS;c++){
-    let lastCol=null;
-    for(let r=0;r<ROWS;r++){
-      const col=(lastCol!==null && Math.random()<0.38)?lastCol:randColor();
-      lastCol=col;
-      const p=makePiece(col,1,'mote');
-      p.r=r;p.c=c;p.px=c;p.py=r-ROWS-1;
-      grid[r][c]=p;
-    }
+  grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  flying=[];particles=[];rings=[];floaters=[];
+
+  // Cold Room package is reserved before obstacles are placed, so it can never erase a goal object.
+  let reserved=null;
+  if(run.tools.coldRoom&&run.stored){reserved={r:ROWS-1,c:Math.floor(COLS/2)};}
+
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const p=makePiece(openingColor(r,c),1,'produce');
+    p.r=r;p.c=c;p.px=c;p.py=r-ROWS-1;grid[r][c]=p;
   }
-  // seed a few tier-2s in later stages so the board reads as "in progress"
-  if(run.stage>=2){
-    for(let i=0;i<2+run.stage;i++){
-      const r=2+Math.floor(Math.random()*(ROWS-3)), c=Math.floor(Math.random()*COLS);
-      if(grid[r][c] && grid[r][c].kind==='mote') grid[r][c].tier=2;
-    }
+
+  if(reserved){
+    const p=makePiece(run.stored.color,run.stored.tier,'produce');
+    p.r=reserved.r;p.c=reserved.c;p.px=reserved.c;p.py=-2;p.flash=1;
+    grid[reserved.r][reserved.c]=p;
+    hint('The Cold Room returned your '+tierName(p.tier)+'.');
+    run.stored=null;saveRun();
   }
-  // stones
+
   const spots=[];
-  for(let r=Math.floor(ROWS/2);r<ROWS;r++) for(let c=0;c<COLS;c++) spots.push([r,c]);
-  shuffle(spots);
+  for(let r=3;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(reserved&&reserved.r===r&&reserved.c===c)continue;
+    spots.push([r,c]);
+  }
+  shuffleWithRng(spots,stageState.rng);
   let si=0;
-  for(let i=0;i<st.stones;i++){
-    const [r,c]=spots[si++]; const p=makePiece(0,1,'stone'); p.r=r;p.c=c;p.px=c;p.py=r-ROWS-2; grid[r][c]=p;
+  for(let i=0;i<stageState.pallets;i++){
+    const [r,c]=spots[si++],p=makePiece(0,1,'pallet');p.r=r;p.c=c;p.px=c;p.py=r-ROWS-2;grid[r][c]=p;
   }
-  for(let i=0;i<st.relics;i++){
-    const [r,c]=spots[si++]; const p=makePiece(0,1,'relic'); p.r=r;p.c=c;p.px=c;p.py=r-ROWS-2; grid[r][c]=p;
+  for(let i=0;i<stageState.equipment;i++){
+    const [r,c]=spots[si++],p=makePiece(0,1,'equipment');p.r=r;p.c=c;p.px=c;p.py=r-ROWS-2;grid[r][c]=p;
   }
-  // kept piece from last round
-  if(run.verbs.keep && run.keptPiece){
-    const c=Math.floor(COLS/2);
-    const p=makePiece(run.keptPiece.color, run.keptPiece.tier, 'mote');
-    p.r=ROWS-1;p.c=c;p.px=c;p.py=-2; p.flash=1;
-    grid[ROWS-1][c]=p;
-    hint("The cold room saved your "+tierName(p.tier)+".");
-    run.keptPiece=null;
-  }
-  // avoid an opening board with no move
-  let guard=0;
-  while(!anyMove() && guard++<40) reshuffle(true);
-}
-function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); const t=a[i];a[i]=a[j];a[j]=t;} }
 
-function startStage(i){
-  run.stage=i;
-  const S=STAGES[i];
-  st = { cfg:S, moves:S.moves, movesUsed:0, colors:S.colors, stones:S.stones||0, relics:S.relics||0,
-         b2:0,b3:0,prism:0,relic:0, lumens:0, done:false, over:false, sight:false,
-         charges:{shift: run.verbs.shift?1:0, ember: run.verbs.ember?1:0}, armed:null, shiftFrom:null };
-  chain=0; bestChain=0; busy=false; whiteFlash=0;
+  ensurePlayable();
+}
+
+function startStage(index){
+  const cfg=STAGES[index];
+  run.stage=index;
+  stageState={index,cfg,colors:cfg.colors,pallets:cfg.pallets,equipment:cfg.equipment,bulk:cfg.bulk,
+    rng:mulberry32(cfg.seed),supply:[],actions:0,receipts:0,baskets:0,crates:0,trucks:0,fleet:0,equipmentDelivered:0,
+    complete:false,charges:{handcart:run.tools.handcart?1:0,crowbar:run.tools.crowbar?1:0},armed:null,handcartFrom:null,orderSheet:false};
+  busy=false;chain=0;bestChain=0;flash=0;
   buildBoard();
-  screen='play';
-  hintText = S.hint; hintTime = 5.2;
-  setDrone(0.06);
+  screen='play';hint(cfg.hint,5.5);saveRun();
 }
 
-function tierName(t){ return ['loose produce','basket','crate','truck'][Math.min(3,t-1)]; }
-
-/* ---------------- grouping / logic ---------------- */
-function floodGroup(r,c){
-  const p0=at(r,c);
-  if(!p0||p0.kind!=='mote') return [];
-  const seen=new Set([p0.id]); const out=[p0]; const stack=[p0];
+/* ---------- grouping and deterministic simulation ---------- */
+function floodGroup(r,c,board=grid){
+  const start=(r<0||c<0||r>=ROWS||c>=COLS)?null:board[r][c];
+  if(!start||start.kind!=='produce')return[];
+  const out=[start],stack=[start],seen=new Set([start.id]);
   while(stack.length){
     const p=stack.pop();
-    const n=[[p.r-1,p.c],[p.r+1,p.c],[p.r,p.c-1],[p.r,p.c+1]];
-    for(const [rr,cc] of n){
-      const q=at(rr,cc);
-      if(q && !seen.has(q.id) && q.kind==='mote' && q.color===p0.color && q.tier===p0.tier){
-        seen.add(q.id); out.push(q); stack.push(q);
-      }
+    for(const [rr,cc] of [[p.r-1,p.c],[p.r+1,p.c],[p.r,p.c-1],[p.r,p.c+1]]){
+      const q=(rr<0||cc<0||rr>=ROWS||cc>=COLS)?null:board[rr][cc];
+      if(q&&q.kind==='produce'&&!seen.has(q.id)&&q.color===start.color&&q.tier===start.tier){seen.add(q.id);out.push(q);stack.push(q);}
     }
   }
   return out;
 }
-function anyMove(){
+function anyMove(board=grid){
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const p=grid[r][c];
-    if(!p||p.kind!=='mote') continue;
-    if(p.tier>=4) return true;
-    if(floodGroup(r,c).length>=2) return true;
+    const p=board[r][c];
+    if(!p||p.kind!=='produce')continue;
+    if(p.tier>=4||floodGroup(r,c,board).length>=2)return true;
   }
   return false;
 }
-function reshuffle(silent){
-  const motes=[];
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ const p=grid[r][c]; if(p&&p.kind==='mote') motes.push(p); }
-  const cols = motes.map(p=>p.color);
-  shuffle(cols);
-  motes.forEach((p,i)=>{ p.color=cols[i]; if(!silent){ p.pop=0.5; p.flash=0.5; } });
-  if(!silent){ hint("The sorting table is reshuffled."); tone(300,0.5,'sine',0.10,1.6); }
+function ensurePlayable(){
+  if(anyMove())return;
+  // Deterministically create one adjacent pair at the top without changing fixed objects.
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS-1;c++){
+    const a=grid[r][c],b=grid[r][c+1];
+    if(a&&b&&a.kind==='produce'&&b.kind==='produce'&&a.tier===1&&b.tier===1){b.color=a.color;b.flash=1;return;}
+  }
+  // If the board is almost entirely fixed objects, clear one non-goal pallet rather than deadlock.
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(grid[r][c]?.kind==='pallet'){grid[r][c]=null;refillBoard();return;}
 }
-
-const wait = ms => new Promise(res=>setTimeout(res, ms));
-
-function px(c){ return bx + c*cell + cell/2; }
-function py(r){ return by + r*cell + cell/2; }
-
-function burstParticles(x,y,color,n,power){
-  for(let i=0;i<n;i++){
-    const a=Math.random()*Math.PI*2, s=(0.4+Math.random())*power;
-    particles.push({x,y,vx:Math.cos(a)*s, vy:Math.sin(a)*s-0.4, life:1, decay:0.012+Math.random()*0.02,
-      size:cell*(0.03+Math.random()*0.09), col:color, rot:Math.random()*6.3, spin:(Math.random()-0.5)*0.5, shard:Math.random()<0.4});
-  }
-  if(particles.length>900) particles.splice(0, particles.length-900);
-}
-function ring(x,y,col,rad,w){ rings.push({x,y,r:cell*0.2,max:rad,col,life:1,w:w||3}); }
-function floatText(x,y,txt,col,size){ floats.push({x,y,txt,col:col||INK,life:1,size:size||16,vy:-0.7}); }
-
-/* ---------------- actions ---------------- */
-async function attemptAct(r,c){
-  if(busy||st.over) return;
-  const p=at(r,c);
-
-  // armed abilities
-  if(st.armed==='ember'){
-    if(!p){ sfxBad(); return; }
-    st.armed=null; st.charges.ember=0;
-    busy=true;
-    p.flash=1; burstParticles(px(c),py(r),'#ffd7a0',22,3.2); ring(px(c),py(r),'#ffd7a0',cell*1.2,3);
-    tone(180,0.5,'sawtooth',0.16,0.4); noise(0.3,0.12,2400,0.2);
-    grid[r][c]=null;
-    shake=Math.max(shake,4);
-    await wait(140);
-    await settle();
-    spendMove(0);
-    busy=false; afterResolve();
-    return;
-  }
-  if(st.armed==='shift'){
-    if(!st.shiftFrom){
-      if(!p){ sfxBad(); return; }
-      st.shiftFrom={r,c}; sfxUI(); hint("Now tap a neighbour.");
-      return;
-    } else {
-      const f=st.shiftFrom;
-      const d=Math.abs(f.r-r)+Math.abs(f.c-c);
-      if(d!==1){ st.shiftFrom=(p?{r,c}:null); sfxBad(); return; }
-      const a=grid[f.r][f.c], b=grid[r][c];
-      grid[f.r][f.c]=b; grid[r][c]=a;
-      if(a){ a.r=r;a.c=c;a.pop=0.35; }
-      if(b){ b.r=f.r;b.c=f.c;b.pop=0.35; }
-      st.armed=null; st.shiftFrom=null; st.charges.shift=0;
-      tone(700,0.14,'triangle',0.14,1.4);
-      busy=true;
-      await wait(200); await settle(); spendMove(0);
-      busy=false; afterResolve();
-      return;
-    }
-  }
-
-  if(!p){ sfxBad(); return; }
-  if(p.kind==='stone'){ sfxBad(); p.pop=0.4; hint("Broken pallet. Load it beside a truck, or clear it with the crowbar."); learn('stone'); return; }
-  if(p.kind==='relic'){ sfxBad(); p.pop=0.4; hint("Equipment crate. Park a truck beside it and dispatch the load."); learn('glass'); return; }
-
-  if(p.tier>=4){ await prismAction(p); return; }
-
-  const group=floodGroup(r,c);
-  if(group.length<2){
-    sfxBad(); p.pop=0.45; p.hint=1;
-    hint("That item needs a touching match: same produce, same package size.");
-    return;
-  }
-  busy=true; chain=0;
-  spendMove(1);
-  await doMerge(group,p);
-  await wait(60);
-  busy=false; afterResolve();
-}
-
-function spendMove(n){
-  st.moves-=n; st.movesUsed+=n;
-  if(n>0) decayFuses();
-}
-function decayFuses(){
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const p=grid[r][c];
-    if(p && p.kind==='mote' && p.tier>=4 && p.bornMove < st.movesUsed){
-      p.fuse--;
-      if(p.fuse<=0){
-        grid[r][c]=null;
-        burstParticles(px(p.c),py(p.r),COLORS[p.color].c,18,2.0);
-        noise(0.35,0.10,180,0.5); tone(92,0.4,'triangle',0.12,0.7);
-        hint("A waiting truck left before you could load it.");
-      }
-    }
-  }
-}
-
-async function doMerge(group, target){
-  chain++; bestChain=Math.max(bestChain,chain);
-  chainGlow=Math.min(1.4, 0.4+chain*0.22);
-  setDrone(Math.min(0.32, 0.06+chain*0.06));
-  const tier=target.tier;
-  const col=COLORS[target.color];
-  learn('bloom');
-  if(chain>1) learn('chain');
-
-  // anticipation
-  for(const g of group){ g.pop=0.35+0.1*chain; g.flash=0.7; }
-  sfxMerge(tier, chain);
-  await wait(90 + (chain>1?40:0));
-
-  const others = group.filter(g=>g!==target);
-  for(const g of others){
-    grid[g.r][g.c]=null;
-    g.tr=target.r; g.tc=target.c; g.shrink=true;
-    flying.push(g);
-  }
-  await wait(150);
-  for(const g of flying){ burstParticles(px(target.c),py(target.r),col.c,4,1.2); }
-  flying.length=0;
-
-  // grow the target — five or more kin leap two tiers
-  const gained = group.length;
-  const leap = gained>=5 ? 2 : 1;
-  if(leap===2){ learn('leap'); floatText(px(target.c),py(target.r)-cell*0.8,"BULK PACK",'#ffffff',18); tone(noteHz(14),0.4,'triangle',0.16,1.6); }
-  target.tier = Math.min(4, tier+leap);
-  target.pop = 0.9; target.flash=1;
-  const X=px(target.c), Y=py(target.r);
-  ring(X,Y,col.c, cell*(1.0+0.35*target.tier), 2+target.tier);
-  burstParticles(X,Y,col.c, 10+gained*5, 1.4+0.5*target.tier);
-  shake=Math.max(shake, 1.5+target.tier*1.2 + chain);
-
-  const pts = 10*tier*gained*chain;
-  st.lumens += pts;
-  floatText(X, Y-cell*0.4, "+"+pts, col.c, 15+Math.min(12,chain*2));
-  if(chain>=2) floatText(X, Y-cell*0.85, "CHAIN "+chain, INK, 13+Math.min(10,chain*2));
-
-  if(target.tier>=2) st.b2++;
-  if(target.tier>=3) st.b3++;
-  if(target.tier===4){
-    target.fuse=3; target.bornMove=st.movesUsed;
-    learn('prism'); learn('fuse');
-    sfxPrism(); shake=Math.max(shake,9);
-    hint("Truck ready. Tap to ship now, or build a second truck beside it before departure.");
-  }
-
-  // an efficient packing run saves time
-  if(chain===3){
-    st.moves++;
-    floatText(X,Y-cell*1.15,"+1 MOVE",'#fff3c2',16);
-    tone(noteHz(12),0.34,'triangle',0.12,1.3);
-    hint("Three automatic packs in one run saved a move.");
-  }
-
-  await wait(170);
-  await settle();
-
-  // auto-chain: does the new piece now stand beside its own kind?
-  if(target.tier<4){
-    const g2=floodGroup(target.r,target.c);
-    if(g2.length>=2){
-      await wait(90);
-      await doMerge(g2, target);
-      return;
-    }
-  }
-  chainGlow=Math.max(chainGlow,0.3);
-  setDrone(0.06);
-}
-
-function breakFixed(q){
-  const X=px(q.c), Y=py(q.r);
-  if(q.kind==='relic'){
-    grid[q.r][q.c]=null;
-    st.relic++; run.relics++;
-    burstParticles(X,Y,GLASS,42,3.4);
-    burstParticles(X,Y,'#ffe6a8',20,2.4);
-    ring(X,Y,GLASS,cell*2.2,4); ring(X,Y,'#ffe6a8',cell*1.4,2);
-    floatText(X,Y-cell*0.5,"TOOL",GLASS,20);
-    sfxGlass(); shake=Math.max(shake,12); learn('glass');
-    const v=unlockVerb();
-    if(v){ hint(v.name+" added to the tool shed."); }
-  } else {
-    grid[q.r][q.c]=null;
-    burstParticles(X,Y,'#8ea0bd',26,2.6);
-    ring(X,Y,'#8ea0bd',cell*1.3,3);
-    noise(0.28,0.16,900,0.2); shake=Math.max(shake,6); learn('stone');
-  }
-}
-
-async function prismAction(p){
-  // nova if touching another prism
-  const nb=[[p.r-1,p.c],[p.r+1,p.c],[p.r,p.c-1],[p.r,p.c+1]];
-  let partner=null;
-  for(const [rr,cc] of nb){ const q=at(rr,cc); if(q&&q.kind==='mote'&&q.tier>=4) partner=q; }
-  busy=true; spendMove(1);
-  if(partner) await nova(p,partner);
-  else await detonate(p);
-  busy=false; afterResolve();
-}
-
-async function detonate(p){
-  const col=COLORS[p.color];
-  p.pop=1.2; p.flash=1;
-  ring(px(p.c),py(p.r),col.c,cell*1.4,4);
-  tone(noteHz(4),0.35,'sine',0.16,2.4);
-  await wait(230);
-  const doomed=[];
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const q=grid[r][c];
-    if(q && q.kind==='mote' && q.color===p.color) doomed.push(q);
-  }
-  if(!doomed.includes(p)) doomed.push(p);
-  const fixed=new Set();
-  for(const q of doomed){
-    const nb=[[q.r-1,q.c],[q.r+1,q.c],[q.r,q.c-1],[q.r,q.c+1]];
-    for(const [rr,cc] of nb){ const f=at(rr,cc); if(f&&(f.kind==='stone'||f.kind==='relic')) fixed.add(f); }
-  }
-  sfxBoom(); shake=Math.max(shake,20); whiteFlash=Math.max(whiteFlash,0.35);
-  ring(px(p.c),py(p.r),col.c,Math.max(bw,bh)*1.1,6);
-  let i=0;
-  for(const q of doomed){
-    grid[q.r][q.c]=null;
-    burstParticles(px(q.c),py(q.r),col.c,12,2.4);
-    tone(noteHz(6+(i%7)),0.22,'sine',0.07,1,i*0.014);
-    i++;
-  }
-  const pts = doomed.length*45;
-  st.lumens += pts; st.prism++;
-  floatText(px(p.c),py(p.r)-cell*0.5,"+"+pts,col.c,22);
-  await wait(180);
-  for(const f of fixed) breakFixed(f);
-  await wait(220);
-  await settle();
-  chainGlow=1.2; setDrone(0.06);
-}
-
-async function nova(a,b){
-  learn('nova');
-  whiteFlash=1; shake=Math.max(shake,26);
-  sfxBoom(); sfxGlass();
-  [a,b].forEach(p=>{ ring(px(p.c),py(p.r),'#ffffff',Math.max(bw,bh)*1.3,8); });
-  hint("FLEET PICKUP");
-  await wait(260);
-  const relics=[];
-  let count=0;
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const q=grid[r][c];
-    if(!q) continue;
-    if(q.kind==='relic'){ relics.push(q); continue; }
-    grid[r][c]=null; count++;
-    burstParticles(px(c),py(r),q.kind==='stone'?'#8ea0bd':COLORS[q.color].c,10,3.0);
-  }
-  for(let i=0;i<10;i++) tone(noteHz(i+6),0.5,'sine',0.09,1,i*0.05);
-  st.prism++;
-  const pts=count*40;
-  st.lumens+=pts;
-  floatText(W/2, by+bh/2, "+"+pts, '#ffffff', 28);
-  await wait(240);
-  for(const q of relics) breakFixed(q);
-  await wait(260);
-  await settle();
-  setDrone(0.06);
-}
-
-async function settle(){
-  let anySpawn=false;
+function compactBoard(board=grid,animate=true){
   for(let c=0;c<COLS;c++){
     let write=ROWS-1;
     for(let r=ROWS-1;r>=0;r--){
-      const p=grid[r][c];
-      if(p){
-        if(write!==r){ grid[write][c]=p; grid[r][c]=null; p.r=write; }
-        write--;
-      }
-    }
-    let k=1, lastCol=null;
-    const below = at(write+1,c);
-    if(below && below.kind==='mote') lastCol=below.color;
-    for(let r=write;r>=0;r--){
-      // produce arrives in batches: the same crop often follows itself down a chute
-      const col = (lastCol!==null && Math.random()<0.42) ? lastCol : randColor();
-      lastCol = col;
-      const p=makePiece(col, Math.random()<(run.stage>=3?0.05:0.0)?2:1, 'mote');
-      p.r=r;p.c=c;p.px=c;p.py=-k-0.4; k++;
-      grid[r][c]=p; anySpawn=true;
+      const p=board[r][c];
+      if(!p)continue;
+      if(write!==r){board[write][c]=p;board[r][c]=null;p.r=write;p.c=c;if(!animate){p.px=c;p.py=write;}}
+      write--;
     }
   }
-  if(anySpawn) sfxSpawn();
-  await wait(300);
+}
+function cloneBoard(){
+  return grid.map(row=>row.map(p=>p?{id:p.id,color:p.color,tier:p.tier,kind:p.kind,r:p.r,c:p.c,marker:false}:null));
+}
+function simulateLanding(r,c){
+  const board=cloneBoard(),target=board[r][c];
+  if(!target||target.kind!=='produce'||target.tier>=4)return null;
+  const group=floodGroup(r,c,board);
+  if(group.length<2)return null;
+  const leap=stageState.bulk&&group.length>=5?2:1;
+  for(const q of group)if(q!==target)board[q.r][q.c]=null;
+  target.tier=Math.min(4,target.tier+leap);target.marker=true;
+  compactBoard(board,false);
+  let located=null;
+  for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)if(board[rr][cc]?.marker)located=board[rr][cc];
+  if(!located)return null;
+  const next=located.tier<4?floodGroup(located.r,located.c,board):[];
+  return {groupSize:group.length,leap,chain:next.length>=2,resultTier:located.tier,finalR:located.r,finalC:located.c};
+}
+function chainDepthForLanding(r,c){
+  // A compact deterministic preview used by the Order Sheet. It follows only
+  // existing pieces and stops before supply enters.
+  const board=cloneBoard();
+  let target=board[r][c],depth=0;
+  if(!target||target.kind!=='produce'||target.tier>=4)return 0;
+  while(target&&target.tier<4){
+    const group=floodGroup(target.r,target.c,board);
+    if(group.length<2)break;
+    depth++;
+    const leap=stageState.bulk&&group.length>=5?2:1;
+    for(const q of group)if(q!==target)board[q.r][q.c]=null;
+    target.tier=Math.min(4,target.tier+leap);target.marker=true;
+    compactBoard(board,false);
+    target=null;
+    for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)if(board[rr][cc]?.marker){target=board[rr][cc];target.marker=false;}
+  }
+  return depth;
+}
+
+/* ---------- effects ---------- */
+function ring(x,y,color,max,width=3){rings.push({x,y,r:cell*.2,max,color,width,life:1});}
+function burst(x,y,color,count=18,power=2){
+  for(let i=0;i<count;i++){
+    const a=Math.random()*Math.PI*2,s=(.35+Math.random())*power;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-.4,life:1,decay:.016+Math.random()*.018,size:cell*(.025+Math.random()*.075),color,rot:Math.random()*6.28,spin:(Math.random()-.5)*.4});
+  }
+  if(particles.length>700)particles.splice(0,particles.length-700);
+}
+function floatText(x,y,text,color=INK,size=16){floaters.push({x,y,text,color,size,life:1,vy:-.65});}
+
+/* ---------- actions ---------- */
+function ageWaitingTrucks(exemptId=null){
+  const leaving=[];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const p=grid[r][c];
+    if(p&&p.kind==='produce'&&p.tier>=4&&p.id!==exemptId&&p.bornAction<stageState.actions){p.wait--;if(p.wait<=0)leaving.push(p);}
+  }
+  for(const p of leaving){
+    if(grid[p.r][p.c]===p)grid[p.r][p.c]=null;
+    burst(boardX(p.c),boardY(p.r),PRODUCE[p.color].main,18,2);floatText(boardX(p.c),boardY(p.r),'DEPARTED',DIM,13);
+    tone(92,.42,'triangle',.10,.75);hint('A waiting truck departed. You can always build another.');
+  }
+}
+function countAction(exemptTruckId=null){stageState.actions++;ageWaitingTrucks(exemptTruckId);}
+
+async function attemptAction(r,c){
+  if(busy||screen!=='play')return;
+  const p=at(r,c);
+
+  if(stageState.armed==='crowbar'){
+    if(!p){sfxBad();return;}
+    stageState.armed=null;stageState.charges.crowbar=0;busy=true;countAction();
+    grid[r][c]=null;burst(boardX(c),boardY(r),'#d9f4ff',26,3);ring(boardX(c),boardY(r),CYAN,cell*1.4,4);noise(.25,.14,2300);
+    await wait(170);await compactAndRefill();busy=false;afterAction();return;
+  }
+
+  if(stageState.armed==='handcart'){
+    if(!stageState.handcartFrom){if(!p){sfxBad();return;}stageState.handcartFrom={r,c};hint('Now tap a neighbouring space.');return;}
+    const f=stageState.handcartFrom,d=Math.abs(f.r-r)+Math.abs(f.c-c);
+    if(d!==1){sfxBad();stageState.handcartFrom=p?{r,c}:null;return;}
+    const a=grid[f.r][f.c],b=grid[r][c];grid[f.r][f.c]=b;grid[r][c]=a;
+    if(a){a.r=r;a.c=c;a.pop=.5;}if(b){b.r=f.r;b.c=f.c;b.pop=.5;}
+    stageState.armed=null;stageState.handcartFrom=null;stageState.charges.handcart=0;busy=true;countAction();tone(760,.15,'triangle',.13,1.35);
+    await wait(220);busy=false;afterAction();return;
+  }
+
+  if(!p){sfxBad();return;}
+  if(p.kind==='pallet'){p.hint=1;sfxBad();hint('Broken pallet: clear it with the Crowbar or park a truck beside it.');learn('pallet');return;}
+  if(p.kind==='equipment'){p.hint=1;sfxBad();hint('Equipment crate: park a truck directly beside it, then dispatch.');learn('equipment');return;}
+  if(p.tier>=4){await dispatchTruck(p);return;}
+
+  const group=floodGroup(r,c);
+  if(group.length<2){p.hint=1;sfxBad();hint('Match touching items with the same produce and package size.');return;}
+
+  busy=true;chain=0;countAction();
+  await resolveMerge(group,p);
+  await refillBoard();
+  busy=false;afterAction();
+}
+
+async function resolveMerge(group,target){
+  chain++;bestChain=Math.max(bestChain,chain);
+  const oldTier=target.tier,color=PRODUCE[target.color],leap=stageState.bulk&&group.length>=5?2:1;
+  sfxMerge(oldTier,chain);
+  for(const q of group){q.pop=.4+chain*.08;q.flash=.8;}
+  await wait(100);
+
+  for(const q of group){
+    if(q===target)continue;
+    grid[q.r][q.c]=null;q.targetR=target.r;q.targetC=target.c;q.shrinking=true;flying.push(q);
+  }
+  await wait(150);flying.length=0;
+
+  target.tier=Math.min(4,oldTier+leap);target.pop=1;target.flash=1;
+  const x=boardX(target.c),y=boardY(target.r);
+  burst(x,y,color.main,12+group.length*4,1.5+target.tier*.35);ring(x,y,color.light,cell*(1+target.tier*.28),2+target.tier);
+  shake=Math.max(shake,2+target.tier+chain);
+  const points=10*oldTier*group.length*chain;stageState.receipts+=points;floatText(x,y-cell*.38,'+'+points,color.light,15+Math.min(8,chain*2));
+  if(leap===2){floatText(x,y-cell*.82,'BULK +2',GOLD,15);learn('bulk');}
+  if(chain>1){floatText(x,y-cell*1.05,'CHAIN '+chain,INK,14);learn('chain');}
+
+  if(target.tier===2)stageState.baskets++;
+  if(target.tier===3)stageState.crates++;
+  if(target.tier===4){target.wait=3;target.bornAction=stageState.actions;learn('truck');hint('Truck ready. Dispatch it, or risk three later actions to build a neighbour.');}
+
+  await wait(150);
+  compactBoard(grid,true);
+  await wait(240);
+
+  // Crucial rule: only the committed board may continue this chain.
+  if(target.tier<4){
+    const next=floodGroup(target.r,target.c);
+    if(next.length>=2){await wait(80);await resolveMerge(next,target);}
+  }
+}
+
+async function compactAndRefill(){compactBoard(grid,true);await wait(230);await refillBoard();}
+async function refillBoard(){
+  // Supply enters only after the entire player-created chain is finished.
+  let spawned=false;
+  for(let c=0;c<COLS;c++){
+    let missing=0;for(let r=0;r<ROWS;r++)if(!grid[r][c])missing++;
+    let k=missing;
+    for(let r=missing-1;r>=0;r--){
+      if(grid[r][c])continue;
+      const p=makePiece(takeSupply(),1,'produce');p.r=r;p.c=c;p.px=c;p.py=-k-.5;k--;grid[r][c]=p;spawned=true;
+    }
+  }
+  if(spawned)tone(930,.05,'sine',.045);
+  await wait(300);ensurePlayable();
+}
+
+function adjacentFixed(p){
+  const out=[];
+  for(const [rr,cc] of [[p.r-1,p.c],[p.r+1,p.c],[p.r,p.c-1],[p.r,p.c+1]]){
+    const q=at(rr,cc);if(q&&(q.kind==='pallet'||q.kind==='equipment'))out.push(q);
+  }
+  return out;
+}
+async function removeFixed(q){
+  if(grid[q.r][q.c]!==q)return;
+  grid[q.r][q.c]=null;
+  const x=boardX(q.c),y=boardY(q.r);
+  if(q.kind==='equipment'){
+    stageState.equipmentDelivered++;run.equipmentDelivered++;
+    burst(x,y,GOLD,44,3.4);ring(x,y,GOLD,cell*2.1,4);floatText(x,y-cell*.4,'TOOL DELIVERED',GOLD,17);sfxTool();learn('equipment');
+    const tool=unlockNextTool();if(tool)hint(tool.name+' added to the Tool Shed.');
+  }else{burst(x,y,'#86b8d8',24,2.6);ring(x,y,'#86b8d8',cell*1.3,3);noise(.25,.13,900);learn('pallet');}
+}
+async function dispatchTruck(truck){
+  const neighbour=[[truck.r-1,truck.c],[truck.r+1,truck.c],[truck.r,truck.c-1],[truck.r,truck.c+1]].map(([r,c])=>at(r,c)).find(q=>q&&q.kind==='produce'&&q.tier>=4);
+  busy=true;countAction(truck.id);
+  if(neighbour)await fleetPickup(truck,neighbour);else await singleDispatch(truck);
+  await refillBoard();busy=false;afterAction();
+}
+async function singleDispatch(truck){
+  const color=PRODUCE[truck.color],fixed=adjacentFixed(truck),doomed=[];
+  truck.pop=1;truck.flash=1;ring(boardX(truck.c),boardY(truck.r),color.light,cell*1.5,4);await wait(200);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const q=grid[r][c];if(q&&q.kind==='produce'&&q.color===truck.color)doomed.push(q);
+  }
+  // Visible route lines make the global collection rule causal.
+  ctx.save();ctx.restore();
+  sfxTruck();flash=.32;shake=Math.max(shake,18);
+  for(const q of doomed){
+    grid[q.r][q.c]=null;burst(boardX(q.c),boardY(q.r),color.main,10,2.2);
+    routeLines.push({x1:boardX(q.c),y1:boardY(q.r),x2:boardX(truck.c),y2:boardY(truck.r),color:color.light,life:1});
+  }
+  stageState.trucks++;stageState.receipts+=doomed.length*45;floatText(boardX(truck.c),boardY(truck.r)-cell*.5,'DISPATCHED',color.light,20);
+  await wait(220);for(const q of fixed)await removeFixed(q);compactBoard(grid,true);await wait(240);
+}
+async function fleetPickup(a,b){
+  learn('fleet');sfxTruck();sfxTool();flash=1;shake=Math.max(shake,25);hint('FLEET PICKUP');await wait(250);
+  const equipment=[];let count=0;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const q=grid[r][c];if(!q)continue;
+    if(q.kind==='equipment'){equipment.push(q);continue;}
+    grid[r][c]=null;count++;burst(boardX(c),boardY(r),q.kind==='pallet'?'#86b8d8':PRODUCE[q.color].main,10,2.8);
+  }
+  stageState.fleet++;stageState.trucks+=2;stageState.receipts+=count*40;floatText(W/2,by+bh/2,'FLEET PICKUP',INK,27);
+  await wait(220);for(const q of equipment)await removeFixed(q);compactBoard(grid,true);await wait(240);
 }
 
 function goalMet(){
-  const g=st.cfg.goal;
-  if(g.b2!==undefined && st.b2<g.b2) return false;
-  if(g.b3!==undefined && st.b3<g.b3) return false;
-  if(g.prism!==undefined && st.prism<g.prism) return false;
-  if(g.relic!==undefined && st.relic<g.relic) return false;
-  return true;
+  const g=stageState.cfg.goal;
+  return (g.baskets===undefined||stageState.baskets>=g.baskets)&&
+         (g.crates===undefined||stageState.crates>=g.crates)&&
+         (g.trucks===undefined||stageState.trucks>=g.trucks)&&
+         (g.fleet===undefined||stageState.fleet>=g.fleet)&&
+         (g.equipment===undefined||stageState.equipmentDelivered>=g.equipment);
 }
-
-function afterResolve(){
-  if(st.over) return;
-  const met=goalMet();
-  if(met && !st.done){
-    st.done=true;
-    hint("Orders filled. Close the shift, or keep packing for a better score.");
-    sfxWin();
-  }
-  if(st.moves<=0){
-    endRound(met);
-    return;
-  }
-  if(!anyMove()) reshuffle(false);
+function afterAction(){
+  if(goalMet()&&!stageState.complete){stageState.complete=true;sfxWin();hint('Orders filled. Close the shift, or keep packing for a better result.',5);}
+  ensurePlayable();
 }
-
-function endRound(win){
-  st.over=true; st.win=win;
-  if(win){
-    const bonus = Math.max(0,st.moves)*15;
-    st.bonus=bonus; st.lumens+=bonus;
-    run.lumens+=st.lumens;
-    run.best[run.stage]=Math.max(run.best[run.stage]||0, st.lumens);
-    // KEEP: carry brightest surviving piece
-    if(run.verbs.keep){
-      let best=null;
-      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-        const p=grid[r][c];
-        if(p&&p.kind==='mote'&&(!best||p.tier>best.tier)) best=p;
-      }
-      if(best && best.tier>=2) run.keptPiece={color:best.color, tier:Math.min(3,best.tier)};
+function closeShift(){
+  if(!stageState.complete)return;
+  run.totalReceipts+=stageState.receipts;
+  const prior=run.bestActions[stageState.index];
+  run.bestActions[stageState.index]=prior===undefined?stageState.actions:Math.min(prior,stageState.actions);
+  if(run.tools.coldRoom){
+    let best=null;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const p=grid[r][c];if(p&&p.kind==='produce'&&p.tier<4&&(!best||p.tier>best.tier))best=p;
     }
-    sfxWin();
-  } else {
-    sfxLose();
+    if(best&&best.tier>=2)run.stored={color:best.color,tier:Math.min(3,best.tier)};
   }
-  setDrone(0.03);
-  screen='result';
+  saveRun();screen='result';
 }
 
-function hint(t){ hintText=t; hintTime=4.0; }
-let hintText='', hintTime=0;
-
-/* ---------------- screens ---------------- */
-let screen='title';   // title | play | result | cabinet | codex
-let prevScreen='play';
-let t=0;
-
-/* ---------------- update ---------------- */
+/* ---------- animation ---------- */
 function spring(p){
-  const tr = p.tr!==null?p.tr:p.r, tc = p.tc!==null?p.tc:p.c;
-  p.vy += (tr-p.py)*0.42; p.vy*=0.70; p.py+=p.vy;
-  p.vx += (tc-p.px)*0.42; p.vx*=0.70; p.px+=p.vx;
-  p.pop *= 0.86; if(p.pop<0.001)p.pop=0;
-  p.flash *= 0.90; if(p.flash<0.002)p.flash=0;
-  p.hint *= 0.93;
-  p.rot += p.spin*0.02*(p.tier>=3?3:1);
-  if(p.shrink) p.scale = Math.max(0, p.scale-0.10);
+  const tr=p.targetR!==null?p.targetR:p.r,tc=p.targetC!==null?p.targetC:p.c;
+  p.vy+=(tr-p.py)*.42;p.vy*=.7;p.py+=p.vy;
+  p.vx+=(tc-p.px)*.42;p.vx*=.7;p.px+=p.vx;
+  p.pop*=.86;p.flash*=.9;p.hint*=.92;if(p.shrinking)p.scale=Math.max(0,p.scale-.1);
 }
+let routeLines=[];
 function update(dt){
   t+=dt;
-  // The title screen exists before a stage board is built. Iterate only rows
-  // that actually exist so the first animation frame cannot crash to black.
-  for(let r=0;r<grid.length;r++){
-    const row=grid[r];
-    if(!row) continue;
-    for(let c=0;c<row.length;c++){ const p=row[c]; if(p) spring(p); }
-  }
-  for(const p of flying) spring(p);
-  for(let i=particles.length-1;i>=0;i--){
-    const q=particles[i];
-    q.x+=q.vx*cell*0.06; q.y+=q.vy*cell*0.06; q.vy+=0.09; q.vx*=0.985;
-    q.rot+=q.spin; q.life-=q.decay*1.6;
-    if(q.life<=0) particles.splice(i,1);
-  }
-  for(let i=rings.length-1;i>=0;i--){
-    const g=rings[i]; g.r += (g.max-g.r)*0.14; g.life-=0.035;
-    if(g.life<=0) rings.splice(i,1);
-  }
-  for(let i=floats.length-1;i>=0;i--){
-    const f=floats[i]; f.y+=f.vy; f.vy*=0.97; f.life-=0.014;
-    if(f.life<=0) floats.splice(i,1);
-  }
-  shake*=0.86; if(shake<0.05)shake=0;
-  chainGlow*=0.95;
-  whiteFlash*=0.88;
-  codexPulse*=0.97;
-  if(hintTime>0) hintTime-=dt;
+  for(const row of grid)if(row)for(const p of row)if(p)spring(p);
+  for(const p of flying)spring(p);
+  for(let i=particles.length-1;i>=0;i--){const q=particles[i];q.x+=q.vx*cell*.06;q.y+=q.vy*cell*.06;q.vy+=.09;q.vx*=.985;q.rot+=q.spin;q.life-=q.decay;if(q.life<=0)particles.splice(i,1);}
+  for(let i=rings.length-1;i>=0;i--){const q=rings[i];q.r+=(q.max-q.r)*.15;q.life-=.034;if(q.life<=0)rings.splice(i,1);}
+  for(let i=floaters.length-1;i>=0;i--){const q=floaters[i];q.y+=q.vy;q.vy*=.97;q.life-=.015;if(q.life<=0)floaters.splice(i,1);}
+  for(let i=routeLines.length-1;i>=0;i--){routeLines[i].life-=.04;if(routeLines[i].life<=0)routeLines.splice(i,1);}
+  shake*=.84;flash*=.86;if(hintTime>0)hintTime-=dt;
 }
 
-/* ---------------- drawing helpers ---------------- */
-function rr(x,y,w,h,r){
-  ctx.beginPath();
-  r=Math.min(r,w/2,h/2);
-  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
-}
-function poly(x,y,rad,n,rot){
-  ctx.beginPath();
-  for(let i=0;i<n;i++){
-    const a=rot+i*Math.PI*2/n;
-    const px2=x+Math.cos(a)*rad, py2=y+Math.sin(a)*rad;
-    if(i===0)ctx.moveTo(px2,py2); else ctx.lineTo(px2,py2);
-  }
-  ctx.closePath();
-}
-function txt(s,x,y,size,col,align,weight){
-  ctx.font=(weight||600)+' '+size+'px ui-rounded, "Avenir Next", "Segoe UI", system-ui, sans-serif';
-  ctx.textAlign=align||'center'; ctx.textBaseline='middle';
-  ctx.fillStyle=col||INK; ctx.fillText(s,x,y);
-}
-function measure(s,size,weight){
-  ctx.font=(weight||600)+' '+size+'px ui-rounded, "Avenir Next", "Segoe UI", system-ui, sans-serif';
-  return ctx.measureText(s).width;
+/* ---------- drawing helpers ---------- */
+function rr(x,y,w,h,r){ctx.beginPath();r=Math.min(r,w/2,h/2);ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
+function txt(s,x,y,size,color=INK,align='center',weight=700){ctx.font=weight+' '+size+'px ui-rounded,"Avenir Next","Segoe UI",system-ui,sans-serif';ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;ctx.fillText(s,x,y);}
+function measureText(s,size,weight=700){ctx.font=weight+' '+size+'px ui-rounded,"Avenir Next","Segoe UI",system-ui,sans-serif';return ctx.measureText(s).width;}
+function wrapText(text,x,y,maxWidth,lineHeight,size,color=INK,align='left'){
+  ctx.font='600 '+size+'px ui-rounded,"Avenir Next","Segoe UI",system-ui,sans-serif';ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;
+  const words=text.split(' ');let line='';
+  for(const word of words){const test=line?line+' '+word:word;if(ctx.measureText(test).width>maxWidth&&line){ctx.fillText(line,x,y);y+=lineHeight;line=word;}else line=test;}
+  if(line){ctx.fillText(line,x,y);y+=lineHeight;}return y;
 }
 
-/* ---------------- background ---------------- */
-function drawBG(){
-  const g=ctx.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,'#6c3f1f'); g.addColorStop(0.48,'#3a2415'); g.addColorStop(1,'#17100b');
-  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-  // sun through dusty packhouse windows
-  const rg=ctx.createRadialGradient(W*0.18,H*0.08,0,W*0.18,H*0.08,Math.max(W,H)*0.9);
-  rg.addColorStop(0,'rgba(255,220,145,0.20)'); rg.addColorStop(1,'rgba(255,190,90,0)');
-  ctx.fillStyle=rg; ctx.fillRect(0,0,W,H);
-  // wooden wall boards
-  ctx.strokeStyle='rgba(255,224,170,0.055)'; ctx.lineWidth=1;
-  for(let y=0;y<H;y+=34){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-  // drifting dust
+function drawBackground(){
+  const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#112b64');g.addColorStop(.45,'#0b1c45');g.addColorStop(1,'#071127');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  const glow=ctx.createRadialGradient(W*.18,H*.08,0,W*.18,H*.08,Math.max(W,H)*.85);glow.addColorStop(0,'rgba(93,240,255,.28)');glow.addColorStop(.42,'rgba(112,96,255,.10)');glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
+  for(let i=0;i<26;i++){
+    const x=(i*91+t*(7+i%4))%(W+40)-20,y=(i*67+Math.sin(t*.4+i)*28)%(H+30)-15;
+    ctx.fillStyle='rgba(150,242,255,'+(.04+(i%5)*.012)+')';ctx.beginPath();ctx.arc(x,y,1+(i%3),0,Math.PI*2);ctx.fill();
+  }
+  // clean luminous conveyor stripes, not rustic wood
+  ctx.strokeStyle='rgba(128,226,255,.055)';ctx.lineWidth=1;
+  for(let y=0;y<H;y+=38){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y+12);ctx.stroke();}
+}
+
+function drawFruit(color,rad){
+  const p=PRODUCE[color];
   ctx.save();
-  for(let i=0;i<30;i++){
-    const s=(i*37)%100/100;
-    const x=(s*W + Math.sin(t*0.22+i)*18)%W;
-    const y=(t*(4+s*7)+i*83)%(H+30)-15;
-    ctx.globalAlpha=0.09+0.08*Math.sin(t+i);
-    ctx.fillStyle='#ffe0a2'; ctx.beginPath(); ctx.arc(x,y,0.7+s*1.2,0,6.3); ctx.fill();
-  }
+  const g=ctx.createRadialGradient(-rad*.28,-rad*.34,rad*.05,0,0,rad);g.addColorStop(0,p.light);g.addColorStop(.42,p.main);g.addColorStop(1,p.dark);ctx.fillStyle=g;
+  if(color===2){ctx.beginPath();ctx.ellipse(0,rad*.08,rad*.68,rad*.92,0,0,Math.PI*2);ctx.fill();}
+  else if(color===3){for(const [dx,dy,s] of [[-.26,-.22,.4],[.26,-.22,.4],[-.42,.2,.38],[0,.18,.4],[.42,.2,.38],[0,.58,.36]]){ctx.beginPath();ctx.arc(dx*rad,dy*rad,rad*s,0,Math.PI*2);ctx.fill();}}
+  else{ctx.beginPath();ctx.arc(0,0,rad*.82,0,Math.PI*2);ctx.fill();}
+  ctx.fillStyle=p.leaf;ctx.fillRect(-rad*.07,-rad*.96,rad*.14,rad*.34);ctx.save();ctx.rotate(-.45);ctx.beginPath();ctx.ellipse(rad*.25,-rad*.72,rad*.36,rad*.17,0,0,Math.PI*2);ctx.fill();ctx.restore();
+  ctx.fillStyle='rgba(255,255,255,.62)';ctx.beginPath();ctx.ellipse(-rad*.3,-rad*.3,rad*.21,rad*.11,-.55,0,Math.PI*2);ctx.fill();
   ctx.restore();
 }
+function pieceScreen(p){return [bx+p.px*cell+cell/2,by+p.py*cell+cell/2];}
+function drawPiece(p,alpha=1){
+  const [x,y]=pieceScreen(p),base=cell*.5,scale=p.scale*(1+p.pop*.42);
+  if(y<by-cell*1.8||y>by+bh+cell*1.8)return;
+  ctx.save();ctx.globalAlpha=alpha;ctx.translate(x,y);ctx.scale(scale,scale*(1-p.pop*.16));ctx.translate(p.hint*Math.sin(t*38)*cell*.045,0);
 
-/* ---------------- piece drawing ---------------- */
-function pieceXY(p){ return [bx + p.px*cell + cell/2, by + p.py*cell + cell/2]; }
-
-function drawFruitIcon(color, rad){
-  const col=COLORS[color];
-  ctx.fillStyle=col.d; ctx.beginPath(); ctx.ellipse(0,rad*0.16,rad*0.86,rad*0.78,0,0,6.3); ctx.fill();
-  const g=ctx.createLinearGradient(0,-rad,0,rad);
-  g.addColorStop(0,col.c); g.addColorStop(1,col.d);
-  ctx.fillStyle=g;
-  if(color===2){
-    ctx.beginPath(); ctx.ellipse(0,rad*0.05,rad*0.72,rad*0.92,0,0,6.3); ctx.fill();
-  }else if(color===3){
-    for(const [dx,dy] of [[-0.28,-0.2],[0.28,-0.2],[-0.45,0.25],[0,0.25],[0.45,0.25],[0,0.68]]){
-      ctx.beginPath(); ctx.arc(dx*rad,dy*rad,rad*0.34,0,6.3); ctx.fill();
-    }
-  }else{
-    ctx.beginPath(); ctx.arc(0,0,rad*0.82,0,6.3); ctx.fill();
+  if(p.kind==='pallet'){
+    ctx.fillStyle='rgba(0,0,0,.24)';rr(-base*.8,-base*.66,base*1.6,base*1.35,7);ctx.fill();
+    const g=ctx.createLinearGradient(-base,0,base,0);g.addColorStop(0,'#48739b');g.addColorStop(.5,'#79b7d7');g.addColorStop(1,'#315879');ctx.fillStyle=g;
+    for(let i=-1;i<=1;i++){rr(-base*.7,i*base*.34-base*.11,base*1.4,base*.22,3);ctx.fill();}
+    ctx.fillStyle='#183650';ctx.fillRect(-base*.56,-base*.62,base*.16,base*1.24);ctx.fillRect(base*.4,-base*.62,base*.16,base*1.24);ctx.restore();return;
   }
-  ctx.fillStyle='#5a7d2a'; ctx.fillRect(-rad*0.08,-rad*0.95,rad*0.16,rad*0.34);
-  ctx.save(); ctx.rotate(-0.45); ctx.beginPath(); ctx.ellipse(rad*0.25,-rad*0.75,rad*0.34,rad*0.17,0,0,6.3); ctx.fill(); ctx.restore();
-  ctx.fillStyle='rgba(255,255,255,0.34)'; ctx.beginPath(); ctx.ellipse(-rad*0.26,-rad*0.28,rad*0.19,rad*0.12,-0.5,0,6.3); ctx.fill();
-}
-function renderPiece(p, ghostAlpha){
-  const [x,y]=pieceXY(p);
-  if(y < by-cell*1.6 || y > by+bh+cell*1.6) { if(p.py< -2.2) return; }
-  const base=cell*0.5, sc=p.scale*(1+p.pop*0.45);
-  ctx.save(); ctx.globalAlpha=(ghostAlpha!==undefined?ghostAlpha:1); ctx.translate(x,y); ctx.scale(sc,sc*(1-p.pop*0.18));
-
-  if(p.kind==='stone'){
-    // broken wooden pallet
-    ctx.fillStyle='rgba(0,0,0,0.28)'; rr(-base*.76,-base*.62,base*1.52,base*1.32,5); ctx.fill();
-    ctx.fillStyle='#8b5a2b';
-    for(let i=-1;i<=1;i++){ rr(-base*.68,i*base*.34-base*.11,base*1.36,base*.22,3); ctx.fill(); }
-    ctx.fillStyle='#4e2e18'; ctx.fillRect(-base*.55,-base*.62,base*.16,base*1.25); ctx.fillRect(base*.38,-base*.62,base*.16,base*1.25);
-    ctx.strokeStyle='#d49a55'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(-base*.48,-base*.5); ctx.lineTo(base*.1,base*.06); ctx.lineTo(-base*.28,base*.55); ctx.stroke();
-    ctx.restore(); return;
+  if(p.kind==='equipment'){
+    const pulse=.5+.5*Math.sin(t*3+p.id),glow=ctx.createRadialGradient(0,0,0,0,0,base*1.4);glow.addColorStop(0,'rgba(255,214,96,'+(.22+.18*pulse)+')');glow.addColorStop(1,'rgba(255,214,96,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,base*1.4,0,Math.PI*2);ctx.fill();
+    const g=ctx.createLinearGradient(-base,-base,base,base);g.addColorStop(0,'#ffdb65');g.addColorStop(1,'#ff8b3d');ctx.fillStyle=g;rr(-base*.7,-base*.7,base*1.4,base*1.4,8);ctx.fill();ctx.strokeStyle='#fff0ae';ctx.lineWidth=2;rr(-base*.7,-base*.7,base*1.4,base*1.4,8);ctx.stroke();
+    ctx.strokeStyle='#193661';ctx.lineWidth=3;ctx.beginPath();ctx.arc(-base*.12,-base*.08,base*.2,.7,5.6);ctx.stroke();ctx.beginPath();ctx.moveTo(0,base*.05);ctx.lineTo(base*.38,base*.42);ctx.stroke();ctx.restore();return;
   }
 
-  if(p.kind==='relic'){
-    // equipment crate with visible wrench
-    const pulse=.5+.5*Math.sin(t*2+p.id);
-    const ag=ctx.createRadialGradient(0,0,0,0,0,base*1.35); ag.addColorStop(0,'rgba(255,211,138,'+(.22+.16*pulse)+')'); ag.addColorStop(1,'rgba(255,211,138,0)');
-    ctx.fillStyle=ag; ctx.beginPath(); ctx.arc(0,0,base*1.35,0,6.3); ctx.fill();
-    ctx.fillStyle='#b97836'; rr(-base*.68,-base*.68,base*1.36,base*1.36,6); ctx.fill();
-    ctx.strokeStyle='#f0bf73'; ctx.lineWidth=2; rr(-base*.68,-base*.68,base*1.36,base*1.36,6); ctx.stroke();
-    ctx.fillStyle='#6d431f'; ctx.fillRect(-base*.58,-base*.12,base*1.16,base*.24);
-    ctx.strokeStyle='#fff0c8'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(-base*.12,-base*.08,base*.20,.7,5.6); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0,base*.05); ctx.lineTo(base*.36,base*.42); ctx.stroke();
-    ctx.restore(); return;
-  }
-
-  const col=COLORS[p.color], pulse=.5+.5*Math.sin(t*5+p.id);
-  const shake2=p.hint*Math.sin(t*40)*cell*.05; ctx.translate(shake2,0);
-  if(p.flash>0){ const gg=ctx.createRadialGradient(0,0,0,0,0,base*1.25); gg.addColorStop(0,col.g+(0.18+p.flash*.25)+')'); gg.addColorStop(1,col.g+'0)'); ctx.fillStyle=gg; ctx.beginPath(); ctx.arc(0,0,base*1.25,0,6.3); ctx.fill(); }
-
-  if(p.tier===1){
-    drawFruitIcon(p.color,base*.48);
-  }else if(p.tier===2){
-    // wicker basket filled with the same produce
-    ctx.fillStyle='#c78a45'; rr(-base*.68,-base*.12,base*1.36,base*.82,base*.18); ctx.fill();
-    ctx.strokeStyle='#f2c27a'; ctx.lineWidth=1.4;
-    for(let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(i*base*.25,-base*.08); ctx.lineTo(i*base*.19,base*.62); ctx.stroke(); }
-    ctx.beginPath(); ctx.arc(0,-base*.08,base*.48,Math.PI,0); ctx.stroke();
-    ctx.save(); ctx.translate(-base*.28,-base*.26); drawFruitIcon(p.color,base*.22); ctx.restore();
-    ctx.save(); ctx.translate(base*.24,-base*.24); drawFruitIcon(p.color,base*.22); ctx.restore();
+  const c=PRODUCE[p.color];
+  if(p.flash>.02){const glow=ctx.createRadialGradient(0,0,0,0,0,base*1.35);glow.addColorStop(0,'rgba(255,255,255,'+(.08+p.flash*.22)+')');glow.addColorStop(.45,c.main+'55');glow.addColorStop(1,c.main+'00');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,base*1.35,0,Math.PI*2);ctx.fill();}
+  if(p.tier===1)drawFruit(p.color,base*.5);
+  else if(p.tier===2){
+    ctx.fillStyle='#4fe0f2';rr(-base*.7,-base*.15,base*1.4,base*.86,base*.18);ctx.fill();ctx.strokeStyle='#b8fbff';ctx.lineWidth=1.4;for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(i*base*.25,-base*.09);ctx.lineTo(i*base*.19,base*.62);ctx.stroke();}
+    ctx.save();ctx.translate(-base*.27,-base*.28);drawFruit(p.color,base*.23);ctx.restore();ctx.save();ctx.translate(base*.25,-base*.26);drawFruit(p.color,base*.23);ctx.restore();
   }else if(p.tier===3){
-    // wooden produce crate
-    ctx.fillStyle='#a66a31'; rr(-base*.72,-base*.58,base*1.44,base*1.16,5); ctx.fill();
-    ctx.fillStyle='#d89a52'; ctx.fillRect(-base*.66,-base*.48,base*1.32,base*.20); ctx.fillRect(-base*.66,-base*.08,base*1.32,base*.20); ctx.fillRect(-base*.66,base*.32,base*1.32,base*.20);
-    ctx.fillStyle=col.c; rr(-base*.32,-base*.20,base*.64,base*.40,4); ctx.fill();
-    ctx.fillStyle='#fff7d6'; ctx.font='800 '+Math.max(7,base*.34)+'px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(COLORS[p.color].name[0]).toUpperCase(),0,1);
+    const g=ctx.createLinearGradient(-base,-base,base,base);g.addColorStop(0,'#5d7cff');g.addColorStop(1,'#3e27a8');ctx.fillStyle=g;rr(-base*.73,-base*.58,base*1.46,base*1.16,7);ctx.fill();
+    ctx.strokeStyle='#b9c7ff';ctx.lineWidth=2;for(const y2 of [-.34,0,.34]){ctx.beginPath();ctx.moveTo(-base*.63,base*y2);ctx.lineTo(base*.63,base*y2);ctx.stroke();}
+    ctx.fillStyle=c.main;rr(-base*.32,-base*.2,base*.64,base*.4,5);ctx.fill();txt(c.name[0].toUpperCase(),0,1,base*.34,'#fff','center',900);
   }else{
-    // delivery truck: visually directional and obviously tappable
-    ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fillRect(-base*.75,base*.36,base*1.5,base*.18);
-    ctx.fillStyle=col.d; rr(-base*.72,-base*.42,base*.92,base*.72,5); ctx.fill();
-    ctx.fillStyle=col.c; rr(-base*.66,-base*.36,base*.80,base*.58,4); ctx.fill();
-    ctx.fillStyle='#e8d6aa'; rr(base*.12,-base*.24,base*.52,base*.54,4); ctx.fill();
-    ctx.fillStyle='#91c5d7'; rr(base*.28,-base*.17,base*.24,base*.20,2); ctx.fill();
-    ctx.fillStyle='#2a2119'; for(const wx of [-base*.42,base*.42]){ ctx.beginPath(); ctx.arc(wx,base*.36,base*.16,0,6.3); ctx.fill(); ctx.fillStyle='#c7b18a'; ctx.beginPath(); ctx.arc(wx,base*.36,base*.07,0,6.3); ctx.fill(); ctx.fillStyle='#2a2119'; }
-    ctx.fillStyle='rgba(255,255,255,'+(.45+.4*pulse)+')'; ctx.beginPath(); ctx.moveTo(base*.66,0); ctx.lineTo(base*.82,-base*.10); ctx.lineTo(base*.82,base*.10); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(-base*.78,base*.36,base*1.56,base*.18);
+    ctx.fillStyle=c.dark;rr(-base*.74,-base*.44,base*.96,base*.76,6);ctx.fill();ctx.fillStyle=c.main;rr(-base*.67,-base*.37,base*.82,base*.58,5);ctx.fill();ctx.fillStyle='#e7f5ff';rr(base*.13,-base*.26,base*.53,base*.57,5);ctx.fill();ctx.fillStyle='#72d9ff';rr(base*.29,-base*.18,base*.24,base*.21,2);ctx.fill();
+    ctx.fillStyle='#101f3c';for(const wx of [-base*.42,base*.44]){ctx.beginPath();ctx.arc(wx,base*.37,base*.16,0,Math.PI*2);ctx.fill();ctx.fillStyle='#bdefff';ctx.beginPath();ctx.arc(wx,base*.37,base*.065,0,Math.PI*2);ctx.fill();ctx.fillStyle='#101f3c';}
+    ctx.fillStyle='rgba(255,255,255,'+(.5+.35*Math.sin(t*6+p.id))+')';ctx.beginPath();ctx.moveTo(base*.66,0);ctx.lineTo(base*.83,-base*.1);ctx.lineTo(base*.83,base*.1);ctx.closePath();ctx.fill();
   }
   ctx.restore();
-
-  if(p.kind==='mote' && p.tier>=4){
-    const n=Math.max(0,p.fuse);
-    for(let i=0;i<3;i++){
-      ctx.beginPath(); ctx.arc(x-cell*.18+i*cell*.18,y+cell*.43,cell*.045,0,6.3);
-      ctx.fillStyle=i<n?'#fff2ad':'rgba(255,255,255,.18)'; ctx.fill();
-    }
-  }
+  if(p.kind==='produce'&&p.tier>=4){for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(x-cell*.18+i*cell*.18,y+cell*.43,cell*.045,0,Math.PI*2);ctx.fillStyle=i<p.wait?'#fff39b':'rgba(255,255,255,.18)';ctx.fill();}}
 }
 
-/* ---------------- board drawing ---------------- */
-let sightGroups=null;
-function computeSight(){
-  const seen=new Set(); const out=[];
+function chainPreviewCells(){
+  const out=[];
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const p=grid[r][c];
-    if(!p||p.kind!=='mote'||p.tier>=4||seen.has(p.id)) continue;
-    const g=floodGroup(r,c);
-    g.forEach(q=>seen.add(q.id));
-    if(g.length>=2){
-      // would it chain? simulate: the target tier+1 beside a same-colour tier+1
-      let chains=false;
-      const nt=Math.min(4,p.tier+1);
-      for(const q of g){
-        const nb=[[q.r-1,q.c],[q.r+1,q.c],[q.r,q.c-1],[q.r,q.c+1]];
-        for(const [rr2,cc2] of nb){
-          const o=at(rr2,cc2);
-          if(o && !g.includes(o) && o.kind==='mote' && o.color===p.color && o.tier===nt) chains=true;
-        }
-      }
-      out.push({cells:g, chains, tier:p.tier, color:p.color});
-    }
+    const p=grid[r][c];if(!p||p.kind!=='produce'||p.tier>=4)continue;
+    const sim=simulateLanding(r,c);if(sim&&sim.chain)out.push({r,c,depth:stageState.orderSheet?chainDepthForLanding(r,c):2,bulk:sim.leap===2});
   }
   return out;
 }
 
 function drawBoard(){
-  ctx.save();
-  const sx=(Math.random()-0.5)*shake, sy=(Math.random()-0.5)*shake;
-  ctx.translate(sx,sy);
+  ctx.save();ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
+  ctx.save();ctx.shadowColor='rgba(0,0,0,.55)';ctx.shadowBlur=32;ctx.shadowOffsetY=10;
+  const panel=ctx.createLinearGradient(bx,by,bx+bw,by+bh);panel.addColorStop(0,'rgba(14,49,98,.94)');panel.addColorStop(1,'rgba(18,24,70,.95)');ctx.fillStyle=panel;rr(bx-8,by-8,bw+16,bh+16,20);ctx.fill();ctx.restore();
+  ctx.strokeStyle='rgba(111,232,255,.48)';ctx.lineWidth=2;rr(bx-8,by-8,bw+16,bh+16,20);ctx.stroke();
+  ctx.strokeStyle='rgba(192,240,255,.09)';ctx.lineWidth=1;
+  for(let r=1;r<ROWS;r++){ctx.beginPath();ctx.moveTo(bx,by+r*cell);ctx.lineTo(bx+bw,by+r*cell);ctx.stroke();}
+  for(let c=1;c<COLS;c++){ctx.beginPath();ctx.moveTo(bx+c*cell,by);ctx.lineTo(bx+c*cell,by+bh);ctx.stroke();}
 
-  // pool
-  ctx.save();
-  ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=30; ctx.shadowOffsetY=8;
-  ctx.fillStyle='rgba(45,27,15,0.86)';
-  rr(bx-8,by-8,bw+16,bh+16,18); ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle='rgba(255,205,130,'+(0.18+chainGlow*0.30)+')'; ctx.lineWidth=2;
-  rr(bx-8,by-8,bw+16,bh+16,18); ctx.stroke();
+  ctx.save();ctx.beginPath();rr(bx-2,by-2,bw+4,bh+4,13);ctx.clip();
 
-  // cell lattice
-  ctx.strokeStyle='rgba(255,225,175,0.08)'; ctx.lineWidth=1;
-  for(let r=1;r<ROWS;r++){ ctx.beginPath(); ctx.moveTo(bx,by+r*cell); ctx.lineTo(bx+bw,by+r*cell); ctx.stroke(); }
-  for(let c=1;c<COLS;c++){ ctx.beginPath(); ctx.moveTo(bx+c*cell,by); ctx.lineTo(bx+c*cell,by+bh); ctx.stroke(); }
-
-  ctx.save();
-  ctx.beginPath(); rr(bx-2,by-2,bw+4,bh+4,12); ctx.clip();
-
-  // sight overlay
-  if(st && st.sight){
-    const groups = computeSight();
-    for(const g of groups){
-      ctx.save();
-      ctx.globalAlpha=0.5;
-      ctx.strokeStyle = g.chains? '#ffffff' : 'rgba(180,220,255,0.5)';
-      ctx.lineWidth = g.chains?2.4:1.2;
-      ctx.setLineDash(g.chains?[]:[4,4]);
-      for(const q of g.cells){
-        rr(bx+q.c*cell+3, by+q.r*cell+3, cell-6, cell-6, 8); ctx.stroke();
-      }
+  if(stageState?.orderSheet){
+    const seen=new Set();
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const p=grid[r][c];if(!p||p.kind!=='produce'||p.tier>=4||seen.has(p.id))continue;
+      const group=floodGroup(r,c);group.forEach(q=>seen.add(q.id));if(group.length<2)continue;
+      ctx.strokeStyle='rgba(164,241,255,.46)';ctx.lineWidth=1.3;ctx.setLineDash([4,4]);
+      for(const q of group){rr(bx+q.c*cell+4,by+q.r*cell+4,cell-8,cell-8,9);ctx.stroke();}
       ctx.setLineDash([]);
-      ctx.restore();
-      const f=g.cells[0];
-      if(g.chains){
-        txt("⚡", bx+f.c*cell+cell*0.5, by+f.r*cell+cell*0.22, cell*0.24, '#ffffff');
-      }
     }
   }
 
-  // shift selection
-  if(st && st.shiftFrom){
-    const f=st.shiftFrom;
-    ctx.strokeStyle='#9fe8ff'; ctx.lineWidth=3;
-    rr(bx+f.c*cell+2, by+f.r*cell+2, cell-4, cell-4, 9); ctx.stroke();
-    const nbs=[[f.r-1,f.c],[f.r+1,f.c],[f.r,f.c-1],[f.r,f.c+1]];
-    ctx.fillStyle='rgba(159,232,255,0.14)';
-    for(const [rr2,cc2] of nbs){
-      if(rr2<0||cc2<0||rr2>=ROWS||cc2>=COLS) continue;
-      rr(bx+cc2*cell+3, by+rr2*cell+3, cell-6, cell-6, 9); ctx.fill();
-    }
+  // Exact landing cells that create a deliberate chain.
+  for(const q of chainPreviewCells()){
+    const x=boardX(q.c),y=boardY(q.r),pulse=.62+.3*Math.sin(t*5+q.r+q.c);
+    ctx.globalAlpha=pulse;ctx.strokeStyle='#ffffff';ctx.lineWidth=stageState?.orderSheet?2.4:1.5;
+    ctx.beginPath();ctx.arc(x,y,cell*(stageState?.orderSheet?.18:.11),0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x-cell*.12,y);ctx.lineTo(x+cell*.12,y);ctx.moveTo(x,y-cell*.12);ctx.lineTo(x,y+cell*.12);ctx.stroke();
+    if(stageState?.orderSheet){txt(q.depth+'x',x+cell*.22,y-cell*.23,cell*.18,q.bulk?GOLD:INK,'center',900);}
+    ctx.globalAlpha=1;
   }
 
-  // pieces
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ const p=grid[r][c]; if(p) renderPiece(p); }
-  for(const p of flying) renderPiece(p, Math.max(0,p.scale));
+  if(stageState?.handcartFrom){const f=stageState.handcartFrom;ctx.strokeStyle=CYAN;ctx.lineWidth=3;rr(bx+f.c*cell+2,by+f.r*cell+2,cell-4,cell-4,9);ctx.stroke();}
 
-  // keyboard cursor
-  if(kbActive && screen==='play'){
-    ctx.strokeStyle='rgba(255,255,255,'+(0.5+0.3*Math.sin(t*6))+')'; ctx.lineWidth=2.5;
-    rr(bx+kc*cell+2, by+kr*cell+2, cell-4, cell-4, 9); ctx.stroke();
-  }
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(grid[r][c])drawPiece(grid[r][c]);
+  for(const p of flying)drawPiece(p,Math.max(0,p.scale));
 
-  // rings
-  for(const g of rings){
-    ctx.globalAlpha=g.life*0.8; ctx.strokeStyle=g.col; ctx.lineWidth=g.w;
-    ctx.beginPath(); ctx.arc(g.x,g.y,g.r,0,6.3); ctx.stroke();
-  }
+  if(keyboardActive&&screen==='play'){ctx.strokeStyle='rgba(255,255,255,'+(.55+.3*Math.sin(t*6))+')';ctx.lineWidth=2.5;rr(bx+keyCol*cell+2,by+keyRow*cell+2,cell-4,cell-4,9);ctx.stroke();}
+
+  for(const l of routeLines){ctx.globalAlpha=l.life;ctx.strokeStyle=l.color;ctx.lineWidth=2;ctx.setLineDash([5,6]);ctx.beginPath();ctx.moveTo(l.x1,l.y1);ctx.quadraticCurveTo((l.x1+l.x2)/2,l.y1-cell*.6,l.x2,l.y2);ctx.stroke();ctx.setLineDash([]);}
   ctx.globalAlpha=1;
-  // particles
-  for(const q of particles){
-    ctx.globalAlpha=Math.max(0,q.life);
-    ctx.fillStyle=q.col;
-    if(q.shard){
-      ctx.save(); ctx.translate(q.x,q.y); ctx.rotate(q.rot);
-      ctx.fillRect(-q.size*0.5,-q.size*0.22,q.size,q.size*0.44); ctx.restore();
-    } else {
-      ctx.beginPath(); ctx.arc(q.x,q.y,q.size*q.life,0,6.3); ctx.fill();
-    }
-  }
-  ctx.globalAlpha=1;
-  ctx.restore(); // clip
-
-  // floats
-  for(const f of floats){
-    ctx.globalAlpha=Math.max(0,Math.min(1,f.life*1.6));
-    txt(f.txt, f.x, f.y, f.size, f.col, 'center', 800);
-  }
-  ctx.globalAlpha=1;
+  for(const r of rings){ctx.globalAlpha=r.life*.85;ctx.strokeStyle=r.color;ctx.lineWidth=r.width;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke();}
+  for(const p of particles){ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.color;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillRect(-p.size*.5,-p.size*.22,p.size,p.size*.44);ctx.restore();}
+  ctx.globalAlpha=1;ctx.restore();
+  for(const f of floaters){ctx.globalAlpha=Math.max(0,Math.min(1,f.life*1.6));txt(f.text,f.x,f.y,f.size,f.color,'center',900);}ctx.globalAlpha=1;
   ctx.restore();
 }
 
-/* ---------------- UI ---------------- */
-let uiButtons=[];
-function button(id,x,y,w,h,label,opts){
-  opts=opts||{};
+function button(id,x,y,w,h,label,opts={}){
   uiButtons.push({id,x,y,w,h,disabled:!!opts.disabled});
-  const hot = (pressedBtn===id);
-  ctx.save();
-  const a = opts.disabled?0.28:1;
-  ctx.globalAlpha=a;
-  if(opts.primary){
-    const g=ctx.createLinearGradient(0,y,0,y+h);
-    g.addColorStop(0,'#f3c36f'); g.addColorStop(1,'#c47a2b');
-    ctx.fillStyle=g;
-  } else {
-    ctx.fillStyle= opts.active? 'rgba(255,210,130,0.22)' : 'rgba(255,255,255,0.055)';
-  }
-  rr(x+(hot?1:0),y+(hot?1:0),w,h,opts.round===undefined?h*0.32:opts.round); ctx.fill();
-  ctx.strokeStyle = opts.active? 'rgba(255,220,150,0.85)' : (opts.primary?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.16)');
-  ctx.lineWidth=1.4;
-  rr(x,y,w,h,opts.round===undefined?h*0.32:opts.round); ctx.stroke();
-  txt(label, x+w/2, y+h/2+ (opts.sub?-h*0.14:0), opts.size||15, opts.primary?'#2e1b0e':(opts.active?'#fff0c6':INK), 'center', 700);
-  if(opts.sub) txt(opts.sub, x+w/2, y+h/2+h*0.24, 10.5, opts.primary?'rgba(6,34,43,0.7)':INK_DIM,'center',600);
-  ctx.restore();
+  const hot=pressedButton===id;ctx.save();ctx.globalAlpha=opts.disabled?.28:1;
+  if(opts.primary){const g=ctx.createLinearGradient(0,y,0,y+h);g.addColorStop(0,'#84f5ff');g.addColorStop(1,'#3c7dff');ctx.fillStyle=g;}
+  else ctx.fillStyle=opts.active?'rgba(105,235,255,.2)':'rgba(255,255,255,.065)';
+  rr(x+(hot?1:0),y+(hot?1:0),w,h,opts.round??h*.31);ctx.fill();ctx.strokeStyle=opts.active?'rgba(160,248,255,.9)':opts.primary?'rgba(255,255,255,.6)':'rgba(255,255,255,.17)';ctx.lineWidth=1.3;rr(x,y,w,h,opts.round??h*.31);ctx.stroke();
+  txt(label,x+w/2,y+h/2+(opts.sub?-h*.14:0),opts.size||14,opts.primary?'#07152d':INK,'center',800);if(opts.sub)txt(opts.sub,x+w/2,y+h/2+h*.24,10.5,opts.primary?'rgba(7,21,45,.72)':DIM,'center',650);ctx.restore();
 }
 
-function goalChips(){
-  const g=st.cfg.goal, out=[];
-  if(g.b2!==undefined) out.push({icon:'basket', have:st.b2, need:g.b2, label:'baskets'});
-  if(g.b3!==undefined) out.push({icon:'crate', have:st.b3, need:g.b3, label:'crates'});
-  if(g.prism!==undefined) out.push({icon:'truck', have:st.prism, need:g.prism, label:'trucks'});
-  if(g.relic!==undefined) out.push({icon:'tool', have:st.relic, need:g.relic, label:'tools'});
+function goalItems(){
+  const g=stageState.cfg.goal,out=[];
+  if(g.baskets!==undefined)out.push(['BASKETS',stageState.baskets,g.baskets]);
+  if(g.crates!==undefined)out.push(['CRATES',stageState.crates,g.crates]);
+  if(g.trucks!==undefined)out.push(['TRUCKS',stageState.trucks,g.trucks]);
+  if(g.fleet!==undefined)out.push(['FLEET',stageState.fleet,g.fleet]);
+  if(g.equipment!==undefined)out.push(['TOOLS',stageState.equipmentDelivered,g.equipment]);
   return out;
 }
-function drawGoalIcon(kind,x,y,s,done){
-  ctx.save(); ctx.translate(x,y); ctx.globalAlpha=done?1:.85; ctx.lineWidth=1.4;
-  if(kind==='basket'){
-    ctx.fillStyle='#c78a45'; rr(-s,-s*.2,s*2,s*1.35,2); ctx.fill(); ctx.strokeStyle='#f3c17b'; ctx.beginPath(); ctx.arc(0,-s*.15,s*.65,Math.PI,0); ctx.stroke();
-  }else if(kind==='crate'){
-    ctx.fillStyle='#b87938'; ctx.fillRect(-s,-s*.8,s*2,s*1.6); ctx.strokeStyle='#edbd78'; ctx.strokeRect(-s,-s*.8,s*2,s*1.6);
-  }else if(kind==='truck'){
-    ctx.fillStyle='#e94f45'; ctx.fillRect(-s,-s*.6,s*1.25,s); ctx.fillStyle='#e8d6aa'; ctx.fillRect(s*.2,-s*.35,s*.75,s*.75); ctx.fillStyle='#241a12'; ctx.beginPath(); ctx.arc(-s*.5,s*.52,s*.28,0,6.3); ctx.arc(s*.55,s*.52,s*.28,0,6.3); ctx.fill();
-  }else{
-    ctx.fillStyle='#b97836'; ctx.fillRect(-s,-s,s*2,s*2); ctx.strokeStyle='#ffe5a8'; ctx.strokeRect(-s,-s,s*2,s*2); ctx.fillStyle='#fff2c8'; ctx.fillRect(-s*.15,-s*.65,s*.3,s*1.3);
-  }
-  ctx.restore();
+function drawHud(){
+  const y0=18+SAFE_TOP;txt(stageState.cfg.name.toUpperCase(),14,y0,15,INK,'left',900);txt(stageState.cfg.sub,14,y0+19,11,DIM,'left',600);
+  const size=Math.max(38,Math.min(44,W*.105));button('guide',W-14-size,y0-8,size,size,'?',{round:size/2,size:18});button('mute',W-22-size*2,y0-8,size,size,muted?'×':'♪',{round:size/2,size:17});button('restart',W-30-size*3,y0-8,size,size,'↻',{round:size/2,size:19});
+
+  const infoY=topH-34;txt('ACTIONS',14,infoY-12,9,FAINT,'left',800);txt(String(stageState.actions),14,infoY+7,22,INK,'left',900);
+  txt('RECEIPTS',W/2,infoY-12,9,FAINT,'center',800);txt(stageState.receipts.toLocaleString(),W/2,infoY+6,15,GOLD,'center',900);
+
+  let gx=W-14;const goals=goalItems();
+  for(let i=goals.length-1;i>=0;i--){const [label,have,need]=goals[i],done=have>=need,text=Math.min(have,need)+'/'+need,w=Math.max(58,measureText(text,13,900)+22);gx-=w;ctx.fillStyle=done?'rgba(121,255,199,.14)':'rgba(255,255,255,.06)';rr(gx,infoY-13,w,28,14);ctx.fill();ctx.strokeStyle=done?'rgba(121,255,199,.6)':'rgba(255,255,255,.14)';rr(gx,infoY-13,w,28,14);ctx.stroke();txt(text,gx+w/2,infoY+1,13,done?MINT:INK,'center',900);txt(label,gx+w/2,infoY-26,8,FAINT,'center',800);gx-=7;}
+
+  const incoming=peekSupply(7),startX=Math.max(82,W*.17);txt('INCOMING',startX,infoY-12,8,FAINT,'center',800);
+  for(let i=0;i<incoming.length;i++){ctx.save();ctx.translate(startX-30+i*10,infoY+7);drawFruit(incoming[i],4.5);ctx.restore();}
 }
-
-function drawHUD(){
-  const S=st.cfg;
-  // stage name
-  txt(S.name.toUpperCase(), 16, 26+ST, 15, INK, 'left', 800);
-  txt(S.sub, 16, 44+ST, 11, INK_FAINT, 'left', 600);
-
-  // codex + mute buttons top-right
-  const bs=Math.max(38, Math.min(46, W*0.11));
-  button('codex', W-16-bs, 12+ST, bs, bs, '?', {round:bs/2, size:19, active:codexPulse>0.2});
-  button('mute', W-16-bs*2-8, 12+ST, bs, bs, muted?'\u266a\u0338':'\u266a', {round:bs/2, size:17});
-  button('retry', W-16-bs*3-16, 12+ST, bs, bs, '\u21bb', {round:bs/2, size:19});
-
-  // moves
-  const my=topH-30;
-  txt('MOVES', 16, my-13, 10, INK_FAINT,'left',700);
-  const mc = st.moves<=3? '#ff8f8f' : INK;
-  txt(String(st.moves), 16, my+8, 24, mc,'left',800);
-  // move pips
-  const maxPips=Math.min(S.moves, 16);
-  const pw = Math.min(9, (W*0.34)/maxPips);
-  for(let i=0;i<maxPips;i++){
-    const filled = i < Math.min(st.moves, maxPips);
-    ctx.fillStyle = filled ? (st.moves<=3?'rgba(255,143,143,0.9)':'rgba(200,230,255,0.75)') : 'rgba(255,255,255,0.12)';
-    ctx.fillRect(56+i*pw, my+2, pw-3, 10);
-  }
-
-  // goals
-  const chips=goalChips();
-  let gx = W-18;
-  for(let i=chips.length-1;i>=0;i--){
-    const ch=chips[i];
-    const label = Math.min(ch.have,ch.need)+"/"+ch.need;
-    const wdt = measure(label,13,800)+30;
-    gx -= wdt;
-    const done = ch.have>=ch.need;
-    ctx.fillStyle = done? 'rgba(120,240,190,0.14)':'rgba(255,255,255,0.05)';
-    rr(gx, my-11, wdt, 26, 13); ctx.fill();
-    ctx.strokeStyle = done? 'rgba(120,240,190,0.55)':'rgba(255,255,255,0.13)'; ctx.lineWidth=1.2;
-    rr(gx, my-11, wdt, 26, 13); ctx.stroke();
-    drawGoalIcon(ch.icon, gx+13, my+2, 7, done);
-    txt(label, gx+wdt-8, my+2, 13, done?'#9df5cf':INK, 'right', 800);
-    gx -= 8;
-  }
-
-  // lumens
-  txt(st.lumens.toLocaleString(), W/2, my+2, 15, 'rgba(255,224,160,0.9)','center',800);
-  txt('RECEIPTS', W/2, my-13, 9, INK_FAINT,'center',700);
-}
-
 function drawAbilityBar(){
-  const y = H-botH+10;
   const list=[];
-  if(run.verbs.shift) list.push({id:'shift', label:'HANDCART', sub:'move one', avail:st.charges.shift>0});
-  if(run.verbs.ember) list.push({id:'ember', label:'CROWBAR', sub:'clear one', avail:st.charges.ember>0});
-  if(run.verbs.sight) list.push({id:'sight', label:'ORDERS', sub:'show plans', avail:true, toggle:true});
-  if(st.done) list.push({id:'finish', label:'CLOSE SHIFT', sub:'+'+(st.moves*15)+' receipts', avail:true, primary:true});
+  if(run.tools.handcart)list.push({id:'handcart',label:'HANDCART',sub:'move one',available:stageState.charges.handcart>0});
+  if(run.tools.crowbar)list.push({id:'crowbar',label:'CROWBAR',sub:'clear one',available:stageState.charges.crowbar>0});
+  if(run.tools.orderSheet)list.push({id:'orderSheet',label:'ORDER SHEET',sub:'exact plans',available:true,toggle:true});
+  if(stageState.complete)list.push({id:'closeShift',label:'CLOSE SHIFT',sub:'orders filled',available:true,primary:true});
+  const y=H-bottomH+9;
+  if(!list.length){if(hintTime>0){ctx.globalAlpha=Math.min(1,hintTime);wrapText(hintText,W/2,y+22,W-34,15,12.5,DIM,'center');ctx.globalAlpha=1;}return;}
+  const gap=7,total=Math.min(W-20,470),w=(total-gap*(list.length-1))/list.length,h=Math.min(58,bottomH-16);let x=(W-total)/2;
+  for(const b of list){button(b.id,x,y,w,h,b.label,{sub:b.sub,disabled:!b.available&&!b.toggle,active:stageState.armed===b.id||(b.id==='orderSheet'&&stageState.orderSheet),primary:b.primary,size:Math.min(13,w*.16)});x+=w+gap;}
+  if(hintTime>0){ctx.globalAlpha=Math.min(1,hintTime)*.92;wrapText(hintText,W/2,y-14,W-28,14,12,DIM,'center');ctx.globalAlpha=1;}
+}
+function drawPlay(){drawBoard();drawHud();drawAbilityBar();if(flash>.01){ctx.fillStyle='rgba(255,255,255,'+Math.min(.82,flash)+')';ctx.fillRect(0,0,W,H);}}
 
-  if(list.length===0){
-    if(hintTime>0 && hintText){
-      ctx.globalAlpha=Math.min(1,hintTime);
-      txt(hintText, W/2, y+26, 13, INK_DIM,'center',600);
-      ctx.globalAlpha=1;
-    }
+function drawTitle(){
+  const cx=W/2,cy=H*.28;
+  for(let i=0;i<4;i++){const a=t*.5+i*Math.PI/2,x=cx+Math.cos(a)*Math.min(W,H)*.22,y=cy+Math.sin(a)*Math.min(W,H)*.09;ctx.save();ctx.translate(x,y);drawFruit(i,13+2*Math.sin(t*2+i));ctx.restore();}
+  const glow=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*.4);glow.addColorStop(0,'rgba(102,232,255,.2)');glow.addColorStop(1,'rgba(102,232,255,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
+  txt('PACKHOUSE',cx,cy,Math.min(54,W*.13),INK,'center',950);txt('juicy produce · deliberate chains',cx,cy+40,13,CYAN,'center',700);
+  const w=Math.min(310,W*.76);button('start',cx-w/2,H*.61,w,58,run.stage>0?'RETURN TO SHIFT':'START SORTING',{primary:true,size:16});button('guide',cx-w/2,H*.61+70,w,46,'PACKING GUIDE',{size:13});button('toolShed',cx-w/2,H*.61+126,w,46,'TOOL SHED',{size:13});
+  txt('No move limits. Every stage stays solvable.',cx,H-30,11,FAINT,'center',650);
+}
+function drawResult(){
+  drawBoard();drawHud();ctx.fillStyle='rgba(5,10,29,.86)';ctx.fillRect(0,0,W,H);uiButtons=[];
+  const cx=W/2;let y=H*.24;txt('SHIFT COMPLETE',cx,y,Math.min(30,W*.075),INK,'center',900);y+=34;txt(stageState.cfg.name,cx,y,13,DIM,'center',650);y+=48;
+  for(const [a,b] of [['Actions',stageState.actions],['Receipts',stageState.receipts.toLocaleString()],['Longest chain',bestChain],['Tools delivered',stageState.equipmentDelivered]]){txt(a,cx-8,y,13,DIM,'right',650);txt(String(b),cx+8,y,14,INK,'left',900);y+=27;}
+  const best=run.bestActions[stageState.index];if(best!==undefined){y+=6;txt('Best: '+best+' actions',cx,y,12,MINT,'center',800);y+=30;}
+  const w=Math.min(310,W*.74),last=stageState.index===STAGES.length-1;button('next',cx-w/2,y,w,56,last?'OPEN TOOL SHED':'NEXT SHIFT',{primary:true,size:16});y+=68;button('replay',cx-w/2,y,w,44,'REPLAY THIS SHIFT',{size:13});
+}
+function drawToolShed(){
+  const cx=W/2;txt('TOOL SHED',cx,46+SAFE_TOP,24,INK,'center',900);txt(run.equipmentDelivered+' of '+TOOLS.length+' tools delivered · '+run.totalReceipts.toLocaleString()+' receipts',cx,73+SAFE_TOP,11,DIM,'center',650);
+  const total=Math.min(W-26,450),gap=8,w=(total-gap*3)/4,x0=(W-total)/2,y0=116+SAFE_TOP,icons=['↔','⌁','✓','▣'];
+  for(let i=0;i<TOOLS.length;i++){const owned=!!run.tools[TOOLS[i].id],x=x0+i*(w+gap);ctx.globalAlpha=owned?1:.27;ctx.fillStyle=owned?'rgba(102,232,255,.12)':'rgba(255,255,255,.04)';rr(x,y0,w,92,12);ctx.fill();ctx.strokeStyle=owned?'rgba(102,232,255,.55)':'rgba(255,255,255,.14)';rr(x,y0,w,92,12);ctx.stroke();txt(owned?icons[i]:'?',x+w/2,y0+29,24,owned?CYAN:FAINT,'center',900);txt(owned?TOOLS[i].name.toUpperCase():'LOCKED',x+w/2,y0+64,Math.min(10,w*.14),owned?INK:FAINT,'center',850);ctx.globalAlpha=1;}
+  let y=y0+120;for(const tool of TOOLS)if(run.tools[tool.id]){txt(tool.name,cx,y,14,CYAN,'center',850);y+=18;y=wrapText(tool.desc,22,y,W-44,15,11.5,DIM,'left')+8;}
+  if(!run.equipmentDelivered){txt('Equipment crates appear in later shifts.',cx,y,12,FAINT,'center',650);y+=25;}
+  button('back',cx-Math.min(270,W*.66)/2,Math.min(H-72,Math.max(y+10,H*.78)),Math.min(270,W*.66),50,'BACK',{primary:true,size:15});
+}
+function drawGuide(){
+  if(previousScreen==='play'&&stageState)drawBoard();ctx.fillStyle='rgba(5,10,29,.93)';ctx.fillRect(0,0,W,H);uiButtons=[];
+  const cx=W/2;txt('PACKING GUIDE',cx,42+SAFE_TOP,18,INK,'center',900);let y=80+SAFE_TOP;
+  const entries=[
+    ['LAND','Tap a matching group. The upgraded package lands on the exact item you tap.'],
+    ['CHAIN','A white sparkle marks a landing cell that immediately touches a matching next-size package.'],
+    ['SUPPLY','Incoming produce follows a fixed queue. New supply never joins the chain you just created.'],
+    ['BULK','From Bulk Orders onward, groups of five or more skip one package size.'],
+    ['TRUCK','A truck collects its produce color. Only pallets or equipment directly beside the parked truck are loaded.'],
+    ['FLEET','Two neighbouring trucks clear the loading floor together.'],
+    ['NO DEAD END','There is no move-limit loss. If a board has no packable group, the floor corrects itself.']
+  ];
+  for(const [title,body] of entries){txt(title,20,y,13,CYAN,'left',900);y+=18;y=wrapText(body,20,y,W-40,15,11.5,DIM,'left')+9;}
+  button('closeGuide',cx-Math.min(240,W*.6)/2,Math.min(H-68,y+6),Math.min(240,W*.6),48,'BACK',{primary:true,size:15});
+}
+
+/* ---------- input ---------- */
+function position(e){const rect=cv.getBoundingClientRect(),p=e.touches?.[0]||e.changedTouches?.[0]||e;return{x:p.clientX-rect.left,y:p.clientY-rect.top};}
+function cellAt(x,y){if(x<bx||x>=bx+bw||y<by||y>=by+bh)return null;return{r:Math.floor((y-by)/cell),c:Math.floor((x-bx)/cell)};}
+function buttonAt(x,y){for(let i=uiButtons.length-1;i>=0;i--){const b=uiButtons[i],pad=6;if(x>=b.x-pad&&x<=b.x+b.w+pad&&y>=b.y-pad&&y<=b.y+b.h+pad)return b;}return null;}
+function down(e){e.preventDefault();initAudio();const {x,y}=position(e),b=buttonAt(x,y);if(b){pressedButton=b.id;pointerDown={x,y,button:b.id};tone(680,.06,'triangle',.08);return;}const cellPos=screen==='play'?cellAt(x,y):null;pointerDown={x,y,cell:cellPos};if(cellPos&&!busy){const p=at(cellPos.r,cellPos.c);if(p){p.pop=Math.max(p.pop,.18);sfxTap();}}}
+function up(e){
+  e.preventDefault();const {x,y}=position(e),pd=pointerDown;pointerDown=null;pressedButton=null;if(!pd)return;
+  if(pd.button){const b=buttonAt(x,y);if(b&&b.id===pd.button&&!b.disabled)handleButton(b.id);return;}
+  if(screen!=='play')return;const c=cellAt(x,y);if(!c||!pd.cell)return;
+  const dx=Math.abs(x-pd.x),dy=Math.abs(y-pd.y);
+  if(dx>cell*.45||dy>cell*.45){
+    if(stageState.charges.handcart>0&&!stageState.armed){const d=Math.abs(pd.cell.r-c.r)+Math.abs(pd.cell.c-c.c);if(d===1){stageState.armed='handcart';stageState.handcartFrom=pd.cell;attemptAction(c.r,c.c);return;}}
     return;
   }
-  const gap=8, totalW=Math.min(W-24, 460);
-  const bwid=(totalW-gap*(list.length-1))/list.length;
-  let x=(W-totalW)/2;
-  const h=Math.min(56, botH-16);
-  for(const b of list){
-    button(b.id, x, y, bwid, h, b.label, {
-      sub:b.sub, disabled:!b.avail && !b.toggle,
-      active: st.armed===b.id || (b.id==='sight'&&st.sight),
-      primary:b.primary, size:13.5
-    });
-    x+=bwid+gap;
-  }
-  if(hintTime>0 && hintText){
-    ctx.globalAlpha=Math.min(1,hintTime)*0.9;
-    txt(hintText, W/2, y-12, 12.5, INK_DIM,'center',600);
-    ctx.globalAlpha=1;
+  if(c.r===pd.cell.r&&c.c===pd.cell.c){keyboardActive=false;attemptAction(c.r,c.c);}
+}
+
+function handleButton(id){
+  if(id==='start'){startStage(run.stage);return;}
+  if(id==='guide'){previousScreen=screen;screen='guide';return;}
+  if(id==='closeGuide'){screen=previousScreen;return;}
+  if(id==='mute'){muted=!muted;if(master)master.gain.value=muted?0:.42;return;}
+  if(id==='restart'||id==='replay'){startStage(stageState.index);return;}
+  if(id==='next'){if(stageState.index>=STAGES.length-1){screen='toolShed';return;}startStage(stageState.index+1);return;}
+  if(id==='toolShed'){previousScreen=screen;screen='toolShed';return;}
+  if(id==='back'){screen=previousScreen==='toolShed'?'title':previousScreen;return;}
+  if(id==='closeShift'){closeShift();return;}
+  if(id==='orderSheet'){stageState.orderSheet=!stageState.orderSheet;return;}
+  if(id==='handcart'||id==='crowbar'){
+    if(stageState.charges[id]<=0)return;stageState.armed=stageState.armed===id?null:id;stageState.handcartFrom=null;
+    hint(id==='handcart'?'Tap an item, then a neighbouring space.':'Tap one item or pallet to clear it.');
   }
 }
 
-function drawPlay(){
-  drawBoard();
-  drawHUD();
-  drawAbilityBar();
-  if(whiteFlash>0.01){
-    ctx.fillStyle='rgba(255,255,255,'+Math.min(0.85,whiteFlash)+')';
-    ctx.fillRect(0,0,W,H);
-  }
-}
+cv.addEventListener('pointerdown',down,{passive:false});cv.addEventListener('pointerup',up,{passive:false});cv.addEventListener('pointercancel',()=>{pointerDown=null;pressedButton=null;});cv.addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('keydown',e=>{
+  initAudio();const k=e.key;
+  if(screen==='title'){if(k==='Enter'||k===' ')handleButton('start');return;}
+  if(screen==='guide'){if(k==='Escape'||k==='Enter'||k===' ')handleButton('closeGuide');return;}
+  if(screen==='toolShed'){if(k==='Escape'||k==='Enter')handleButton('back');return;}
+  if(screen==='result'){if(k==='Enter'||k===' ')handleButton('next');return;}
+  if(screen!=='play')return;
+  if(k==='ArrowLeft'){keyboardActive=true;keyCol=Math.max(0,keyCol-1);e.preventDefault();}
+  else if(k==='ArrowRight'){keyboardActive=true;keyCol=Math.min(COLS-1,keyCol+1);e.preventDefault();}
+  else if(k==='ArrowUp'){keyboardActive=true;keyRow=Math.max(0,keyRow-1);e.preventDefault();}
+  else if(k==='ArrowDown'){keyboardActive=true;keyRow=Math.min(ROWS-1,keyRow+1);e.preventDefault();}
+  else if(k==='Enter'||k===' '){keyboardActive=true;attemptAction(keyRow,keyCol);e.preventDefault();}
+  else if(k==='1')handleButton('handcart');else if(k==='2')handleButton('crowbar');else if(k==='3')handleButton('orderSheet');
+  else if(k.toLowerCase()==='i'){previousScreen='play';screen='guide';}
+  else if(k.toLowerCase()==='r')handleButton('restart');else if(k.toLowerCase()==='f'&&stageState.complete)handleButton('closeShift');else if(k.toLowerCase()==='m')handleButton('mute');
+});
 
-/* ---------------- title ---------------- */
-function drawTitle(){
-  drawBG();
-  const cx=W/2, cy=H*0.31;
-  // a tiny packing-line vignette
-  for(let i=0;i<4;i++){
-    const a=t*.45+i*1.57, x=cx+Math.cos(a)*Math.min(W,H)*.19, y=cy+Math.sin(a)*Math.min(W,H)*.08;
-    ctx.save(); ctx.translate(x,y); drawFruitIcon(i,11+2*Math.sin(t*2+i)); ctx.restore();
-  }
-  ctx.fillStyle='rgba(255,228,170,.10)'; rr(cx-Math.min(175,W*.43),cy-58,Math.min(350,W*.86),116,18); ctx.fill();
-  txt('PACKHOUSE',cx,cy,Math.min(50,W*.125),INK,'center',800);
-  txt('sort the harvest · pack the orders',cx,cy+35,13,INK_DIM,'center',600);
-  const bwid=Math.min(300,W*.72),h=58;
-  button('start',cx-bwid/2,H*.62,bwid,h,run&&run.stage>0?'RETURN TO WORK':'START THE SHIFT',{primary:true,size:16});
-  button('howto',cx-bwid/2,H*.62+h+12,bwid,46,'PACKING GUIDE',{size:13});
-  txt('tap matching produce · choose where the package lands',cx,H-34,11,INK_FAINT,'center',600);
-}
-
-/* ---------------- result / cabinet ---------------- */
-function drawResult(){
-  drawBoard();
-  drawHUD();
-  uiButtons=[];
-  ctx.fillStyle='rgba(4,8,16,0.80)'; ctx.fillRect(0,0,W,H);
-  const cx=W/2;
-  let y=H*0.24;
-  if(st.win){
-    txt('SHIFT COMPLETE', cx, y, Math.min(28,W*0.075), INK,'center',800); y+=30;
-    txt(st.cfg.name+' — cleared', cx, y, 13, INK_DIM,'center',600); y+=44;
-  } else {
-    txt('ORDERS MISSED', cx, y, Math.min(26,W*0.07), '#ffb0b0','center',800); y+=30;
-    txt('The doors closed before every order was packed.', cx, y, 12.5, INK_DIM,'center',600); y+=44;
-  }
-  const rows=[
-    ['Receipts this shift', st.lumens.toLocaleString()],
-    ['Longest chain', String(bestChain)],
-    ['Tools delivered', String(st.relic)],
-  ];
-  if(st.win && st.bonus) rows.splice(1,0,['Unused moves', '+'+st.bonus]);
-  for(const [a,b] of rows){
-    txt(a, cx-8, y, 13, INK_DIM,'right',600);
-    txt(b, cx+8, y, 14, INK,'left',800);
-    y+=26;
-  }
-  y+=16;
-  const bwid=Math.min(300,W*0.72);
-  if(st.win){
-    const last = run.stage>=STAGES.length-1;
-    button('next', cx-bwid/2, y, bwid, 56, last?'OPEN THE TOOL SHED':'NEXT SHIFT', {primary:true,size:16}); y+=68;
-    button('cabinet', cx-bwid/2, y, bwid, 44, 'TOOL SHED', {size:13}); y+=54;
-  } else {
-    button('retry', cx-bwid/2, y, bwid, 56, 'TRY AGAIN', {primary:true,size:16}); y+=68;
-    button('cabinet', cx-bwid/2, y, bwid, 44, 'TOOL SHED', {size:13}); y+=54;
-  }
-}
-
-function drawCabinet(){
-  drawBG();
-  const cx=W/2;
-  txt('TOOL SHED',cx,H*.10,Math.min(27,W*.07),INK,'center',800);
-  txt(run.relics+' of '+VERBS.length+' tools delivered · '+run.lumens.toLocaleString()+' receipts',cx,H*.10+27,12,INK_DIM,'center',600);
-  const n=VERBS.length, gap=10, total=Math.min(W-28,430), cw=(total-gap*(n-1))/n, x0=(W-total)/2, y0=H*.23;
-  const icons=['↔','⌁','✓','▣'];
-  for(let i=0;i<n;i++){
-    const owned=i<run.relics, x=x0+i*(cw+gap);
-    ctx.globalAlpha=owned?1:.28;
-    ctx.fillStyle=owned?'rgba(255,224,160,.14)':'rgba(255,255,255,.04)'; rr(x,y0,cw,96,12); ctx.fill();
-    ctx.strokeStyle=owned?'rgba(255,214,140,.65)':'rgba(255,255,255,.16)'; rr(x,y0,cw,96,12); ctx.stroke();
-    txt(owned?icons[i]:'?',x+cw/2,y0+30,25,owned?'#ffe0a0':INK_FAINT,'center',800);
-    txt(owned?VERBS[i].name.toUpperCase():'LOCKED',x+cw/2,y0+64,Math.min(10.5,cw*.14),owned?INK:INK_FAINT,'center',800);
-    ctx.globalAlpha=1;
-  }
-  let y=y0+126;
-  for(let i=0;i<n;i++) if(i<run.relics){
-    txt(VERBS[i].name,cx,y,14,COLORS[i].c,'center',800); y+=18;
-    y=wrapText(VERBS[i].desc,22,y,W-44,16,11.5,INK_DIM)+10;
-  }
-  if(run.relics===0){ txt('Equipment crates are visible on later loading floors.',cx,y,12,INK_FAINT,'center',600); y+=24; }
-  y=Math.max(y+6,H-140);
-  const bwid=Math.min(300,W*.72), last=run.stage>=STAGES.length-1&&st&&st.over&&st.win;
-  button('back',cx-bwid/2,y,bwid,54,last?'START ANOTHER WEEK':'BACK',{primary:true,size:15});
-  txt(run.relics>=VERBS.length?'Every tool changes what a good board looks like.':'Park a truck beside an equipment crate to bring its tool home.',cx,y+72,11.5,INK_FAINT,'center',600);
-}
-
-function drawCodex(){
-  if(prevScreen==='play' && st){ drawBoard(); drawHUD(); uiButtons=[]; }
-  else drawBG();
-  ctx.fillStyle='rgba(4,8,16,0.90)'; ctx.fillRect(0,0,W,H);
-  const cx=W/2;
-  txt('PACKING GUIDE', cx, 44, 17, INK,'center',800);
-  let y=84;
-  const pad=22;
-  for(const e of CODEX){
-    const known = run.codex[e.id];
-    ctx.globalAlpha = known?1:0.30;
-    txt(known?e.t:'— — —', pad, y, 14, known?'#a9e5ff':INK_FAINT,'left',800);
-    y+=19;
-    const text = known? e.x : 'You have not encountered this on the packing floor yet.';
-    y = wrapText(text, pad, y, W-pad*2, 16, 12, INK_DIM)+12;
-    ctx.globalAlpha=1;
-  }
-  const bwid=Math.min(240,W*0.6);
-  button('closecodex', cx-bwid/2, Math.min(H-72, y+8), bwid, 50, 'BACK', {primary:true,size:15});
-}
-function wrapText(text,x,y,maxW,lh,size,col){
-  ctx.font='600 '+size+'px ui-rounded, "Avenir Next", "Segoe UI", system-ui, sans-serif';
-  ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillStyle=col;
-  const words=text.split(' '); let line='';
-  for(const w of words){
-    const test=line?line+' '+w:w;
-    if(ctx.measureText(test).width>maxW && line){ ctx.fillText(line,x,y); y+=lh; line=w; }
-    else line=test;
-  }
-  if(line){ ctx.fillText(line,x,y); y+=lh; }
-  return y;
-}
-
-/* ---------------- main loop ---------------- */
+/* ---------- frame ---------- */
 let last=performance.now();
 function frame(now){
-  const dt=Math.min(0.05,(now-last)/1000); last=now;
-  update(dt);
-  uiButtons=[];
-  if(screen==='title') drawTitle();
-  else {
-    drawBG();
-    if(screen==='play') drawPlay();
-    else if(screen==='result') drawResult();
-    else if(screen==='cabinet') drawCabinet();
-    else if(screen==='codex') drawCodex();
-  }
+  const dt=Math.min(.05,(now-last)/1000);last=now;update(dt);uiButtons=[];drawBackground();
+  if(screen==='title')drawTitle();else if(screen==='play')drawPlay();else if(screen==='result')drawResult();else if(screen==='toolShed')drawToolShed();else if(screen==='guide')drawGuide();
   requestAnimationFrame(frame);
 }
 
-/* ---------------- input ---------------- */
-let pointerDown=null, pressedBtn=null;
-let kbActive=false, kr=ROWS-1, kc=Math.floor(COLS/2);
-
-function pos(e){
-  const rect=cv.getBoundingClientRect();
-  const p = (e.touches&&e.touches[0])||(e.changedTouches&&e.changedTouches[0])||e;
-  return {x:p.clientX-rect.left, y:p.clientY-rect.top};
-}
-function cellAt(x,y){
-  if(x<bx||y<by||x>=bx+bw||y>=by+bh) return null;
-  return {c:Math.floor((x-bx)/cell), r:Math.floor((y-by)/cell)};
-}
-function btnAt(x,y){
-  for(let i=uiButtons.length-1;i>=0;i--){
-    const b=uiButtons[i];
-    const pad=6;
-    if(x>=b.x-pad&&x<=b.x+b.w+pad&&y>=b.y-pad&&y<=b.y+b.h+pad) return b;
-  }
-  return null;
-}
-function onDown(e){
-  e.preventDefault(); initAudio();
-  const {x,y}=pos(e);
-  const b=btnAt(x,y);
-  if(b){ pressedBtn=b.id; pointerDown={x,y,btn:b.id}; sfxUI(); return; }
-  const cl = (screen==='play')? cellAt(x,y):null;
-  pointerDown={x,y,cell:cl};
-  if(cl && !busy) { const p=at(cl.r,cl.c); if(p){ p.pop=Math.max(p.pop,0.18); sfxTap(); } }
-}
-function onUp(e){
-  e.preventDefault();
-  const {x,y}=pos(e);
-  const pd=pointerDown; pointerDown=null; pressedBtn=null;
-  if(!pd) return;
-  if(pd.btn){
-    const b=btnAt(x,y);
-    if(b && b.id===pd.btn && !b.disabled) handleButton(b.id);
-    return;
-  }
-  if(screen!=='play') return;
-  const cl=cellAt(x,y);
-  if(!cl||!pd.cell) return;
-  const dx=Math.abs(x-pd.x), dy=Math.abs(y-pd.y);
-  // drag = shift gesture if shift is armed or available
-  if((dx>cell*0.45||dy>cell*0.45)){
-    if(st.armed==='shift' || (st.charges.shift>0 && !st.armed)){
-      const from=pd.cell;
-      const d=Math.abs(from.r-cl.r)+Math.abs(from.c-cl.c);
-      if(d===1){
-        st.armed='shift'; st.shiftFrom=from;
-        attemptAct(cl.r,cl.c);
-        return;
-      }
-    }
-    return; // ignore stray drags: prevents accidental moves
-  }
-  if(cl.r===pd.cell.r && cl.c===pd.cell.c){
-    kbActive=false;
-    attemptAct(cl.r,cl.c);
-  }
-}
-function handleButton(id){
-  if(id==='start'){ if(!run) newRun(); startStage(run.stage); return; }
-  if(id==='howto'){ prevScreen='title'; screen='codex'; return; }
-  if(id==='codex'){ prevScreen=screen; screen='codex'; codexPulse=0; return; }
-  if(id==='closecodex'){ screen=prevScreen==='title'?'title':'play'; return; }
-  if(id==='mute'){ muted=!muted; if(master) master.gain.value = muted?0:0.5; setDrone(muted?0:0.06); return; }
-  if(id==='retry'){ startStage(run.stage); return; }
-  if(id==='next'){
-    if(run.stage>=STAGES.length-1){ screen='cabinet'; return; }
-    startStage(run.stage+1); return;
-  }
-  if(id==='cabinet'){ prevScreen=screen; screen='cabinet'; return; }
-  if(id==='back'){
-    if(st && st.over && st.win && run.stage>=STAGES.length-1){ newRunKeepCabinet(); return; }
-    screen = (st && st.over)? 'result' : (st? 'play':'title'); return;
-  }
-  if(id==='finish'){ endRound(true); return; }
-  if(id==='sight'){ st.sight=!st.sight; return; }
-  if(id==='shift'||id==='ember'){
-    if(st.charges[id]<=0) return;
-    st.armed = (st.armed===id)? null : id;
-    st.shiftFrom=null;
-    hint(id==='shift'? 'Tap an item, then a neighbouring space.' : 'Tap one item or pallet to clear it.');
-    return;
-  }
-}
-function newRunKeepCabinet(){
-  // loop the tides, keep the cabinet
-  const keep={relics:run.relics, lumens:run.lumens, verbs:run.verbs, codex:run.codex, best:run.best};
-  newRun(); run.relics=keep.relics; run.lumens=keep.lumens; run.verbs=keep.verbs; run.codex=keep.codex; run.best=keep.best;
-  startStage(0);
-}
-
-cv.addEventListener('pointerdown', onDown, {passive:false});
-cv.addEventListener('pointerup', onUp, {passive:false});
-cv.addEventListener('pointercancel', ()=>{pointerDown=null;pressedBtn=null;});
-cv.addEventListener('contextmenu', e=>e.preventDefault());
-
-window.addEventListener('keydown', e=>{
-  initAudio();
-  const k=e.key;
-  if(screen==='title'){ if(k==='Enter'||k===' '){ handleButton('start'); e.preventDefault(); } return; }
-  if(screen==='codex'){ if(k==='Escape'||k==='Enter'||k===' '||k.toLowerCase()==='i'){ handleButton('closecodex'); e.preventDefault(); } return; }
-  if(screen==='cabinet'){ if(k==='Escape'||k==='Enter'){ handleButton('back'); } return; }
-  if(screen==='result'){
-    if(k==='Enter'||k===' '){ handleButton(st.win?'next':'retry'); e.preventDefault(); }
-    if(k.toLowerCase()==='c') handleButton('cabinet');
-    return;
-  }
-  // play
-  if(k==='ArrowLeft'){ kbActive=true; kc=Math.max(0,kc-1); e.preventDefault(); }
-  else if(k==='ArrowRight'){ kbActive=true; kc=Math.min(COLS-1,kc+1); e.preventDefault(); }
-  else if(k==='ArrowUp'){ kbActive=true; kr=Math.max(0,kr-1); e.preventDefault(); }
-  else if(k==='ArrowDown'){ kbActive=true; kr=Math.min(ROWS-1,kr+1); e.preventDefault(); }
-  else if(k==='Enter'||k===' '){ kbActive=true; attemptAct(kr,kc); e.preventDefault(); }
-  else if(k==='1') handleButton('shift');
-  else if(k==='2') handleButton('ember');
-  else if(k==='3') handleButton('sight');
-  else if(k.toLowerCase()==='i') { prevScreen='play'; screen='codex'; codexPulse=0; }
-  else if(k.toLowerCase()==='r') handleButton('retry');
-  else if(k.toLowerCase()==='f' && st.done) handleButton('finish');
-  else if(k.toLowerCase()==='m') handleButton('mute');
-});
-
-/* ---------------- boot ---------------- */
-measureSafeArea();
-resize();
-newRun();
-requestAnimationFrame(frame);
+measureSafeArea();resize();loadRun();requestAnimationFrame(frame);
 </script>
 </body>
 </html>
