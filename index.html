@@ -3,52 +3,60 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>PACKHOUSE — Juicy Shift</title>
+<title>PACKHOUSE — Pass 3</title>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#07142c;touch-action:none;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:#08152e;touch-action:none;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
   canvas{display:block;width:100%;height:100%}
   *{box-sizing:border-box;user-select:none;-webkit-user-select:none}
 </style>
 </head>
 <body>
-<canvas id="c" aria-label="PACKHOUSE produce packing puzzle"></canvas>
+<canvas id="c" aria-label="Packhouse packing puzzle"></canvas>
 <script>
 "use strict";
+/* ==========================================================================
+   PACKHOUSE — prototype pass 3
 
-/* ============================================================
-   PACKHOUSE V2 — controlled packing puzzle
+   Core rule (one sentence):
+     Press a group of touching, matching produce; the packed item settles in
+     the column you pressed, and if it lands touching another match it packs
+     again.
 
-   Design commitments:
-   1. The tapped cell is the package landing choice.
-   2. Automatic chains use only the committed board state.
-      New supply never joins the current chain.
-   3. Every stage is deterministic and always remains playable.
-   4. There is no move-limit failure state.
-   5. Internal names use the same grounded language as the UI.
-   ============================================================ */
+   The three changes this pass is really testing:
+     1. PLAN-ON-PRESS. Holding a piece shows the exact landing cell, the ghost
+        of the resulting package, the pieces it will chain with, and the score.
+        Release to commit, drag to cancel. Consequence is visible before the
+        move, but the game never says which move is best.
+     2. SEEDED STOCK + PER-COLUMN CHUTES. Boards start with loose baskets and
+        crates, supply is a visible per-column queue, and the floor guarantees
+        at least one chain opportunity exists. Chains become a thing you look
+        for, not a thing that happens to you.
+     3. FORKLIFT. A scarce drag-to-swap that gives real positional agency, so
+        "I can engineer that" becomes possible.
+   ========================================================================== */
 
 const cv=document.getElementById('c');
 const ctx=cv.getContext('2d');
-let W=0,H=0,DPR=1,SAFE_TOP=0,SAFE_BOTTOM=0;
-const COLS=7,ROWS=8;
-let cell=48,bx=0,by=0,bw=0,bh=0,topH=122,bottomH=94;
+let W=0,H=0,DPR=1,ST=0,SB=0;
+let COLS=7,ROWS=8,cell=48,bx=0,by=0,bw=0,bh=0,topH=118,botH=96,chuteH=30;
 
-function measureSafeArea(){
+function measureSafe(){
   const d=document.createElement('div');
   d.style.cssText='position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
   document.body.appendChild(d);
   const cs=getComputedStyle(d);
-  SAFE_TOP=parseFloat(cs.paddingTop)||0;
-  SAFE_BOTTOM=parseFloat(cs.paddingBottom)||0;
+  ST=parseFloat(cs.paddingTop)||0; SB=parseFloat(cs.paddingBottom)||0;
   d.remove();
 }
 function layout(){
-  topH=Math.max(106,Math.min(144,H*.17))+SAFE_TOP;
-  bottomH=Math.max(82,Math.min(112,H*.14))+SAFE_BOTTOM;
-  const aw=W-20, ah=H-topH-bottomH-12;
-  cell=Math.floor(Math.min(aw/COLS,ah/ROWS));
+  topH=Math.max(102,Math.min(138,H*.155))+ST;
+  botH=Math.max(74,Math.min(102,H*.125))+SB;
+  const aw=W-18, ah=H-topH-botH-8;
+  cell=Math.max(24,Math.floor(Math.min(aw/COLS, ah/(ROWS+0.8))));
+  chuteH=Math.round(cell*.66);
   bw=cell*COLS; bh=cell*ROWS;
-  bx=Math.round((W-bw)/2); by=Math.round(topH+(ah-bh)/2);
+  bx=Math.round((W-bw)/2);
+  by=Math.round(topH+chuteH+Math.max(0,(ah-chuteH-bh)/2));
 }
 function resize(){
   DPR=Math.min(2,window.devicePixelRatio||1);
@@ -60,747 +68,909 @@ function resize(){
 }
 addEventListener('resize',resize);
 
-/* ---------- vivid produce palette ---------- */
+/* ---------------- palette ---------------- */
 const PRODUCE=[
-  {name:'apple', plural:'apples', main:'#ff3f66', dark:'#a90e3c', light:'#ff9db2', leaf:'#64e572'},
-  {name:'orange',plural:'oranges',main:'#ff9b1c',dark:'#c54a08',light:'#ffd26f',leaf:'#72df62'},
-  {name:'pear',plural:'pears',main:'#8fe23c',dark:'#328f29',light:'#d7ff7e',leaf:'#34c96b'},
-  {name:'berry',plural:'berries',main:'#995cff',dark:'#4d20a9',light:'#dabdff',leaf:'#5de28e'}
+  {n:'apple', main:'#ff3f66', dark:'#a30d3a', light:'#ffa8ba', leaf:'#5fe06d', L:'A'},
+  {n:'orange',main:'#ff9b1c', dark:'#bf4708', light:'#ffd583', leaf:'#6fdc5f', L:'O'},
+  {n:'pear',  main:'#8fe23c', dark:'#2e8a26', light:'#ddff8a', leaf:'#2fc466', L:'P'},
+  {n:'berry', main:'#9a5cff', dark:'#4a1fa6', light:'#dcc2ff', leaf:'#57e08a', L:'B'}
 ];
-const INK='#f8fbff',DIM='rgba(238,247,255,.68)',FAINT='rgba(238,247,255,.34)';
-const CYAN='#66e8ff',GOLD='#ffd36b',MINT='#79ffc7';
+const INK='#f6fbff',DIM='rgba(236,246,255,.66)',FAINT='rgba(236,246,255,.32)';
+const CYAN='#6ae9ff',GOLD='#ffd36b',MINT='#79ffc7';
+const TIER_NAME=['produce','basket','crate','truck'];
+const tierName=t=>TIER_NAME[Math.min(3,Math.max(0,t-1))];
 
-/* ---------- deterministic supply ---------- */
-function mulberry32(seed){
-  return function(){
-    seed|=0; seed=seed+0x6D2B79F5|0;
-    let t=Math.imul(seed^seed>>>15,1|seed);
-    t=t+Math.imul(t^t>>>7,61|t)^t;
-    return ((t^t>>>14)>>>0)/4294967296;
-  };
-}
-function shuffleWithRng(a,rng){
-  for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
-  return a;
-}
+/* ---------------- rng ---------------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function shuffle(arr,rng){for(let i=arr.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
 
-/* ---------- stage data ---------- */
+/* ---------------- shifts ----------------
+   Each shift introduces exactly one new idea and keeps everything before it. */
 const STAGES=[
-  {name:'Fresh Sort',sub:'learn where the package lands',seed:1081,colors:3,bulk:false,pallets:0,equipment:0,goal:{baskets:5},
-   hint:'Tap a matching group. The package lands on the exact item you tap.'},
-  {name:'Crate Logic',sub:'use landing position to build chains',seed:2189,colors:3,bulk:false,pallets:0,equipment:0,goal:{crates:3},
-   hint:'A white sparkle marks a landing cell that will chain immediately.'},
-  {name:'Bulk Orders',sub:'large groups skip one package size',seed:3779,colors:3,bulk:true,pallets:0,equipment:0,goal:{crates:5},
-   hint:'Groups of five or more bulk-pack two sizes at once.'},
-  {name:'Dispatch Bay',sub:'park a truck where it matters',seed:4813,colors:3,bulk:true,pallets:2,equipment:1,goal:{trucks:1,equipment:1},
-   hint:'A truck delivers equipment only when parked directly beside its crate.'},
-  {name:'Market Rush',sub:'four crops and a crowded loading floor',seed:6397,colors:4,bulk:true,pallets:4,equipment:2,goal:{trucks:2,equipment:2},
-   hint:'A waiting truck leaves after three later actions. Dispatch now or build beside it.'},
-  {name:'Fleet Day',sub:'engineer two neighbouring trucks',seed:7919,colors:4,bulk:true,pallets:5,equipment:3,goal:{fleet:1,equipment:3},
-   hint:'Two neighbouring trucks coordinate a fleet pickup and clear the floor.'}
+ {name:'Fresh Sort',sub:'press, look, release',cols:6,rows:7,colors:2,seed:1071,
+  bulk:false,forklift:0,seedBaskets:0,seedCrates:0,basketDrop:0,goal:{baskets:5},noGuarantee:true,
+  teach:'Press and hold any fruit. The plan shows where the basket will land.',
+  layout:['......','......','......','oaoaoa','aoaaoo','oaoaao','aaooaa']},
+
+ {name:'Chain Reaction',sub:'land a package beside its match',cols:7,rows:8,colors:3,seed:2189,
+  bulk:false,forklift:0,seedBaskets:4,seedCrates:0,basketDrop:0,goal:{chains:6},bonus:{chain:3,reward:300},
+  teach:'Loose baskets are already on the floor. Land a new one touching them.'},
+
+ {name:'Crate Logic',sub:'bulk orders and the forklift',cols:7,rows:8,colors:3,seed:3779,
+  bulk:true,forklift:2,seedBaskets:4,seedCrates:1,basketDrop:.35,goal:{crates:7},bonus:{chain:3,reward:400},
+  teach:'Drag a package onto a neighbour to use the forklift. Two loads per shift.'},
+
+ {name:'Dispatch Bay',sub:'a truck collects its whole crop',cols:7,rows:8,colors:3,seed:4813,
+  bulk:true,forklift:2,seedBaskets:3,seedCrates:0,basketDrop:.28,goal:{trucks:3},bonus:{chain:3,reward:500},
+  teach:'Merge two crates to build a truck. Press the truck to send it out.'},
+
+ {name:'Market Rush',sub:'four crops, one loading floor',cols:7,rows:8,colors:4,seed:6397,
+  bulk:true,forklift:3,seedBaskets:4,seedCrates:1,basketDrop:.3,goal:{trucks:3},bonus:{chain:4,reward:900},
+  teach:'Two trucks side by side leave together and clear the whole floor.'}
 ];
 
-const TOOLS=[
-  {id:'handcart',name:'Handcart',verb:'MOVE',desc:'Move one item into a neighbouring space once each shift.'},
-  {id:'crowbar',name:'Crowbar',verb:'CLEAR',desc:'Remove one item or broken pallet once each shift.'},
-  {id:'orderSheet',name:'Order Sheet',verb:'PLAN',desc:'Show every packable group and the exact landing cells that chain.'},
-  {id:'coldRoom',name:'Cold Room',verb:'STORE',desc:'Carry your best surviving package into the next shift.'}
-];
+/* ---------------- save ---------------- */
+const KEY='packhouse-p3';
+let run={stage:0,total:0,chainsMade:0,best:{},seenChain:false,seenTruck:false};
+function load(){try{const v=JSON.parse(localStorage.getItem(KEY));if(v)run=Object.assign(run,v);}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(run));}catch(e){}}
 
-const SAVE_KEY='packhouse-v2-save';
-let run;
-function freshRun(){return {stage:0,totalReceipts:0,equipmentDelivered:0,tools:{},known:{},bestActions:{},stored:null};}
-function loadRun(){
-  try{const v=JSON.parse(localStorage.getItem(SAVE_KEY));run=Object.assign(freshRun(),v||{});}catch(e){run=freshRun();}
-}
-function saveRun(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(run));}catch(e){}}
-function unlockNextTool(){
-  const index=run.equipmentDelivered-1;
-  const tool=TOOLS[index];
-  if(tool&&!run.tools[tool.id]){run.tools[tool.id]=true;saveRun();return tool;}
-  return null;
-}
-function learn(id){run.known[id]=true;saveRun();}
-
-/* ---------- audio ---------- */
+/* ---------------- audio ---------------- */
 let AC=null,master=null,muted=false;
-function initAudio(){
-  if(AC)return;
-  try{AC=new (AudioContext||webkitAudioContext)();master=AC.createGain();master.gain.value=.42;master.connect(AC.destination);}catch(e){AC=null;}
-}
-function tone(freq,dur=.14,type='sine',vol=.12,slide=1,delay=0){
-  if(!AC||muted)return;
-  const t=AC.currentTime+delay,o=AC.createOscillator(),g=AC.createGain();
-  o.type=type;o.frequency.setValueAtTime(freq,t);if(slide!==1)o.frequency.exponentialRampToValueAtTime(Math.max(30,freq*slide),t+dur);
-  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+function initAudio(){if(AC)return;try{AC=new (window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=.4;master.connect(AC.destination);}catch(e){AC=null;}}
+function tone(f,dur=.14,type='sine',vol=.12,slide=1,delay=0){
+  if(!AC||muted)return;const t=AC.currentTime+delay,o=AC.createOscillator(),g=AC.createGain();
+  o.type=type;o.frequency.setValueAtTime(f,t);if(slide!==1)o.frequency.exponentialRampToValueAtTime(Math.max(30,f*slide),t+dur);
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
   o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+.03);
 }
-function noise(dur=.35,vol=.14,freq=1300){
-  if(!AC||muted)return;
-  const t=AC.currentTime,n=AC.createBufferSource(),len=Math.floor(AC.sampleRate*dur),buf=AC.createBuffer(1,len,AC.sampleRate),d=buf.getChannelData(0);
+function noise(dur=.3,vol=.14,f=1300){
+  if(!AC||muted)return;const t=AC.currentTime,n=AC.createBufferSource(),len=Math.floor(AC.sampleRate*dur),buf=AC.createBuffer(1,len,AC.sampleRate),d=buf.getChannelData(0);
   for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*(1-i/len);
-  n.buffer=buf;const f=AC.createBiquadFilter(),g=AC.createGain();f.type='bandpass';f.frequency.value=freq;f.Q.value=1;g.gain.value=vol;g.gain.exponentialRampToValueAtTime(.0001,t+dur);
-  n.connect(f);f.connect(g);g.connect(master);n.start(t);n.stop(t+dur);
+  n.buffer=buf;const bp=AC.createBiquadFilter(),g=AC.createGain();bp.type='bandpass';bp.frequency.value=f;bp.Q.value=1;g.gain.value=vol;g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  n.connect(bp);bp.connect(g);g.connect(master);n.start(t);n.stop(t+dur);
 }
-const SCALE=[0,2,4,7,9,12,14,16,19,21,24];
+const SCALE=[0,2,4,7,9,12,14,16,19,21,24,26,28];
 const hz=i=>220*Math.pow(2,SCALE[Math.max(0,Math.min(SCALE.length-1,i))]/12);
-function sfxMerge(tier,chain){tone(hz(tier+chain),.18,'triangle',.16);tone(hz(tier+chain+3),.24,'sine',.10,1,0.04);}
-function sfxBad(){tone(120,.13,'square',.06,.72);}
-function sfxTap(){tone(620,.05,'sine',.08);}
-function sfxTruck(){noise(.55,.22,1500);tone(72,.6,'sine',.22,.45);}
-function sfxTool(){[5,8,10].forEach((n,i)=>tone(hz(n),.45,'triangle',.12,1,i*.06));}
-function sfxWin(){[2,5,8,10].forEach((n,i)=>tone(hz(n),.5,'triangle',.14,1,i*.08));}
+function sfxPack(tier,chain){tone(hz(tier+chain*2),.17,'triangle',.15);tone(hz(tier+chain*2+3),.22,'sine',.09,1,.04);}
+function sfxNo(){tone(118,.12,'square',.05,.72);}
+function sfxTap(){tone(600,.045,'sine',.06);}
+function sfxLift(){tone(420,.12,'triangle',.1,1.6);}
+function sfxTruck(){noise(.5,.2,1500);tone(70,.55,'sine',.2,.45);}
+function sfxWin(){[2,5,8,11].forEach((n,i)=>tone(hz(n),.45,'triangle',.13,1,i*.08));}
 
-/* ---------- board state ---------- */
-let grid=[],flying=[],particles=[],rings=[],floaters=[];
-let uid=1,busy=false,chain=0,bestChain=0,shake=0,flash=0,t=0;
-let stageState=null,screen='title',previousScreen='play';
+/* ---------------- board state ---------------- */
+let grid=[],flying=[],parts=[],rings=[],floats=[],lines=[];
+let uid=1,busy=false,shakeAmt=0,flash=0,t=0;
+let cfg=STAGES[0],st=null,rng=mulberry32(1),colQ=[];
+let screen='title',prevScreen='play';
 let hintText='',hintTime=0;
-let uiButtons=[],pressedButton=null,pointerDown=null;
-let keyboardActive=false,keyRow=ROWS-1,keyCol=Math.floor(COLS/2);
+let buttons=[],pressBtn=null,down=null,preview=null;
+let spotCells=[];
+let keyR=0,keyC=0,keyOn=false;
 
-function makePiece(color,tier=1,kind='produce'){
-  return {id:uid++,color,tier,kind,r:0,c:0,px:0,py:0,vx:0,vy:0,pop:0,flash:0,hint:0,scale:1,targetR:null,targetC:null,shrinking:false,wait:0,bornAction:-1};
-}
-function at(r,c){return r<0||c<0||r>=ROWS||c>=COLS?null:grid[r][c];}
-function boardX(c){return bx+c*cell+cell/2;}
-function boardY(r){return by+r*cell+cell/2;}
-function tierName(t){return ['produce','basket','crate','truck'][Math.min(3,t-1)];}
-function hint(s,time=4){hintText=s;hintTime=time;}
+function makeP(color,tier){return {id:uid++,color,tier,r:0,c:0,px:0,py:0,vx:0,vy:0,pop:0,flash:0,wig:0,scale:1,tR:null,tC:null,gone:false};}
+function at(r,c){return (r<0||c<0||r>=ROWS||c>=COLS)?null:grid[r][c];}
+const bxc=c=>bx+c*cell+cell/2, byr=r=>by+r*cell+cell/2;
+function hint(s,time=4.5){hintText=s;hintTime=time;}
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 
-function supplyFill(n=40){
-  while(stageState.supply.length<n){
+/* --------- supply: one visible queue per column --------- */
+function fillQ(c){
+  while(colQ[c].length<5){
     const bag=[];
-    for(let repeat=0;repeat<3;repeat++)for(let c=0;c<stageState.colors;c++)bag.push(c);
-    shuffleWithRng(bag,stageState.rng);
-    stageState.supply.push(...bag);
+    for(let k=0;k<2;k++)for(let i=0;i<cfg.colors;i++)bag.push({color:i,tier:1});
+    shuffle(bag,rng);
+    if(cfg.basketDrop&&rng()<cfg.basketDrop)bag[Math.floor(rng()*bag.length)].tier=2;
+    colQ[c].push.apply(colQ[c],bag);
   }
 }
-function peekSupply(n=7){supplyFill(n);return stageState.supply.slice(0,n);}
-function takeSupply(){supplyFill(1);return stageState.supply.shift();}
+function pull(c){fillQ(c);const s=colQ[c].shift();fillQ(c);return s;}
 
-function openingColor(r,c){
-  // Fixed stage seed plus a structured stripe bias: deterministic, readable,
-  // and guaranteed to begin with several possible groups.
-  const stripe=(c+Math.floor(r/2)+stageState.index)%stageState.colors;
-  return stageState.rng()<.52?stripe:Math.floor(stageState.rng()*stageState.colors);
+/* --------- board construction --------- */
+function charPiece(ch){
+  const low='aopb'.indexOf(ch); if(low>=0)return makeP(low,1);
+  const up='AOPB'.indexOf(ch); if(up>=0)return makeP(up,2);
+  const cr='1234'.indexOf(ch); if(cr>=0)return makeP(cr,3);
+  return null;
 }
-
+function genColor(r,c){
+  const stripe=(c+((r/2)|0)+st.index)%cfg.colors;
+  return rng()<.5?stripe:Math.floor(rng()*cfg.colors);
+}
 function buildBoard(){
   grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
-  flying=[];particles=[];rings=[];floaters=[];
-
-  // Cold Room package is reserved before obstacles are placed, so it can never erase a goal object.
-  let reserved=null;
-  if(run.tools.coldRoom&&run.stored){reserved={r:ROWS-1,c:Math.floor(COLS/2)};}
-
+  flying=[];parts=[];rings=[];floats=[];lines=[];
+  const L=cfg.layout;
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const p=makePiece(openingColor(r,c),1,'produce');
-    p.r=r;p.c=c;p.px=c;p.py=r-ROWS-1;grid[r][c]=p;
+    let p=null;
+    if(L){p=charPiece(L[r][c]);}
+    else p=makeP(genColor(r,c),1);
+    if(p){p.r=r;p.c=c;p.px=c;p.py=r-ROWS-1;grid[r][c]=p;}
   }
-
-  if(reserved){
-    const p=makePiece(run.stored.color,run.stored.tier,'produce');
-    p.r=reserved.r;p.c=reserved.c;p.px=reserved.c;p.py=-2;p.flash=1;
-    grid[reserved.r][reserved.c]=p;
-    hint('The Cold Room returned your '+tierName(p.tier)+'.');
-    run.stored=null;saveRun();
+  for(let c=0;c<COLS;c++)for(let r=0;r<ROWS;r++)if(!grid[r][c]){
+    const s=pull(c),p=makeP(s.color,s.tier);p.r=r;p.c=c;p.px=c;p.py=r-ROWS-1;grid[r][c]=p;
   }
-
+  if(!L)seedStock();
+  ensurePlayable();ensureOpportunity();refreshSpots();
+}
+function seedStock(){
   const spots=[];
-  for(let r=3;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    if(reserved&&reserved.r===r&&reserved.c===c)continue;
-    spots.push([r,c]);
-  }
-  shuffleWithRng(spots,stageState.rng);
-  let si=0;
-  for(let i=0;i<stageState.pallets;i++){
-    const [r,c]=spots[si++],p=makePiece(0,1,'pallet');p.r=r;p.c=c;p.px=c;p.py=r-ROWS-2;grid[r][c]=p;
-  }
-  for(let i=0;i<stageState.equipment;i++){
-    const [r,c]=spots[si++],p=makePiece(0,1,'equipment');p.r=r;p.c=c;p.px=c;p.py=r-ROWS-2;grid[r][c]=p;
-  }
-
-  ensurePlayable();
+  for(let r=2;r<ROWS;r++)for(let c=0;c<COLS;c++)spots.push([r,c]);
+  shuffle(spots,rng);
+  let i=0;
+  for(let k=0;k<cfg.seedCrates&&i<spots.length;k++){const[r,c]=spots[i++];const p=grid[r][c];if(p){p.tier=3;p.color=Math.floor(rng()*cfg.colors);}}
+  for(let k=0;k<cfg.seedBaskets&&i<spots.length;k++){const[r,c]=spots[i++];const p=grid[r][c];if(p){p.tier=2;p.color=Math.floor(rng()*cfg.colors);}}
 }
 
-function startStage(index){
-  const cfg=STAGES[index];
-  run.stage=index;
-  stageState={index,cfg,colors:cfg.colors,pallets:cfg.pallets,equipment:cfg.equipment,bulk:cfg.bulk,
-    rng:mulberry32(cfg.seed),supply:[],actions:0,receipts:0,baskets:0,crates:0,trucks:0,fleet:0,equipmentDelivered:0,
-    complete:false,charges:{handcart:run.tools.handcart?1:0,crowbar:run.tools.crowbar?1:0},armed:null,handcartFrom:null,orderSheet:false};
-  busy=false;chain=0;bestChain=0;flash=0;
-  buildBoard();
-  screen='play';hint(cfg.hint,5.5);saveRun();
-}
-
-/* ---------- grouping and deterministic simulation ---------- */
-function floodGroup(r,c,board=grid){
-  const start=(r<0||c<0||r>=ROWS||c>=COLS)?null:board[r][c];
-  if(!start||start.kind!=='produce')return[];
-  const out=[start],stack=[start],seen=new Set([start.id]);
+/* --------- groups and pure simulation --------- */
+function floodGrid(r,c){
+  const s=at(r,c); if(!s)return [];
+  const out=[s],stack=[s],seen=new Set([s.id]);
   while(stack.length){
     const p=stack.pop();
-    for(const [rr,cc] of [[p.r-1,p.c],[p.r+1,p.c],[p.r,p.c-1],[p.r,p.c+1]]){
-      const q=(rr<0||cc<0||rr>=ROWS||cc>=COLS)?null:board[rr][cc];
-      if(q&&q.kind==='produce'&&!seen.has(q.id)&&q.color===start.color&&q.tier===start.tier){seen.add(q.id);out.push(q);stack.push(q);}
+    const nb=[[p.r-1,p.c],[p.r+1,p.c],[p.r,p.c-1],[p.r,p.c+1]];
+    for(const[rr,cc]of nb){const q=at(rr,cc);if(q&&!seen.has(q.id)&&q.color===s.color&&q.tier===s.tier){seen.add(q.id);out.push(q);stack.push(q);}}
+  }
+  return out;
+}
+function cloneB(){return grid.map((row,r)=>row.map((p,c)=>p?{color:p.color,tier:p.tier,r,c}:null));}
+function floodB(b,r,c){
+  const s=b[r][c]; if(!s)return[];
+  const out=[s],stack=[s],seen=new Set([s]);
+  while(stack.length){
+    const p=stack.pop();
+    const nb=[[p.r-1,p.c],[p.r+1,p.c],[p.r,p.c-1],[p.r,p.c+1]];
+    for(const[rr,cc]of nb){
+      if(rr<0||cc<0||rr>=ROWS||cc>=COLS)continue;
+      const q=b[rr][cc];
+      if(q&&!seen.has(q)&&q.color===s.color&&q.tier===s.tier){seen.add(q);out.push(q);stack.push(q);}
     }
   }
   return out;
 }
-function anyMove(board=grid){
+function settleB(b){
+  for(let c=0;c<COLS;c++){
+    let w=ROWS-1;
+    for(let r=ROWS-1;r>=0;r--){const q=b[r][c];if(!q)continue;if(w!==r){b[w][c]=q;b[r][c]=null;}q.r=w;q.c=c;w--;}
+  }
+}
+const packScore=(fromTier,size,chainIdx)=>10*fromTier*size*chainIdx;
+
+/* Returns the full consequence of pressing (r,c): landing cell, resulting
+   tier, how many packs it will trigger, who it chains with, and the score. */
+function simulate(r,c){
+  const src=at(r,c);
+  if(!src||src.tier>=4)return null;
+  const live=floodGrid(r,c);
+  if(live.length<2)return null;
+  const b=cloneB(),tgt=b[r][c];
+  const g=floodB(b,r,c);
+  const bulk=cfg.bulk&&g.length>=5;
+  for(const q of g)b[q.r][q.c]=null;
+  let cur={color:tgt.color,tier:Math.min(4,tgt.tier+(bulk?2:1)),r,c};
+  b[r][c]=cur;settleB(b);
+  let chain=1,pts=packScore(tgt.tier,g.length,1),matches=[],firstLand={r:cur.r,c:cur.c};
+  while(cur.tier<4){
+    const g2=floodB(b,cur.r,cur.c);
+    if(g2.length<2)break;
+    if(chain===1)matches=g2.filter(q=>q!==cur).map(q=>({r:q.r,c:q.c}));
+    chain++;
+    const b2=cfg.bulk&&g2.length>=5,from=cur.tier;
+    for(const q of g2)b[q.r][q.c]=null;
+    cur={color:cur.color,tier:Math.min(4,from+(b2?2:1)),r:cur.r,c:cur.c};
+    b[cur.r][cur.c]=cur;settleB(b);
+    pts+=packScore(from,g2.length,chain);
+  }
+  return {group:live.map(q=>({r:q.r,c:q.c})),groupSize:live.length,bulk,
+          landR:firstLand.r,landC:firstLand.c,tier:Math.min(4,src.tier+(bulk?2:1)),
+          chain,matches,points:pts,finalTier:cur.tier,color:src.color};
+}
+
+/* --------- the floor never dead-ends, and always holds a chain --------- */
+function anyMove(){
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const p=board[r][c];
-    if(!p||p.kind!=='produce')continue;
-    if(p.tier>=4||floodGroup(r,c,board).length>=2)return true;
+    const p=grid[r][c];if(!p)continue;
+    if(p.tier>=4)return true;
+    if(floodGrid(r,c).length>=2)return true;
   }
   return false;
 }
 function ensurePlayable(){
   if(anyMove())return;
-  // Deterministically create one adjacent pair at the top without changing fixed objects.
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS-1;c++){
     const a=grid[r][c],b=grid[r][c+1];
-    if(a&&b&&a.kind==='produce'&&b.kind==='produce'&&a.tier===1&&b.tier===1){b.color=a.color;b.flash=1;return;}
-  }
-  // If the board is almost entirely fixed objects, clear one non-goal pallet rather than deadlock.
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(grid[r][c]?.kind==='pallet'){grid[r][c]=null;refillBoard();return;}
-}
-function compactBoard(board=grid,animate=true){
-  for(let c=0;c<COLS;c++){
-    let write=ROWS-1;
-    for(let r=ROWS-1;r>=0;r--){
-      const p=board[r][c];
-      if(!p)continue;
-      if(write!==r){board[write][c]=p;board[r][c]=null;p.r=write;p.c=c;if(!animate){p.px=c;p.py=write;}}
-      write--;
-    }
+    if(a&&b&&a.tier<4&&b.tier<4){b.color=a.color;b.tier=a.tier;b.flash=1;return;}
   }
 }
-function cloneBoard(){
-  return grid.map(row=>row.map(p=>p?{id:p.id,color:p.color,tier:p.tier,kind:p.kind,r:p.r,c:p.c,marker:false}:null));
-}
-function simulateLanding(r,c){
-  const board=cloneBoard(),target=board[r][c];
-  if(!target||target.kind!=='produce'||target.tier>=4)return null;
-  const group=floodGroup(r,c,board);
-  if(group.length<2)return null;
-  const leap=stageState.bulk&&group.length>=5?2:1;
-  for(const q of group)if(q!==target)board[q.r][q.c]=null;
-  target.tier=Math.min(4,target.tier+leap);target.marker=true;
-  compactBoard(board,false);
-  let located=null;
-  for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)if(board[rr][cc]?.marker)located=board[rr][cc];
-  if(!located)return null;
-  const next=located.tier<4?floodGroup(located.r,located.c,board):[];
-  return {groupSize:group.length,leap,chain:next.length>=2,resultTier:located.tier,finalR:located.r,finalC:located.c};
-}
-function chainDepthForLanding(r,c){
-  // A compact deterministic preview used by the Order Sheet. It follows only
-  // existing pieces and stops before supply enters.
-  const board=cloneBoard();
-  let target=board[r][c],depth=0;
-  if(!target||target.kind!=='produce'||target.tier>=4)return 0;
-  while(target&&target.tier<4){
-    const group=floodGroup(target.r,target.c,board);
-    if(group.length<2)break;
-    depth++;
-    const leap=stageState.bulk&&group.length>=5?2:1;
-    for(const q of group)if(q!==target)board[q.r][q.c]=null;
-    target.tier=Math.min(4,target.tier+leap);target.marker=true;
-    compactBoard(board,false);
-    target=null;
-    for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++)if(board[rr][cc]?.marker){target=board[rr][cc];target.marker=false;}
-  }
-  return depth;
-}
-
-/* ---------- effects ---------- */
-function ring(x,y,color,max,width=3){rings.push({x,y,r:cell*.2,max,color,width,life:1});}
-function burst(x,y,color,count=18,power=2){
-  for(let i=0;i<count;i++){
-    const a=Math.random()*Math.PI*2,s=(.35+Math.random())*power;
-    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-.4,life:1,decay:.016+Math.random()*.018,size:cell*(.025+Math.random()*.075),color,rot:Math.random()*6.28,spin:(Math.random()-.5)*.4});
-  }
-  if(particles.length>700)particles.splice(0,particles.length-700);
-}
-function floatText(x,y,text,color=INK,size=16){floaters.push({x,y,text,color,size,life:1,vy:-.65});}
-
-/* ---------- actions ---------- */
-function ageWaitingTrucks(exemptId=null){
-  const leaving=[];
+function opportunityExists(){
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const p=grid[r][c];
-    if(p&&p.kind==='produce'&&p.tier>=4&&p.id!==exemptId&&p.bornAction<stageState.actions){p.wait--;if(p.wait<=0)leaving.push(p);}
+    const p=grid[r][c];if(!p||p.tier>=4)continue;
+    const s=simulate(r,c);
+    if(s&&s.chain>1)return true;
   }
-  for(const p of leaving){
-    if(grid[p.r][p.c]===p)grid[p.r][p.c]=null;
-    burst(boardX(p.c),boardY(p.r),PRODUCE[p.color].main,18,2);floatText(boardX(p.c),boardY(p.r),'DEPARTED',DIM,13);
-    tone(92,.42,'triangle',.10,.75);hint('A waiting truck departed. You can always build another.');
+  return false;
+}
+/* If no chain is possible, one restock arrives — always from as high on the
+   floor as possible so it reads as new stock, not as the game rewriting itself. */
+function ensureOpportunity(){
+  if(cfg.noGuarantee)return;
+  if(opportunityExists())return;
+  let best=null;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const p=grid[r][c];if(!p||p.tier>=4)continue;
+    const s=simulate(r,c);
+    if(s&&s.tier<4&&(!best||s.groupSize>best.s.groupSize))best={r,c,s};
+  }
+  if(!best)return;
+  const want={color:best.s.color,tier:best.s.tier};
+  const inGroup=new Set(best.s.group.map(q=>q.r*COLS+q.c));
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(inGroup.has(r*COLS+c))continue;
+    const p=grid[r][c];if(!p||p.tier>=4)continue;
+    const oc=p.color,ot=p.tier;
+    p.color=want.color;p.tier=want.tier;
+    const s2=simulate(best.r,best.c);
+    if(s2&&s2.chain>1){p.flash=1;p.pop=.55;return;}
+    p.color=oc;p.tier=ot;
   }
 }
-function countAction(exemptTruckId=null){stageState.actions++;ageWaitingTrucks(exemptTruckId);}
+/* Training wheels: until the player has made three chains of their own, the
+   floor marks cells that would chain. It never says which is worth more. */
+function refreshSpots(){
+  spotCells=[];
+  if(run.chainsMade>=3)return;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const p=grid[r][c];if(!p||p.tier>=4)continue;
+    const s=simulate(r,c);
+    if(s&&s.chain>1)spotCells.push({r,c});
+  }
+}
 
-async function attemptAction(r,c){
+/* ---------------- effects ---------------- */
+function ring(x,y,color,max,width=3){rings.push({x,y,r:cell*.2,max,color,width,life:1});}
+function burst(x,y,color,n=18,power=2){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2,s=(.35+Math.random())*power;
+    parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-.4,life:1,decay:.016+Math.random()*.018,size:cell*(.03+Math.random()*.07),color,rot:Math.random()*6.28,spin:(Math.random()-.5)*.4});
+  }
+  if(parts.length>620)parts.splice(0,parts.length-620);
+}
+function pop(x,y,text,color=INK,size=16){floats.push({x,y,text,color,size,life:1,vy:-.7});}
+
+/* ---------------- actions ---------------- */
+function startStage(i){
+  cfg=STAGES[i];run.stage=i;
+  COLS=cfg.cols;ROWS=cfg.rows;layout();
+  rng=mulberry32(cfg.seed);colQ=Array.from({length:COLS},()=>[]);
+  for(let c=0;c<COLS;c++)fillQ(c);
+  st={index:i,actions:0,receipts:0,baskets:0,crates:0,trucks:0,fleet:0,bestChain:0,chains:0,bonusDone:false,
+      forklift:cfg.forklift,done:false,firstPack:false};
+  busy=false;preview=null;down=null;flash=0;
+  buildBoard();
+  screen='play';hint(cfg.teach,7);save();
+}
+
+async function attemptPack(r,c){
   if(busy||screen!=='play')return;
-  const p=at(r,c);
-
-  if(stageState.armed==='crowbar'){
-    if(!p){sfxBad();return;}
-    stageState.armed=null;stageState.charges.crowbar=0;busy=true;countAction();
-    grid[r][c]=null;burst(boardX(c),boardY(r),'#d9f4ff',26,3);ring(boardX(c),boardY(r),CYAN,cell*1.4,4);noise(.25,.14,2300);
-    await wait(170);await compactAndRefill();busy=false;afterAction();return;
-  }
-
-  if(stageState.armed==='handcart'){
-    if(!stageState.handcartFrom){if(!p){sfxBad();return;}stageState.handcartFrom={r,c};hint('Now tap a neighbouring space.');return;}
-    const f=stageState.handcartFrom,d=Math.abs(f.r-r)+Math.abs(f.c-c);
-    if(d!==1){sfxBad();stageState.handcartFrom=p?{r,c}:null;return;}
-    const a=grid[f.r][f.c],b=grid[r][c];grid[f.r][f.c]=b;grid[r][c]=a;
-    if(a){a.r=r;a.c=c;a.pop=.5;}if(b){b.r=f.r;b.c=f.c;b.pop=.5;}
-    stageState.armed=null;stageState.handcartFrom=null;stageState.charges.handcart=0;busy=true;countAction();tone(760,.15,'triangle',.13,1.35);
-    await wait(220);busy=false;afterAction();return;
-  }
-
-  if(!p){sfxBad();return;}
-  if(p.kind==='pallet'){p.hint=1;sfxBad();hint('Broken pallet: clear it with the Crowbar or park a truck beside it.');learn('pallet');return;}
-  if(p.kind==='equipment'){p.hint=1;sfxBad();hint('Equipment crate: park a truck directly beside it, then dispatch.');learn('equipment');return;}
-  if(p.tier>=4){await dispatchTruck(p);return;}
-
-  const group=floodGroup(r,c);
-  if(group.length<2){p.hint=1;sfxBad();hint('Match touching items with the same produce and package size.');return;}
-
-  busy=true;chain=0;countAction();
-  await resolveMerge(group,p);
-  await refillBoard();
-  busy=false;afterAction();
+  const p=at(r,c);if(!p)return;
+  if(p.tier>=4){await dispatch(p);return;}
+  const g=floodGrid(r,c);
+  if(g.length<2){p.wig=1;sfxNo();hint('Packages only merge with touching produce of the same crop and the same size.');return;}
+  busy=true;st.actions++;
+  await doPack(g,p,1);
+  await refill();
+  busy=false;after();
 }
 
-async function resolveMerge(group,target){
-  chain++;bestChain=Math.max(bestChain,chain);
-  const oldTier=target.tier,color=PRODUCE[target.color],leap=stageState.bulk&&group.length>=5?2:1;
-  sfxMerge(oldTier,chain);
-  for(const q of group){q.pop=.4+chain*.08;q.flash=.8;}
-  await wait(100);
-
+async function doPack(group,target,chainIdx){
+  st.bestChain=Math.max(st.bestChain,chainIdx);
+  const from=target.tier,col=PRODUCE[target.color];
+  const bulk=cfg.bulk&&group.length>=5;
+  sfxPack(from,chainIdx);
+  for(const q of group){q.pop=.42+chainIdx*.09;q.flash=.85;}
+  await wait(95);
   for(const q of group){
     if(q===target)continue;
-    grid[q.r][q.c]=null;q.targetR=target.r;q.targetC=target.c;q.shrinking=true;flying.push(q);
+    grid[q.r][q.c]=null;q.tR=target.r;q.tC=target.c;q.gone=true;flying.push(q);
   }
-  await wait(150);flying.length=0;
-
-  target.tier=Math.min(4,oldTier+leap);target.pop=1;target.flash=1;
-  const x=boardX(target.c),y=boardY(target.r);
-  burst(x,y,color.main,12+group.length*4,1.5+target.tier*.35);ring(x,y,color.light,cell*(1+target.tier*.28),2+target.tier);
-  shake=Math.max(shake,2+target.tier+chain);
-  const points=10*oldTier*group.length*chain;stageState.receipts+=points;floatText(x,y-cell*.38,'+'+points,color.light,15+Math.min(8,chain*2));
-  if(leap===2){floatText(x,y-cell*.82,'BULK +2',GOLD,15);learn('bulk');}
-  if(chain>1){floatText(x,y-cell*1.05,'CHAIN '+chain,INK,14);learn('chain');}
-
-  if(target.tier===2)stageState.baskets++;
-  if(target.tier===3)stageState.crates++;
-  if(target.tier===4){target.wait=3;target.bornAction=stageState.actions;learn('truck');hint('Truck ready. Dispatch it, or risk three later actions to build a neighbour.');}
-
-  await wait(150);
-  compactBoard(grid,true);
-  await wait(240);
-
-  // Crucial rule: only the committed board may continue this chain.
+  await wait(140);flying.length=0;
+  target.tier=Math.min(4,from+(bulk?2:1));target.pop=1;target.flash=1;
+  const x=bxc(target.c),y=byr(target.r);
+  burst(x,y,col.main,12+group.length*4,1.4+target.tier*.35);
+  ring(x,y,col.light,cell*(1+target.tier*.3),2+target.tier);
+  shakeAmt=Math.max(shakeAmt,2+target.tier+chainIdx);
+  const pts=packScore(from,group.length,chainIdx);
+  st.receipts+=pts;
+  pop(x,y-cell*.36,'+'+pts,col.light,15+Math.min(9,chainIdx*3));
+  if(bulk){pop(x,y-cell*.82,'BULK ORDER',GOLD,14);}
+  if(chainIdx>1){
+    pop(x,y-cell*1.02,'CHAIN \u00d7'+chainIdx,INK,15+chainIdx);
+    flash=Math.max(flash,.08*chainIdx);
+    if(!run.seenChain){run.seenChain=true;hint('That was a chain: the new package landed touching a match, so it packed again.',7);}
+    st.chains++;run.chainsMade++;save();
+  }
+  if(target.tier===2)st.baskets++;
+  if(target.tier===3)st.crates++;
+  if(target.tier===4){
+    st.trucks++;
+    if(!run.seenTruck){run.seenTruck=true;save();hint('A truck. Press it to send it out — it collects every '+PRODUCE[target.color].n+' on the floor.',7);}
+    else hint('Truck loaded. Send it now, or build a second one beside it for a fleet pickup.');
+  }
+  if(!st.firstPack&&st.index===0){st.firstPack=true;hint('The package settled in the column you pressed, as low as the stack allows.',6);}
+  await wait(140);
+  compact();
+  await wait(230);
   if(target.tier<4){
-    const next=floodGroup(target.r,target.c);
-    if(next.length>=2){await wait(80);await resolveMerge(next,target);}
+    const next=floodGrid(target.r,target.c);
+    if(next.length>=2){await wait(70);await doPack(next,target,chainIdx+1);}
   }
 }
 
-async function compactAndRefill(){compactBoard(grid,true);await wait(230);await refillBoard();}
-async function refillBoard(){
-  // Supply enters only after the entire player-created chain is finished.
-  let spawned=false;
+function compact(){
   for(let c=0;c<COLS;c++){
-    let missing=0;for(let r=0;r<ROWS;r++)if(!grid[r][c])missing++;
-    let k=missing;
-    for(let r=missing-1;r>=0;r--){
-      if(grid[r][c])continue;
-      const p=makePiece(takeSupply(),1,'produce');p.r=r;p.c=c;p.px=c;p.py=-k-.5;k--;grid[r][c]=p;spawned=true;
+    let w=ROWS-1;
+    for(let r=ROWS-1;r>=0;r--){const p=grid[r][c];if(!p)continue;if(w!==r){grid[w][c]=p;grid[r][c]=null;p.r=w;p.c=c;}w--;}
+  }
+}
+async function refill(){
+  let any=false;
+  for(let c=0;c<COLS;c++){
+    let miss=0;for(let r=0;r<ROWS;r++)if(!grid[r][c])miss++;
+    let k=miss;
+    for(let r=miss-1;r>=0;r--){
+      const s=pull(c),p=makeP(s.color,s.tier);
+      p.r=r;p.c=c;p.px=c;p.py=-k-.5;k--;grid[r][c]=p;any=true;
     }
   }
-  if(spawned)tone(930,.05,'sine',.045);
-  await wait(300);ensurePlayable();
+  if(any)tone(920,.05,'sine',.04);
+  await wait(280);
 }
 
-function adjacentFixed(p){
-  const out=[];
-  for(const [rr,cc] of [[p.r-1,p.c],[p.r+1,p.c],[p.r,p.c-1],[p.r,p.c+1]]){
-    const q=at(rr,cc);if(q&&(q.kind==='pallet'||q.kind==='equipment'))out.push(q);
-  }
-  return out;
+async function dispatch(truck){
+  busy=true;st.actions++;
+  const mate=[[truck.r-1,truck.c],[truck.r+1,truck.c],[truck.r,truck.c-1],[truck.r,truck.c+1]]
+    .map(([r,c])=>at(r,c)).find(q=>q&&q.tier>=4);
+  if(mate)await fleet(truck,mate);else await singleRun(truck);
+  await refill();busy=false;after();
 }
-async function removeFixed(q){
-  if(grid[q.r][q.c]!==q)return;
-  grid[q.r][q.c]=null;
-  const x=boardX(q.c),y=boardY(q.r);
-  if(q.kind==='equipment'){
-    stageState.equipmentDelivered++;run.equipmentDelivered++;
-    burst(x,y,GOLD,44,3.4);ring(x,y,GOLD,cell*2.1,4);floatText(x,y-cell*.4,'TOOL DELIVERED',GOLD,17);sfxTool();learn('equipment');
-    const tool=unlockNextTool();if(tool)hint(tool.name+' added to the Tool Shed.');
-  }else{burst(x,y,'#86b8d8',24,2.6);ring(x,y,'#86b8d8',cell*1.3,3);noise(.25,.13,900);learn('pallet');}
-}
-async function dispatchTruck(truck){
-  const neighbour=[[truck.r-1,truck.c],[truck.r+1,truck.c],[truck.r,truck.c-1],[truck.r,truck.c+1]].map(([r,c])=>at(r,c)).find(q=>q&&q.kind==='produce'&&q.tier>=4);
-  busy=true;countAction(truck.id);
-  if(neighbour)await fleetPickup(truck,neighbour);else await singleDispatch(truck);
-  await refillBoard();busy=false;afterAction();
-}
-async function singleDispatch(truck){
-  const color=PRODUCE[truck.color],fixed=adjacentFixed(truck),doomed=[];
-  truck.pop=1;truck.flash=1;ring(boardX(truck.c),boardY(truck.r),color.light,cell*1.5,4);await wait(200);
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const q=grid[r][c];if(q&&q.kind==='produce'&&q.color===truck.color)doomed.push(q);
-  }
-  // Visible route lines make the global collection rule causal.
-  ctx.save();ctx.restore();
-  sfxTruck();flash=.32;shake=Math.max(shake,18);
+async function singleRun(truck){
+  const col=PRODUCE[truck.color],doomed=[];
+  truck.pop=1;truck.flash=1;ring(bxc(truck.c),byr(truck.r),col.light,cell*1.6,4);
+  await wait(180);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const q=grid[r][c];if(q&&q.color===truck.color)doomed.push(q);}
+  sfxTruck();flash=.3;shakeAmt=Math.max(shakeAmt,16);
+  let value=0;
   for(const q of doomed){
-    grid[q.r][q.c]=null;burst(boardX(q.c),boardY(q.r),color.main,10,2.2);
-    routeLines.push({x1:boardX(q.c),y1:boardY(q.r),x2:boardX(truck.c),y2:boardY(truck.r),color:color.light,life:1});
+    grid[q.r][q.c]=null;
+    value+=15*q.tier;
+    burst(bxc(q.c),byr(q.r),col.main,9,2.1);
+    lines.push({x1:bxc(q.c),y1:byr(q.r),x2:bxc(truck.c),y2:byr(truck.r),color:col.light,life:1});
   }
-  stageState.trucks++;stageState.receipts+=doomed.length*45;floatText(boardX(truck.c),boardY(truck.r)-cell*.5,'DISPATCHED',color.light,20);
-  await wait(220);for(const q of fixed)await removeFixed(q);compactBoard(grid,true);await wait(240);
+  st.receipts+=value;
+  pop(bxc(truck.c),byr(truck.r)-cell*.5,'DISPATCHED +'+value,col.light,19);
+  await wait(240);compact();await wait(230);
 }
-async function fleetPickup(a,b){
-  learn('fleet');sfxTruck();sfxTool();flash=1;shake=Math.max(shake,25);hint('FLEET PICKUP');await wait(250);
-  const equipment=[];let count=0;
+async function fleet(a,b){
+  sfxTruck();sfxWin();flash=.9;shakeAmt=Math.max(shakeAmt,24);hint('Fleet pickup — the whole floor goes out at once.');
+  await wait(240);
+  let value=0;
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
     const q=grid[r][c];if(!q)continue;
-    if(q.kind==='equipment'){equipment.push(q);continue;}
-    grid[r][c]=null;count++;burst(boardX(c),boardY(r),q.kind==='pallet'?'#86b8d8':PRODUCE[q.color].main,10,2.8);
+    grid[r][c]=null;value+=18*q.tier;
+    burst(bxc(c),byr(r),PRODUCE[q.color].main,9,2.6);
   }
-  stageState.fleet++;stageState.trucks+=2;stageState.receipts+=count*40;floatText(W/2,by+bh/2,'FLEET PICKUP',INK,27);
-  await wait(220);for(const q of equipment)await removeFixed(q);compactBoard(grid,true);await wait(240);
+  st.fleet++;st.trucks++;st.receipts+=value;
+  pop(W/2,by+bh/2,'FLEET PICKUP +'+value,INK,26);
+  await wait(260);
 }
 
-function goalMet(){
-  const g=stageState.cfg.goal;
-  return (g.baskets===undefined||stageState.baskets>=g.baskets)&&
-         (g.crates===undefined||stageState.crates>=g.crates)&&
-         (g.trucks===undefined||stageState.trucks>=g.trucks)&&
-         (g.fleet===undefined||stageState.fleet>=g.fleet)&&
-         (g.equipment===undefined||stageState.equipmentDelivered>=g.equipment);
+function doSwap(r1,c1,r2,c2){
+  if(st.forklift<=0)return;
+  const a=grid[r1][c1],b=grid[r2][c2];
+  if(!a||!b)return;
+  grid[r1][c1]=b;grid[r2][c2]=a;
+  a.r=r2;a.c=c2;a.pop=.5;b.r=r1;b.c=c1;b.pop=.5;
+  st.forklift--;st.actions++;sfxLift();
+  pop(bxc(c2),byr(r2)-cell*.4,'FORKLIFT',CYAN,13);
+  after();
 }
-function afterAction(){
-  if(goalMet()&&!stageState.complete){stageState.complete=true;sfxWin();hint('Orders filled. Close the shift, or keep packing for a better result.',5);}
-  ensurePlayable();
+
+function goalRows(){
+  const g=cfg.goal,out=[];
+  if(g.baskets!==undefined)out.push(['BASKETS',st.baskets,g.baskets]);
+  if(g.crates!==undefined)out.push(['CRATES',st.crates,g.crates]);
+  if(g.chains!==undefined)out.push(['CHAINS',st.chains,g.chains]);
+  if(g.trucks!==undefined)out.push(['TRUCKS',st.trucks,g.trucks]);
+  if(g.chain!==undefined)out.push(['CHAIN',st.bestChain,g.chain]);
+  return out;
+}
+function bonusRow(){return cfg.bonus?['BONUS \u00d7'+cfg.bonus.chain,Math.min(st.bestChain,cfg.bonus.chain),cfg.bonus.chain]:null;}
+function goalMet(){return goalRows().every(([,h,n])=>h>=n);}
+function after(){
+  ensurePlayable();ensureOpportunity();refreshSpots();
+  if(cfg.bonus&&!st.bonusDone&&st.bestChain>=cfg.bonus.chain){
+    st.bonusDone=true;st.receipts+=cfg.bonus.reward;sfxWin();flash=Math.max(flash,.3);
+    pop(W/2,by+bh*.38,'STRETCH ORDER +'+cfg.bonus.reward,GOLD,22);
+    hint('Stretch order filled: a chain of '+cfg.bonus.chain+'.',5);
+  }
+  if(goalMet()&&!st.done){st.done=true;sfxWin();hint('Orders filled. Close the shift, or keep packing for a bigger number.',6);}
 }
 function closeShift(){
-  if(!stageState.complete)return;
-  run.totalReceipts+=stageState.receipts;
-  const prior=run.bestActions[stageState.index];
-  run.bestActions[stageState.index]=prior===undefined?stageState.actions:Math.min(prior,stageState.actions);
-  if(run.tools.coldRoom){
-    let best=null;
-    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-      const p=grid[r][c];if(p&&p.kind==='produce'&&p.tier<4&&(!best||p.tier>best.tier))best=p;
-    }
-    if(best&&best.tier>=2)run.stored={color:best.color,tier:Math.min(3,best.tier)};
-  }
-  saveRun();screen='result';
+  if(!st.done)return;
+  run.total+=st.receipts;
+  const prev=run.best[st.index];
+  run.best[st.index]=prev===undefined?st.actions:Math.min(prev,st.actions);
+  save();screen='result';
 }
 
-/* ---------- animation ---------- */
+/* ---------------- preview ---------------- */
+function buildPreview(r,c){
+  const p=at(r,c);if(!p)return null;
+  if(p.tier>=4){
+    const targets=[];
+    let mate=null;
+    for(const[rr,cc]of[[r-1,c],[r+1,c],[r,c-1],[r,c+1]]){const q=at(rr,cc);if(q&&q.tier>=4)mate=q;}
+    let value=0;
+    for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++){const q=grid[rr][cc];if(q&&q.color===p.color){targets.push({r:rr,c:cc});value+=15*q.tier;}}
+    return {kind:'dispatch',r,c,targets,mate:!!mate,value,color:p.color};
+  }
+  const s=simulate(r,c);
+  if(!s)return {kind:'invalid',r,c};
+  s.kind='pack';s.r=r;s.c=c;return s;
+}
+
+/* ---------------- animation ---------------- */
 function spring(p){
-  const tr=p.targetR!==null?p.targetR:p.r,tc=p.targetC!==null?p.targetC:p.c;
+  const tr=p.tR!==null?p.tR:p.r, tc=p.tC!==null?p.tC:p.c;
   p.vy+=(tr-p.py)*.42;p.vy*=.7;p.py+=p.vy;
   p.vx+=(tc-p.px)*.42;p.vx*=.7;p.px+=p.vx;
-  p.pop*=.86;p.flash*=.9;p.hint*=.92;if(p.shrinking)p.scale=Math.max(0,p.scale-.1);
+  p.pop*=.86;p.flash*=.9;p.wig*=.9;
+  if(p.gone)p.scale=Math.max(0,p.scale-.1);
 }
-let routeLines=[];
 function update(dt){
   t+=dt;
-  for(const row of grid)if(row)for(const p of row)if(p)spring(p);
+  for(const row of grid)for(const p of row)if(p)spring(p);
   for(const p of flying)spring(p);
-  for(let i=particles.length-1;i>=0;i--){const q=particles[i];q.x+=q.vx*cell*.06;q.y+=q.vy*cell*.06;q.vy+=.09;q.vx*=.985;q.rot+=q.spin;q.life-=q.decay;if(q.life<=0)particles.splice(i,1);}
+  for(let i=parts.length-1;i>=0;i--){const q=parts[i];q.x+=q.vx*cell*.06;q.y+=q.vy*cell*.06;q.vy+=.09;q.vx*=.985;q.rot+=q.spin;q.life-=q.decay;if(q.life<=0)parts.splice(i,1);}
   for(let i=rings.length-1;i>=0;i--){const q=rings[i];q.r+=(q.max-q.r)*.15;q.life-=.034;if(q.life<=0)rings.splice(i,1);}
-  for(let i=floaters.length-1;i>=0;i--){const q=floaters[i];q.y+=q.vy;q.vy*=.97;q.life-=.015;if(q.life<=0)floaters.splice(i,1);}
-  for(let i=routeLines.length-1;i>=0;i--){routeLines[i].life-=.04;if(routeLines[i].life<=0)routeLines.splice(i,1);}
-  shake*=.84;flash*=.86;if(hintTime>0)hintTime-=dt;
+  for(let i=floats.length-1;i>=0;i--){const q=floats[i];q.y+=q.vy;q.vy*=.97;q.life-=.014;if(q.life<=0)floats.splice(i,1);}
+  for(let i=lines.length-1;i>=0;i--){lines[i].life-=.04;if(lines[i].life<=0)lines.splice(i,1);}
+  shakeAmt*=.84;flash*=.87;if(hintTime>0)hintTime-=dt;
 }
 
-/* ---------- drawing helpers ---------- */
+/* ---------------- drawing ---------------- */
 function rr(x,y,w,h,r){ctx.beginPath();r=Math.min(r,w/2,h/2);ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
 function txt(s,x,y,size,color=INK,align='center',weight=700){ctx.font=weight+' '+size+'px ui-rounded,"Avenir Next","Segoe UI",system-ui,sans-serif';ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;ctx.fillText(s,x,y);}
-function measureText(s,size,weight=700){ctx.font=weight+' '+size+'px ui-rounded,"Avenir Next","Segoe UI",system-ui,sans-serif';return ctx.measureText(s).width;}
-function wrapText(text,x,y,maxWidth,lineHeight,size,color=INK,align='left'){
+function tw(s,size,weight=700){ctx.font=weight+' '+size+'px ui-rounded,"Avenir Next","Segoe UI",system-ui,sans-serif';return ctx.measureText(s).width;}
+function wrap(text,x,y,maxW,lh,size,color=INK,align='left'){
   ctx.font='600 '+size+'px ui-rounded,"Avenir Next","Segoe UI",system-ui,sans-serif';ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;
   const words=text.split(' ');let line='';
-  for(const word of words){const test=line?line+' '+word:word;if(ctx.measureText(test).width>maxWidth&&line){ctx.fillText(line,x,y);y+=lineHeight;line=word;}else line=test;}
-  if(line){ctx.fillText(line,x,y);y+=lineHeight;}return y;
-}
-
-function drawBackground(){
-  const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#112b64');g.addColorStop(.45,'#0b1c45');g.addColorStop(1,'#071127');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-  const glow=ctx.createRadialGradient(W*.18,H*.08,0,W*.18,H*.08,Math.max(W,H)*.85);glow.addColorStop(0,'rgba(93,240,255,.28)');glow.addColorStop(.42,'rgba(112,96,255,.10)');glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
-  for(let i=0;i<26;i++){
-    const x=(i*91+t*(7+i%4))%(W+40)-20,y=(i*67+Math.sin(t*.4+i)*28)%(H+30)-15;
-    ctx.fillStyle='rgba(150,242,255,'+(.04+(i%5)*.012)+')';ctx.beginPath();ctx.arc(x,y,1+(i%3),0,Math.PI*2);ctx.fill();
-  }
-  // clean luminous conveyor stripes, not rustic wood
-  ctx.strokeStyle='rgba(128,226,255,.055)';ctx.lineWidth=1;
-  for(let y=0;y<H;y+=38){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y+12);ctx.stroke();}
+  for(const w of words){const test=line?line+' '+w:w;if(ctx.measureText(test).width>maxW&&line){ctx.fillText(line,x,y);y+=lh;line=w;}else line=test;}
+  if(line){ctx.fillText(line,x,y);y+=lh;}return y;
 }
 
 function drawFruit(color,rad){
-  const p=PRODUCE[color];
-  ctx.save();
-  const g=ctx.createRadialGradient(-rad*.28,-rad*.34,rad*.05,0,0,rad);g.addColorStop(0,p.light);g.addColorStop(.42,p.main);g.addColorStop(1,p.dark);ctx.fillStyle=g;
-  if(color===2){ctx.beginPath();ctx.ellipse(0,rad*.08,rad*.68,rad*.92,0,0,Math.PI*2);ctx.fill();}
-  else if(color===3){for(const [dx,dy,s] of [[-.26,-.22,.4],[.26,-.22,.4],[-.42,.2,.38],[0,.18,.4],[.42,.2,.38],[0,.58,.36]]){ctx.beginPath();ctx.arc(dx*rad,dy*rad,rad*s,0,Math.PI*2);ctx.fill();}}
-  else{ctx.beginPath();ctx.arc(0,0,rad*.82,0,Math.PI*2);ctx.fill();}
-  ctx.fillStyle=p.leaf;ctx.fillRect(-rad*.07,-rad*.96,rad*.14,rad*.34);ctx.save();ctx.rotate(-.45);ctx.beginPath();ctx.ellipse(rad*.25,-rad*.72,rad*.36,rad*.17,0,0,Math.PI*2);ctx.fill();ctx.restore();
-  ctx.fillStyle='rgba(255,255,255,.62)';ctx.beginPath();ctx.ellipse(-rad*.3,-rad*.3,rad*.21,rad*.11,-.55,0,Math.PI*2);ctx.fill();
+  const p=PRODUCE[color];ctx.save();
+  const g=ctx.createRadialGradient(-rad*.28,-rad*.34,rad*.05,0,0,rad);
+  g.addColorStop(0,p.light);g.addColorStop(.42,p.main);g.addColorStop(1,p.dark);ctx.fillStyle=g;
+  if(color===2){ctx.beginPath();ctx.ellipse(0,rad*.08,rad*.66,rad*.92,0,0,Math.PI*2);ctx.fill();}
+  else if(color===3){for(const[dx,dy,s]of[[-.26,-.22,.4],[.26,-.22,.4],[-.42,.2,.38],[0,.18,.4],[.42,.2,.38],[0,.58,.36]]){ctx.beginPath();ctx.arc(dx*rad,dy*rad,rad*s,0,Math.PI*2);ctx.fill();}}
+  else{ctx.beginPath();ctx.arc(0,0,rad*.84,0,Math.PI*2);ctx.fill();}
+  ctx.fillStyle=p.leaf;ctx.fillRect(-rad*.07,-rad*.98,rad*.14,rad*.34);
+  ctx.save();ctx.rotate(-.45);ctx.beginPath();ctx.ellipse(rad*.25,-rad*.72,rad*.36,rad*.17,0,0,Math.PI*2);ctx.fill();ctx.restore();
+  ctx.fillStyle='rgba(255,255,255,.6)';ctx.beginPath();ctx.ellipse(-rad*.3,-rad*.3,rad*.2,rad*.1,-.55,0,Math.PI*2);ctx.fill();
   ctx.restore();
 }
-function pieceScreen(p){return [bx+p.px*cell+cell/2,by+p.py*cell+cell/2];}
-function drawPiece(p,alpha=1){
-  const [x,y]=pieceScreen(p),base=cell*.5,scale=p.scale*(1+p.pop*.42);
-  if(y<by-cell*1.8||y>by+bh+cell*1.8)return;
-  ctx.save();ctx.globalAlpha=alpha;ctx.translate(x,y);ctx.scale(scale,scale*(1-p.pop*.16));ctx.translate(p.hint*Math.sin(t*38)*cell*.045,0);
-
-  if(p.kind==='pallet'){
-    ctx.fillStyle='rgba(0,0,0,.24)';rr(-base*.8,-base*.66,base*1.6,base*1.35,7);ctx.fill();
-    const g=ctx.createLinearGradient(-base,0,base,0);g.addColorStop(0,'#48739b');g.addColorStop(.5,'#79b7d7');g.addColorStop(1,'#315879');ctx.fillStyle=g;
-    for(let i=-1;i<=1;i++){rr(-base*.7,i*base*.34-base*.11,base*1.4,base*.22,3);ctx.fill();}
-    ctx.fillStyle='#183650';ctx.fillRect(-base*.56,-base*.62,base*.16,base*1.24);ctx.fillRect(base*.4,-base*.62,base*.16,base*1.24);ctx.restore();return;
+/* one routine draws a package at any size: board, chute, ghost, legend */
+function drawPack(color,tier,base,phase){
+  const c=PRODUCE[color];
+  if(tier<=1){drawFruit(color,base*.5);return;}
+  if(tier===2){
+    ctx.fillStyle='#4fe0f2';rr(-base*.7,-base*.16,base*1.4,base*.86,base*.18);ctx.fill();
+    ctx.strokeStyle='#bcfbff';ctx.lineWidth=Math.max(1,base*.045);
+    for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(i*base*.25,-base*.1);ctx.lineTo(i*base*.19,base*.6);ctx.stroke();}
+    ctx.save();ctx.translate(-base*.27,-base*.3);drawFruit(color,base*.23);ctx.restore();
+    ctx.save();ctx.translate(base*.25,-base*.28);drawFruit(color,base*.23);ctx.restore();
+    return;
   }
-  if(p.kind==='equipment'){
-    const pulse=.5+.5*Math.sin(t*3+p.id),glow=ctx.createRadialGradient(0,0,0,0,0,base*1.4);glow.addColorStop(0,'rgba(255,214,96,'+(.22+.18*pulse)+')');glow.addColorStop(1,'rgba(255,214,96,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,base*1.4,0,Math.PI*2);ctx.fill();
-    const g=ctx.createLinearGradient(-base,-base,base,base);g.addColorStop(0,'#ffdb65');g.addColorStop(1,'#ff8b3d');ctx.fillStyle=g;rr(-base*.7,-base*.7,base*1.4,base*1.4,8);ctx.fill();ctx.strokeStyle='#fff0ae';ctx.lineWidth=2;rr(-base*.7,-base*.7,base*1.4,base*1.4,8);ctx.stroke();
-    ctx.strokeStyle='#193661';ctx.lineWidth=3;ctx.beginPath();ctx.arc(-base*.12,-base*.08,base*.2,.7,5.6);ctx.stroke();ctx.beginPath();ctx.moveTo(0,base*.05);ctx.lineTo(base*.38,base*.42);ctx.stroke();ctx.restore();return;
+  if(tier===3){
+    const g=ctx.createLinearGradient(-base,-base,base,base);g.addColorStop(0,'#6d86ff');g.addColorStop(1,'#3a2496');
+    ctx.fillStyle=g;rr(-base*.74,-base*.58,base*1.48,base*1.16,7);ctx.fill();
+    ctx.strokeStyle='#c1cdff';ctx.lineWidth=Math.max(1,base*.06);
+    for(const y of[-.34,0,.34]){ctx.beginPath();ctx.moveTo(-base*.64,base*y);ctx.lineTo(base*.64,base*y);ctx.stroke();}
+    ctx.fillStyle=c.main;rr(-base*.33,-base*.2,base*.66,base*.4,5);ctx.fill();
+    txt(c.L,0,base*.02,base*.34,'#fff','center',900);
+    return;
   }
-
-  const c=PRODUCE[p.color];
-  if(p.flash>.02){const glow=ctx.createRadialGradient(0,0,0,0,0,base*1.35);glow.addColorStop(0,'rgba(255,255,255,'+(.08+p.flash*.22)+')');glow.addColorStop(.45,c.main+'55');glow.addColorStop(1,c.main+'00');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,base*1.35,0,Math.PI*2);ctx.fill();}
-  if(p.tier===1)drawFruit(p.color,base*.5);
-  else if(p.tier===2){
-    ctx.fillStyle='#4fe0f2';rr(-base*.7,-base*.15,base*1.4,base*.86,base*.18);ctx.fill();ctx.strokeStyle='#b8fbff';ctx.lineWidth=1.4;for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(i*base*.25,-base*.09);ctx.lineTo(i*base*.19,base*.62);ctx.stroke();}
-    ctx.save();ctx.translate(-base*.27,-base*.28);drawFruit(p.color,base*.23);ctx.restore();ctx.save();ctx.translate(base*.25,-base*.26);drawFruit(p.color,base*.23);ctx.restore();
-  }else if(p.tier===3){
-    const g=ctx.createLinearGradient(-base,-base,base,base);g.addColorStop(0,'#5d7cff');g.addColorStop(1,'#3e27a8');ctx.fillStyle=g;rr(-base*.73,-base*.58,base*1.46,base*1.16,7);ctx.fill();
-    ctx.strokeStyle='#b9c7ff';ctx.lineWidth=2;for(const y2 of [-.34,0,.34]){ctx.beginPath();ctx.moveTo(-base*.63,base*y2);ctx.lineTo(base*.63,base*y2);ctx.stroke();}
-    ctx.fillStyle=c.main;rr(-base*.32,-base*.2,base*.64,base*.4,5);ctx.fill();txt(c.name[0].toUpperCase(),0,1,base*.34,'#fff','center',900);
-  }else{
-    ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(-base*.78,base*.36,base*1.56,base*.18);
-    ctx.fillStyle=c.dark;rr(-base*.74,-base*.44,base*.96,base*.76,6);ctx.fill();ctx.fillStyle=c.main;rr(-base*.67,-base*.37,base*.82,base*.58,5);ctx.fill();ctx.fillStyle='#e7f5ff';rr(base*.13,-base*.26,base*.53,base*.57,5);ctx.fill();ctx.fillStyle='#72d9ff';rr(base*.29,-base*.18,base*.24,base*.21,2);ctx.fill();
-    ctx.fillStyle='#101f3c';for(const wx of [-base*.42,base*.44]){ctx.beginPath();ctx.arc(wx,base*.37,base*.16,0,Math.PI*2);ctx.fill();ctx.fillStyle='#bdefff';ctx.beginPath();ctx.arc(wx,base*.37,base*.065,0,Math.PI*2);ctx.fill();ctx.fillStyle='#101f3c';}
-    ctx.fillStyle='rgba(255,255,255,'+(.5+.35*Math.sin(t*6+p.id))+')';ctx.beginPath();ctx.moveTo(base*.66,0);ctx.lineTo(base*.83,-base*.1);ctx.lineTo(base*.83,base*.1);ctx.closePath();ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(-base*.78,base*.36,base*1.56,base*.16);
+  ctx.fillStyle=c.dark;rr(-base*.74,-base*.44,base*.96,base*.76,6);ctx.fill();
+  ctx.fillStyle=c.main;rr(-base*.67,-base*.37,base*.82,base*.58,5);ctx.fill();
+  ctx.fillStyle='#e7f5ff';rr(base*.13,-base*.26,base*.53,base*.57,5);ctx.fill();
+  ctx.fillStyle='#72d9ff';rr(base*.29,-base*.18,base*.24,base*.21,2);ctx.fill();
+  ctx.fillStyle='#101f3c';
+  for(const wx of[-base*.42,base*.44]){ctx.beginPath();ctx.arc(wx,base*.37,base*.16,0,Math.PI*2);ctx.fill();}
+  ctx.fillStyle='#bdefff';
+  for(const wx of[-base*.42,base*.44]){ctx.beginPath();ctx.arc(wx,base*.37,base*.06,0,Math.PI*2);ctx.fill();}
+  ctx.fillStyle='rgba(255,255,255,'+(.45+.35*Math.sin((phase||0)))+')';
+  ctx.beginPath();ctx.moveTo(base*.66,0);ctx.lineTo(base*.84,-base*.1);ctx.lineTo(base*.84,base*.1);ctx.closePath();ctx.fill();
+}
+function drawPiece(p,alpha){
+  const x=bx+p.px*cell+cell/2, y=by+p.py*cell+cell/2;
+  if(y<by-cell*2||y>by+bh+cell*2)return;
+  const base=cell*.5,sc=p.scale*(1+p.pop*.4);
+  ctx.save();ctx.globalAlpha=alpha===undefined?1:alpha;
+  ctx.translate(x+p.wig*Math.sin(t*40)*cell*.07,y);ctx.scale(sc,sc*(1-p.pop*.15));
+  if(p.flash>.02){
+    const c=PRODUCE[p.color],g=ctx.createRadialGradient(0,0,0,0,0,base*1.35);
+    g.addColorStop(0,'rgba(255,255,255,'+(.08+p.flash*.24)+')');g.addColorStop(.45,c.main+'55');g.addColorStop(1,c.main+'00');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,base*1.35,0,Math.PI*2);ctx.fill();
   }
+  drawPack(p.color,p.tier,base,t*6+p.id);
   ctx.restore();
-  if(p.kind==='produce'&&p.tier>=4){for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(x-cell*.18+i*cell*.18,y+cell*.43,cell*.045,0,Math.PI*2);ctx.fillStyle=i<p.wait?'#fff39b':'rgba(255,255,255,.18)';ctx.fill();}}
 }
 
-function chainPreviewCells(){
-  const out=[];
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-    const p=grid[r][c];if(!p||p.kind!=='produce'||p.tier>=4)continue;
-    const sim=simulateLanding(r,c);if(sim&&sim.chain)out.push({r,c,depth:stageState.orderSheet?chainDepthForLanding(r,c):2,bulk:sim.leap===2});
-  }
-  return out;
+function drawBg(){
+  const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#123069');g.addColorStop(.45,'#0b1c45');g.addColorStop(1,'#071127');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  const glow=ctx.createRadialGradient(W*.2,H*.06,0,W*.2,H*.06,Math.max(W,H)*.85);
+  glow.addColorStop(0,'rgba(93,240,255,.25)');glow.addColorStop(.42,'rgba(112,96,255,.09)');glow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(128,226,255,.05)';ctx.lineWidth=1;
+  for(let y=0;y<H;y+=38){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y+12);ctx.stroke();}
 }
 
-function drawBoard(){
-  ctx.save();ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
-  ctx.save();ctx.shadowColor='rgba(0,0,0,.55)';ctx.shadowBlur=32;ctx.shadowOffsetY=10;
-  const panel=ctx.createLinearGradient(bx,by,bx+bw,by+bh);panel.addColorStop(0,'rgba(14,49,98,.94)');panel.addColorStop(1,'rgba(18,24,70,.95)');ctx.fillStyle=panel;rr(bx-8,by-8,bw+16,bh+16,20);ctx.fill();ctx.restore();
-  ctx.strokeStyle='rgba(111,232,255,.48)';ctx.lineWidth=2;rr(bx-8,by-8,bw+16,bh+16,20);ctx.stroke();
-  ctx.strokeStyle='rgba(192,240,255,.09)';ctx.lineWidth=1;
-  for(let r=1;r<ROWS;r++){ctx.beginPath();ctx.moveTo(bx,by+r*cell);ctx.lineTo(bx+bw,by+r*cell);ctx.stroke();}
-  for(let c=1;c<COLS;c++){ctx.beginPath();ctx.moveTo(bx+c*cell,by);ctx.lineTo(bx+c*cell,by+bh);ctx.stroke();}
-
-  ctx.save();ctx.beginPath();rr(bx-2,by-2,bw+4,bh+4,13);ctx.clip();
-
-  if(stageState?.orderSheet){
-    const seen=new Set();
-    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
-      const p=grid[r][c];if(!p||p.kind!=='produce'||p.tier>=4||seen.has(p.id))continue;
-      const group=floodGroup(r,c);group.forEach(q=>seen.add(q.id));if(group.length<2)continue;
-      ctx.strokeStyle='rgba(164,241,255,.46)';ctx.lineWidth=1.3;ctx.setLineDash([4,4]);
-      for(const q of group){rr(bx+q.c*cell+4,by+q.r*cell+4,cell-8,cell-8,9);ctx.stroke();}
-      ctx.setLineDash([]);
+function drawChutes(){
+  const y0=by-chuteH-4;
+  for(let c=0;c<COLS;c++){
+    const x=bx+c*cell;
+    ctx.fillStyle='rgba(10,32,68,.72)';rr(x+3,y0,cell-6,chuteH,6);ctx.fill();
+    ctx.strokeStyle='rgba(120,220,255,.18)';ctx.lineWidth=1;rr(x+3,y0,cell-6,chuteH,6);ctx.stroke();
+    const q=colQ[c]||[];
+    for(let i=Math.min(1,q.length-1);i>=0;i--){
+      const s=q[i];if(!s)continue;
+      ctx.save();
+      ctx.globalAlpha=i===0?1:.4;
+      const sz=i===0?cell*.34:cell*.24;
+      ctx.translate(x+cell/2+(i===0?0:cell*.24),y0+chuteH*(i===0?.58:.3));
+      drawPack(s.color,s.tier,sz,0);
+      ctx.restore();
     }
+    ctx.fillStyle='rgba(150,235,255,.22)';
+    ctx.beginPath();ctx.moveTo(x+cell/2-4,y0+chuteH+1);ctx.lineTo(x+cell/2+4,y0+chuteH+1);ctx.lineTo(x+cell/2,y0+chuteH+6);ctx.closePath();ctx.fill();
+  }
+  txt('INCOMING',bx-6,y0+chuteH/2,8,FAINT,'right',800);
+}
+
+function drawPreview(){
+  const pv=preview;if(!pv)return;
+  if(pv.kind==='invalid'){
+    const x=bxc(pv.c),y=byr(pv.r);
+    ctx.strokeStyle='rgba(255,150,160,.85)';ctx.lineWidth=2.4;
+    rr(bx+pv.c*cell+3,by+pv.r*cell+3,cell-6,cell-6,9);ctx.stroke();
+    txt('no match touching',x,by+pv.r*cell-6,11,'rgba(255,180,190,.9)','center',800);
+    return;
+  }
+  if(pv.kind==='move'){
+    const a={x:bxc(pv.c),y:byr(pv.r)},b={x:bxc(pv.to.c),y:byr(pv.to.r)};
+    ctx.strokeStyle=CYAN;ctx.lineWidth=2.5;
+    rr(bx+pv.c*cell+3,by+pv.r*cell+3,cell-6,cell-6,9);ctx.stroke();
+    rr(bx+pv.to.c*cell+3,by+pv.to.r*cell+3,cell-6,cell-6,9);ctx.stroke();
+    ctx.setLineDash([5,5]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);
+    txt('FORKLIFT SWAP',(a.x+b.x)/2,(a.y+b.y)/2-cell*.5,12,CYAN,'center',900);
+    return;
+  }
+  if(pv.kind==='dispatch'){
+    const col=PRODUCE[pv.color];
+    for(const q of pv.targets){
+      const x=bxc(q.c),y=byr(q.r);
+      ctx.strokeStyle=col.light;ctx.globalAlpha=.55+.25*Math.sin(t*7);ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(x,y,cell*.42,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
+    }
+    const x=bxc(pv.c),y=byr(pv.r);
+    txt(pv.mate?'FLEET PICKUP — CLEARS THE FLOOR':'COLLECTS '+pv.targets.length+' \u00b7 +'+pv.value,x,by+pv.r*cell-8,12,pv.mate?GOLD:col.light,'center',900);
+    return;
   }
 
-  // Exact landing cells that create a deliberate chain.
-  for(const q of chainPreviewCells()){
-    const x=boardX(q.c),y=boardY(q.r),pulse=.62+.3*Math.sin(t*5+q.r+q.c);
-    ctx.globalAlpha=pulse;ctx.strokeStyle='#ffffff';ctx.lineWidth=stageState?.orderSheet?2.4:1.5;
-    ctx.beginPath();ctx.arc(x,y,cell*(stageState?.orderSheet?.18:.11),0,Math.PI*2);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(x-cell*.12,y);ctx.lineTo(x+cell*.12,y);ctx.moveTo(x,y-cell*.12);ctx.lineTo(x,y+cell*.12);ctx.stroke();
-    if(stageState?.orderSheet){txt(q.depth+'x',x+cell*.22,y-cell*.23,cell*.18,q.bulk?GOLD:INK,'center',900);}
+  /* pack plan: what will be consumed, where it lands, what it will chain with */
+  ctx.save();
+  ctx.setLineDash([4,4]);ctx.lineWidth=1.8;ctx.strokeStyle='rgba(255,255,255,.75)';
+  for(const q of pv.group)rr(bx+q.c*cell+4,by+q.r*cell+4,cell-8,cell-8,9);
+  ctx.stroke();ctx.setLineDash([]);
+
+  const sx=bxc(pv.c),sy=byr(pv.r),lx=bxc(pv.landC),ly=byr(pv.landR);
+  if(pv.landR!==pv.r){
+    ctx.strokeStyle='rgba(255,255,255,.4)';ctx.lineWidth=2;ctx.setLineDash([3,6]);
+    ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(lx,ly-cell*.3);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,255,255,.6)';
+    ctx.beginPath();ctx.moveTo(lx-cell*.11,ly-cell*.36);ctx.lineTo(lx+cell*.11,ly-cell*.36);ctx.lineTo(lx,ly-cell*.18);ctx.closePath();ctx.fill();
+  }
+  ctx.globalAlpha=.55+.15*Math.sin(t*6);
+  ctx.save();ctx.translate(lx,ly);drawPack(pv.color,pv.tier,cell*.5,t*6);ctx.restore();
+  ctx.globalAlpha=1;
+  ctx.strokeStyle='#ffffff';ctx.lineWidth=2.4;ctx.setLineDash([6,4]);
+  rr(bx+pv.landC*cell+3,by+pv.landR*cell+3,cell-6,cell-6,9);ctx.stroke();ctx.setLineDash([]);
+
+  for(const m of pv.matches){
+    const x=bxc(m.c),y=byr(m.r);
+    ctx.strokeStyle=GOLD;ctx.lineWidth=2.6;ctx.globalAlpha=.65+.3*Math.sin(t*8);
+    ctx.beginPath();ctx.arc(x,y,cell*.4,0,Math.PI*2);ctx.stroke();
+    ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(x,y);ctx.stroke();ctx.setLineDash([]);
     ctx.globalAlpha=1;
   }
 
-  if(stageState?.handcartFrom){const f=stageState.handcartFrom;ctx.strokeStyle=CYAN;ctx.lineWidth=3;rr(bx+f.c*cell+2,by+f.r*cell+2,cell-4,cell-4,9);ctx.stroke();}
-
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(grid[r][c])drawPiece(grid[r][c]);
-  for(const p of flying)drawPiece(p,Math.max(0,p.scale));
-
-  if(keyboardActive&&screen==='play'){ctx.strokeStyle='rgba(255,255,255,'+(.55+.3*Math.sin(t*6))+')';ctx.lineWidth=2.5;rr(bx+keyCol*cell+2,by+keyRow*cell+2,cell-4,cell-4,9);ctx.stroke();}
-
-  for(const l of routeLines){ctx.globalAlpha=l.life;ctx.strokeStyle=l.color;ctx.lineWidth=2;ctx.setLineDash([5,6]);ctx.beginPath();ctx.moveTo(l.x1,l.y1);ctx.quadraticCurveTo((l.x1+l.x2)/2,l.y1-cell*.6,l.x2,l.y2);ctx.stroke();ctx.setLineDash([]);}
-  ctx.globalAlpha=1;
-  for(const r of rings){ctx.globalAlpha=r.life*.85;ctx.strokeStyle=r.color;ctx.lineWidth=r.width;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke();}
-  for(const p of particles){ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.color;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillRect(-p.size*.5,-p.size*.22,p.size,p.size*.44);ctx.restore();}
-  ctx.globalAlpha=1;ctx.restore();
-  for(const f of floaters){ctx.globalAlpha=Math.max(0,Math.min(1,f.life*1.6));txt(f.text,f.x,f.y,f.size,f.color,'center',900);}ctx.globalAlpha=1;
+  let label=tierName(pv.tier).toUpperCase();
+  if(pv.bulk)label='BULK '+label;
+  let sub='+'+pv.points;
+  if(pv.chain>1)sub='CHAIN \u00d7'+pv.chain+'  \u00b7  +'+pv.points;
+  const wlab=Math.max(tw(label,12,900),tw(sub,12,800))+18;
+  let py=by+pv.landR*cell-24;
+  if(py<by+4)py=by+pv.landR*cell+cell+8;
+  ctx.fillStyle='rgba(6,16,38,.86)';rr(lx-wlab/2,py-13,wlab,26,8);ctx.fill();
+  ctx.strokeStyle=pv.chain>1?GOLD:'rgba(255,255,255,.3)';ctx.lineWidth=1.4;rr(lx-wlab/2,py-13,wlab,26,8);ctx.stroke();
+  txt(label,lx,py-4,11,INK,'center',900);
+  txt(sub,lx,py+7,11,pv.chain>1?GOLD:DIM,'center',800);
   ctx.restore();
 }
 
-function button(id,x,y,w,h,label,opts={}){
-  uiButtons.push({id,x,y,w,h,disabled:!!opts.disabled});
-  const hot=pressedButton===id;ctx.save();ctx.globalAlpha=opts.disabled?.28:1;
+function drawBoard(){
+  ctx.save();ctx.translate((Math.random()-.5)*shakeAmt,(Math.random()-.5)*shakeAmt);
+  ctx.save();ctx.shadowColor='rgba(0,0,0,.5)';ctx.shadowBlur=30;ctx.shadowOffsetY=10;
+  const panel=ctx.createLinearGradient(bx,by,bx+bw,by+bh);
+  panel.addColorStop(0,'rgba(14,49,98,.94)');panel.addColorStop(1,'rgba(18,24,70,.95)');
+  ctx.fillStyle=panel;rr(bx-8,by-8,bw+16,bh+16,18);ctx.fill();ctx.restore();
+  ctx.strokeStyle='rgba(111,232,255,.42)';ctx.lineWidth=2;rr(bx-8,by-8,bw+16,bh+16,18);ctx.stroke();
+  ctx.strokeStyle='rgba(192,240,255,.08)';ctx.lineWidth=1;
+  for(let r=1;r<ROWS;r++){ctx.beginPath();ctx.moveTo(bx,by+r*cell);ctx.lineTo(bx+bw,by+r*cell);ctx.stroke();}
+  for(let c=1;c<COLS;c++){ctx.beginPath();ctx.moveTo(bx+c*cell,by);ctx.lineTo(bx+c*cell,by+bh);ctx.stroke();}
+
+  drawChutes();
+
+  ctx.save();ctx.beginPath();rr(bx-2,by-2,bw+4,bh+4,12);ctx.clip();
+
+  if(!preview)for(const s of spotCells){
+    const x=bxc(s.c),y=byr(s.r),a=.35+.3*Math.sin(t*4+s.r+s.c);
+    ctx.globalAlpha=a;ctx.strokeStyle='#ffffff';ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.arc(x,y+cell*.34,cell*.07,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
+  }
+
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(grid[r][c]){
+    const p=grid[r][c];
+    let a=1;
+    if(preview&&preview.kind==='pack'&&preview.group.some(q=>q.r===r&&q.c===c))a=.5;
+    drawPiece(p,a);
+  }
+  for(const p of flying)drawPiece(p,Math.max(0,p.scale));
+
+  drawPreview();
+
+  if(keyOn&&screen==='play'){ctx.strokeStyle='rgba(255,255,255,'+(.5+.3*Math.sin(t*6))+')';ctx.lineWidth=2.5;rr(bx+keyC*cell+2,by+keyR*cell+2,cell-4,cell-4,9);ctx.stroke();}
+
+  for(const l of lines){ctx.globalAlpha=l.life;ctx.strokeStyle=l.color;ctx.lineWidth=2;ctx.setLineDash([5,6]);ctx.beginPath();ctx.moveTo(l.x1,l.y1);ctx.quadraticCurveTo((l.x1+l.x2)/2,l.y1-cell*.6,l.x2,l.y2);ctx.stroke();ctx.setLineDash([]);}
+  ctx.globalAlpha=1;
+  for(const r of rings){ctx.globalAlpha=r.life*.85;ctx.strokeStyle=r.color;ctx.lineWidth=r.width;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke();}
+  for(const p of parts){ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.color;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillRect(-p.size*.5,-p.size*.22,p.size,p.size*.44);ctx.restore();}
+  ctx.globalAlpha=1;ctx.restore();
+  for(const f of floats){ctx.globalAlpha=Math.max(0,Math.min(1,f.life*1.6));txt(f.text,f.x,f.y,f.size,f.color,'center',900);}
+  ctx.globalAlpha=1;ctx.restore();
+}
+
+function button(id,x,y,w,h,label,opts){
+  opts=opts||{};
+  buttons.push({id,x,y,w,h,disabled:!!opts.disabled});
+  const hot=pressBtn===id;ctx.save();ctx.globalAlpha=opts.disabled?.28:1;
   if(opts.primary){const g=ctx.createLinearGradient(0,y,0,y+h);g.addColorStop(0,'#84f5ff');g.addColorStop(1,'#3c7dff');ctx.fillStyle=g;}
   else ctx.fillStyle=opts.active?'rgba(105,235,255,.2)':'rgba(255,255,255,.065)';
-  rr(x+(hot?1:0),y+(hot?1:0),w,h,opts.round??h*.31);ctx.fill();ctx.strokeStyle=opts.active?'rgba(160,248,255,.9)':opts.primary?'rgba(255,255,255,.6)':'rgba(255,255,255,.17)';ctx.lineWidth=1.3;rr(x,y,w,h,opts.round??h*.31);ctx.stroke();
-  txt(label,x+w/2,y+h/2+(opts.sub?-h*.14:0),opts.size||14,opts.primary?'#07152d':INK,'center',800);if(opts.sub)txt(opts.sub,x+w/2,y+h/2+h*.24,10.5,opts.primary?'rgba(7,21,45,.72)':DIM,'center',650);ctx.restore();
+  const rad=opts.round!==undefined?opts.round:h*.31;
+  rr(x+(hot?1:0),y+(hot?1:0),w,h,rad);ctx.fill();
+  ctx.strokeStyle=opts.primary?'rgba(255,255,255,.55)':'rgba(255,255,255,.17)';ctx.lineWidth=1.3;rr(x,y,w,h,rad);ctx.stroke();
+  txt(label,x+w/2,y+h/2+(opts.sub?-h*.14:0),opts.size||14,opts.primary?'#07152d':INK,'center',800);
+  if(opts.sub)txt(opts.sub,x+w/2,y+h/2+h*.24,10.5,opts.primary?'rgba(7,21,45,.72)':DIM,'center',650);
+  ctx.restore();
 }
 
-function goalItems(){
-  const g=stageState.cfg.goal,out=[];
-  if(g.baskets!==undefined)out.push(['BASKETS',stageState.baskets,g.baskets]);
-  if(g.crates!==undefined)out.push(['CRATES',stageState.crates,g.crates]);
-  if(g.trucks!==undefined)out.push(['TRUCKS',stageState.trucks,g.trucks]);
-  if(g.fleet!==undefined)out.push(['FLEET',stageState.fleet,g.fleet]);
-  if(g.equipment!==undefined)out.push(['TOOLS',stageState.equipmentDelivered,g.equipment]);
-  return out;
-}
 function drawHud(){
-  const y0=18+SAFE_TOP;txt(stageState.cfg.name.toUpperCase(),14,y0,15,INK,'left',900);txt(stageState.cfg.sub,14,y0+19,11,DIM,'left',600);
-  const size=Math.max(38,Math.min(44,W*.105));button('guide',W-14-size,y0-8,size,size,'?',{round:size/2,size:18});button('mute',W-22-size*2,y0-8,size,size,muted?'×':'♪',{round:size/2,size:17});button('restart',W-30-size*3,y0-8,size,size,'↻',{round:size/2,size:19});
+  const y0=16+ST;
+  txt(('SHIFT '+(st.index+1)+' \u00b7 '+cfg.name).toUpperCase(),14,y0,14,INK,'left',900);
+  txt(cfg.sub,14,y0+18,11,DIM,'left',600);
+  const s=Math.max(36,Math.min(42,W*.1));
+  button('guide',W-14-s,y0-9,s,s,'?',{round:s/2,size:17});
+  button('mute',W-20-s*2,y0-9,s,s,muted?'\u00d7':'\u266a',{round:s/2,size:16});
+  button('restart',W-26-s*3,y0-9,s,s,'\u21bb',{round:s/2,size:18});
 
-  const infoY=topH-34;txt('ACTIONS',14,infoY-12,9,FAINT,'left',800);txt(String(stageState.actions),14,infoY+7,22,INK,'left',900);
-  txt('RECEIPTS',W/2,infoY-12,9,FAINT,'center',800);txt(stageState.receipts.toLocaleString(),W/2,infoY+6,15,GOLD,'center',900);
+  const iy=topH-30;
+  txt('ACTIONS',14,iy-12,9,FAINT,'left',800);txt(String(st.actions),14,iy+7,20,INK,'left',900);
+  txt('RECEIPTS',W*.34,iy-12,9,FAINT,'center',800);txt(st.receipts.toLocaleString(),W*.34,iy+6,15,GOLD,'center',900);
 
-  let gx=W-14;const goals=goalItems();
-  for(let i=goals.length-1;i>=0;i--){const [label,have,need]=goals[i],done=have>=need,text=Math.min(have,need)+'/'+need,w=Math.max(58,measureText(text,13,900)+22);gx-=w;ctx.fillStyle=done?'rgba(121,255,199,.14)':'rgba(255,255,255,.06)';rr(gx,infoY-13,w,28,14);ctx.fill();ctx.strokeStyle=done?'rgba(121,255,199,.6)':'rgba(255,255,255,.14)';rr(gx,infoY-13,w,28,14);ctx.stroke();txt(text,gx+w/2,infoY+1,13,done?MINT:INK,'center',900);txt(label,gx+w/2,infoY-26,8,FAINT,'center',800);gx-=7;}
-
-  const incoming=peekSupply(7),startX=Math.max(82,W*.17);txt('INCOMING',startX,infoY-12,8,FAINT,'center',800);
-  for(let i=0;i<incoming.length;i++){ctx.save();ctx.translate(startX-30+i*10,infoY+7);drawFruit(incoming[i],4.5);ctx.restore();}
+  let gx=W-14;const rows=goalRows();const bon=bonusRow();if(bon)rows.push(bon);
+  for(let i=rows.length-1;i>=0;i--){
+    const nm=rows[i][0],have=rows[i][1],need=rows[i][2],done=have>=need,isB=bon&&i===rows.length-1;
+    const text=Math.min(have,need)+'/'+need,w=Math.max(54,tw(text,13,900)+20);
+    gx-=w;
+    ctx.fillStyle=done?(isB?'rgba(255,211,107,.16)':'rgba(121,255,199,.14)'):'rgba(255,255,255,.06)';rr(gx,iy-13,w,28,14);ctx.fill();
+    ctx.strokeStyle=done?(isB?'rgba(255,211,107,.7)':'rgba(121,255,199,.6)'):(isB?'rgba(255,211,107,.3)':'rgba(255,255,255,.14)');ctx.lineWidth=1.2;rr(gx,iy-13,w,28,14);ctx.stroke();
+    txt(text,gx+w/2,iy+1,13,done?(isB?GOLD:MINT):INK,'center',900);
+    txt(nm,gx+w/2,iy-25,8,isB?'rgba(255,211,107,.55)':FAINT,'center',800);
+    gx-=7;
+  }
 }
-function drawAbilityBar(){
-  const list=[];
-  if(run.tools.handcart)list.push({id:'handcart',label:'HANDCART',sub:'move one',available:stageState.charges.handcart>0});
-  if(run.tools.crowbar)list.push({id:'crowbar',label:'CROWBAR',sub:'clear one',available:stageState.charges.crowbar>0});
-  if(run.tools.orderSheet)list.push({id:'orderSheet',label:'ORDER SHEET',sub:'exact plans',available:true,toggle:true});
-  if(stageState.complete)list.push({id:'closeShift',label:'CLOSE SHIFT',sub:'orders filled',available:true,primary:true});
-  const y=H-bottomH+9;
-  if(!list.length){if(hintTime>0){ctx.globalAlpha=Math.min(1,hintTime);wrapText(hintText,W/2,y+22,W-34,15,12.5,DIM,'center');ctx.globalAlpha=1;}return;}
-  const gap=7,total=Math.min(W-20,470),w=(total-gap*(list.length-1))/list.length,h=Math.min(58,bottomH-16);let x=(W-total)/2;
-  for(const b of list){button(b.id,x,y,w,h,b.label,{sub:b.sub,disabled:!b.available&&!b.toggle,active:stageState.armed===b.id||(b.id==='orderSheet'&&stageState.orderSheet),primary:b.primary,size:Math.min(13,w*.16)});x+=w+gap;}
-  if(hintTime>0){ctx.globalAlpha=Math.min(1,hintTime)*.92;wrapText(hintText,W/2,y-14,W-28,14,12,DIM,'center');ctx.globalAlpha=1;}
+function drawBottom(){
+  const y=H-botH+8,h=Math.min(52,botH-16);
+  let hintY=y+h*.5;
+  if(st.done){
+    const w=Math.min(230,W*.56);
+    button('close',W/2-w/2,y,w,h,'CLOSE SHIFT',{primary:true,size:15,sub:'orders filled'});
+    hintY=y-14;
+  }else if(cfg.forklift>0){
+    const w=Math.min(200,W*.52),x=W/2-w/2;
+    ctx.fillStyle='rgba(255,255,255,.05)';rr(x,y+h*.12,w,h*.76,10);ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.14)';ctx.lineWidth=1.2;rr(x,y+h*.12,w,h*.76,10);ctx.stroke();
+    txt('FORKLIFT',x+14,y+h*.36,11,st.forklift>0?CYAN:FAINT,'left',900);
+    txt('drag onto a neighbour',x+14,y+h*.63,9.5,FAINT,'left',650);
+    for(let i=0;i<cfg.forklift;i++){
+      ctx.beginPath();ctx.arc(x+w-18-i*14,y+h*.5,5,0,Math.PI*2);
+      ctx.fillStyle=i<st.forklift?CYAN:'rgba(255,255,255,.15)';ctx.fill();
+    }
+    hintY=y-12;
+  }
+  if(hintTime>0){ctx.globalAlpha=Math.min(1,hintTime);wrap(hintText,W/2,hintY,W-30,14,12,DIM,'center');ctx.globalAlpha=1;}
 }
-function drawPlay(){drawBoard();drawHud();drawAbilityBar();if(flash>.01){ctx.fillStyle='rgba(255,255,255,'+Math.min(.82,flash)+')';ctx.fillRect(0,0,W,H);}}
+function drawPlay(){
+  drawBoard();drawHud();drawBottom();
+  if(flash>.01){ctx.fillStyle='rgba(255,255,255,'+Math.min(.8,flash)+')';ctx.fillRect(0,0,W,H);}
+}
 
 function drawTitle(){
-  const cx=W/2,cy=H*.28;
-  for(let i=0;i<4;i++){const a=t*.5+i*Math.PI/2,x=cx+Math.cos(a)*Math.min(W,H)*.22,y=cy+Math.sin(a)*Math.min(W,H)*.09;ctx.save();ctx.translate(x,y);drawFruit(i,13+2*Math.sin(t*2+i));ctx.restore();}
-  const glow=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*.4);glow.addColorStop(0,'rgba(102,232,255,.2)');glow.addColorStop(1,'rgba(102,232,255,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
-  txt('PACKHOUSE',cx,cy,Math.min(54,W*.13),INK,'center',950);txt('juicy produce · deliberate chains',cx,cy+40,13,CYAN,'center',700);
-  const w=Math.min(310,W*.76);button('start',cx-w/2,H*.61,w,58,run.stage>0?'RETURN TO SHIFT':'START SORTING',{primary:true,size:16});button('guide',cx-w/2,H*.61+70,w,46,'PACKING GUIDE',{size:13});button('toolShed',cx-w/2,H*.61+126,w,46,'TOOL SHED',{size:13});
-  txt('No move limits. Every stage stays solvable.',cx,H-30,11,FAINT,'center',650);
+  const cx=W/2,cy=H*.26;
+  for(let i=0;i<4;i++){
+    const a=t*.5+i*Math.PI/2,x=cx+Math.cos(a)*Math.min(W,H)*.22,y=cy+Math.sin(a)*Math.min(W,H)*.085;
+    ctx.save();ctx.translate(x,y);drawFruit(i,13+2*Math.sin(t*2+i));ctx.restore();
+  }
+  txt('PACKHOUSE',cx,cy,Math.min(52,W*.13),INK,'center',950);
+  txt('press to plan \u00b7 release to pack',cx,cy+38,13,CYAN,'center',700);
+  const w=Math.min(300,W*.76);
+  button('start',cx-w/2,H*.6,w,56,run.stage>0?'SHIFT '+(run.stage+1):'START THE SHIFT',{primary:true,size:16});
+  button('guide',cx-w/2,H*.6+68,w,44,'HOW PACKING WORKS',{size:13});
+  if(run.stage>0)button('reset',cx-w/2,H*.6+120,w,40,'START OVER FROM SHIFT 1',{size:12});
+  txt(run.total>0?run.total.toLocaleString()+' receipts banked':'No move limit. The floor never dead-ends.',cx,H-28,11,FAINT,'center',650);
 }
 function drawResult(){
-  drawBoard();drawHud();ctx.fillStyle='rgba(5,10,29,.86)';ctx.fillRect(0,0,W,H);uiButtons=[];
-  const cx=W/2;let y=H*.24;txt('SHIFT COMPLETE',cx,y,Math.min(30,W*.075),INK,'center',900);y+=34;txt(stageState.cfg.name,cx,y,13,DIM,'center',650);y+=48;
-  for(const [a,b] of [['Actions',stageState.actions],['Receipts',stageState.receipts.toLocaleString()],['Longest chain',bestChain],['Tools delivered',stageState.equipmentDelivered]]){txt(a,cx-8,y,13,DIM,'right',650);txt(String(b),cx+8,y,14,INK,'left',900);y+=27;}
-  const best=run.bestActions[stageState.index];if(best!==undefined){y+=6;txt('Best: '+best+' actions',cx,y,12,MINT,'center',800);y+=30;}
-  const w=Math.min(310,W*.74),last=stageState.index===STAGES.length-1;button('next',cx-w/2,y,w,56,last?'OPEN TOOL SHED':'NEXT SHIFT',{primary:true,size:16});y+=68;button('replay',cx-w/2,y,w,44,'REPLAY THIS SHIFT',{size:13});
-}
-function drawToolShed(){
-  const cx=W/2;txt('TOOL SHED',cx,46+SAFE_TOP,24,INK,'center',900);txt(run.equipmentDelivered+' of '+TOOLS.length+' tools delivered · '+run.totalReceipts.toLocaleString()+' receipts',cx,73+SAFE_TOP,11,DIM,'center',650);
-  const total=Math.min(W-26,450),gap=8,w=(total-gap*3)/4,x0=(W-total)/2,y0=116+SAFE_TOP,icons=['↔','⌁','✓','▣'];
-  for(let i=0;i<TOOLS.length;i++){const owned=!!run.tools[TOOLS[i].id],x=x0+i*(w+gap);ctx.globalAlpha=owned?1:.27;ctx.fillStyle=owned?'rgba(102,232,255,.12)':'rgba(255,255,255,.04)';rr(x,y0,w,92,12);ctx.fill();ctx.strokeStyle=owned?'rgba(102,232,255,.55)':'rgba(255,255,255,.14)';rr(x,y0,w,92,12);ctx.stroke();txt(owned?icons[i]:'?',x+w/2,y0+29,24,owned?CYAN:FAINT,'center',900);txt(owned?TOOLS[i].name.toUpperCase():'LOCKED',x+w/2,y0+64,Math.min(10,w*.14),owned?INK:FAINT,'center',850);ctx.globalAlpha=1;}
-  let y=y0+120;for(const tool of TOOLS)if(run.tools[tool.id]){txt(tool.name,cx,y,14,CYAN,'center',850);y+=18;y=wrapText(tool.desc,22,y,W-44,15,11.5,DIM,'left')+8;}
-  if(!run.equipmentDelivered){txt('Equipment crates appear in later shifts.',cx,y,12,FAINT,'center',650);y+=25;}
-  button('back',cx-Math.min(270,W*.66)/2,Math.min(H-72,Math.max(y+10,H*.78)),Math.min(270,W*.66),50,'BACK',{primary:true,size:15});
+  drawBoard();drawHud();
+  ctx.fillStyle='rgba(5,10,29,.87)';ctx.fillRect(0,0,W,H);buttons=[];
+  const cx=W/2;let y=H*.24;
+  txt('SHIFT COMPLETE',cx,y,Math.min(29,W*.075),INK,'center',900);y+=32;
+  txt(cfg.name,cx,y,13,DIM,'center',650);y+=44;
+  const stats=[['Actions',st.actions],['Receipts',st.receipts.toLocaleString()],['Longest chain','\u00d7'+Math.max(1,st.bestChain)],['Trucks sent',st.trucks]];
+  for(const s of stats){txt(s[0],cx-8,y,13,DIM,'right',650);txt(String(s[1]),cx+8,y,14,INK,'left',900);y+=26;}
+  const best=run.best[st.index];
+  if(best!==undefined){y+=4;txt('Fewest actions so far: '+best,cx,y,12,MINT,'center',800);y+=28;}
+  const w=Math.min(300,W*.74),last=st.index===STAGES.length-1;
+  button('next',cx-w/2,y,w,54,last?'BACK TO TITLE':'NEXT SHIFT',{primary:true,size:16});y+=66;
+  button('replay',cx-w/2,y,w,42,'REPLAY THIS SHIFT',{size:13});
 }
 function drawGuide(){
-  if(previousScreen==='play'&&stageState)drawBoard();ctx.fillStyle='rgba(5,10,29,.93)';ctx.fillRect(0,0,W,H);uiButtons=[];
-  const cx=W/2;txt('PACKING GUIDE',cx,42+SAFE_TOP,18,INK,'center',900);let y=80+SAFE_TOP;
-  const entries=[
-    ['LAND','Tap a matching group. The upgraded package lands on the exact item you tap.'],
-    ['CHAIN','A white sparkle marks a landing cell that immediately touches a matching next-size package.'],
-    ['SUPPLY','Incoming produce follows a fixed queue. New supply never joins the chain you just created.'],
-    ['BULK','From Bulk Orders onward, groups of five or more skip one package size.'],
-    ['TRUCK','A truck collects its produce color. Only pallets or equipment directly beside the parked truck are loaded.'],
-    ['FLEET','Two neighbouring trucks clear the loading floor together.'],
-    ['NO DEAD END','There is no move-limit loss. If a board has no packable group, the floor corrects itself.']
+  if(prevScreen==='play'&&st)drawBoard();
+  ctx.fillStyle='rgba(5,10,29,.93)';ctx.fillRect(0,0,W,H);buttons=[];
+  const cx=W/2;txt('HOW PACKING WORKS',cx,40+ST,17,INK,'center',900);
+  let y=76+ST;
+  const legend=[[1,'produce'],[2,'basket'],[3,'crate'],[4,'truck']];
+  const lw=Math.min(W-40,340),lx=cx-lw/2;
+  for(let i=0;i<legend.length;i++){
+    const x=lx+lw*(i+.5)/4;
+    ctx.save();ctx.translate(x,y+14);drawPack(0,legend[i][0],20,t*6);ctx.restore();
+    txt(legend[i][1],x,y+42,10,DIM,'center',700);
+    if(i<3)txt('\u2192',lx+lw*(i+1)/4,y+14,14,FAINT,'center',900);
+  }
+  y+=72;
+  const rowsTxt=[
+    ['PRESS','Hold any piece. You see the group it belongs to, the exact cell the package will land in, and what it will chain with.'],
+    ['RELEASE','Release on the same piece to pack it. Drag away to cancel.'],
+    ['LANDING','The package settles in the column you pressed, as low as the remaining stack allows. That column choice is the whole game.'],
+    ['CHAIN','If it lands touching a matching package of the same size, it packs again immediately — and again after that.'],
+    ['INCOMING','Each column has its own chute. The next two arrivals for that column are always visible above the floor.'],
+    ['FORKLIFT','Drag a piece onto a neighbour to swap them. A few loads per shift, so spend them on chains you could not otherwise reach.'],
+    ['TRUCK','Press a truck to send it out; it collects every piece of its crop. Two trucks side by side leave as a fleet and clear the floor.']
   ];
-  for(const [title,body] of entries){txt(title,20,y,13,CYAN,'left',900);y+=18;y=wrapText(body,20,y,W-40,15,11.5,DIM,'left')+9;}
-  button('closeGuide',cx-Math.min(240,W*.6)/2,Math.min(H-68,y+6),Math.min(240,W*.6),48,'BACK',{primary:true,size:15});
+  for(const row of rowsTxt){
+    txt(row[0],20,y,12,CYAN,'left',900);y+=17;
+    y=wrap(row[1],20,y,W-40,14,11,DIM,'left')+7;
+  }
+  button('closeGuide',cx-Math.min(230,W*.6)/2,Math.min(H-64,y+4),Math.min(230,W*.6),46,'BACK',{primary:true,size:15});
 }
 
-/* ---------- input ---------- */
-function position(e){const rect=cv.getBoundingClientRect(),p=e.touches?.[0]||e.changedTouches?.[0]||e;return{x:p.clientX-rect.left,y:p.clientY-rect.top};}
+/* ---------------- input ---------------- */
+function pos(e){const r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
 function cellAt(x,y){if(x<bx||x>=bx+bw||y<by||y>=by+bh)return null;return{r:Math.floor((y-by)/cell),c:Math.floor((x-bx)/cell)};}
-function buttonAt(x,y){for(let i=uiButtons.length-1;i>=0;i--){const b=uiButtons[i],pad=6;if(x>=b.x-pad&&x<=b.x+b.w+pad&&y>=b.y-pad&&y<=b.y+b.h+pad)return b;}return null;}
-function down(e){e.preventDefault();initAudio();const {x,y}=position(e),b=buttonAt(x,y);if(b){pressedButton=b.id;pointerDown={x,y,button:b.id};tone(680,.06,'triangle',.08);return;}const cellPos=screen==='play'?cellAt(x,y):null;pointerDown={x,y,cell:cellPos};if(cellPos&&!busy){const p=at(cellPos.r,cellPos.c);if(p){p.pop=Math.max(p.pop,.18);sfxTap();}}}
-function up(e){
-  e.preventDefault();const {x,y}=position(e),pd=pointerDown;pointerDown=null;pressedButton=null;if(!pd)return;
-  if(pd.button){const b=buttonAt(x,y);if(b&&b.id===pd.button&&!b.disabled)handleButton(b.id);return;}
-  if(screen!=='play')return;const c=cellAt(x,y);if(!c||!pd.cell)return;
-  const dx=Math.abs(x-pd.x),dy=Math.abs(y-pd.y);
-  if(dx>cell*.45||dy>cell*.45){
-    if(stageState.charges.handcart>0&&!stageState.armed){const d=Math.abs(pd.cell.r-c.r)+Math.abs(pd.cell.c-c.c);if(d===1){stageState.armed='handcart';stageState.handcartFrom=pd.cell;attemptAction(c.r,c.c);return;}}
-    return;
-  }
-  if(c.r===pd.cell.r&&c.c===pd.cell.c){keyboardActive=false;attemptAction(c.r,c.c);}
-}
+function btnAt(x,y){for(let i=buttons.length-1;i>=0;i--){const b=buttons[i],p=6;if(x>=b.x-p&&x<=b.x+b.w+p&&y>=b.y-p&&y<=b.y+b.h+p)return b;}return null;}
 
-function handleButton(id){
+function onDown(e){
+  e.preventDefault();initAudio();
+  const q=pos(e),b=btnAt(q.x,q.y);
+  if(b){pressBtn=b.id;down={btn:b.id};tone(660,.05,'triangle',.07);return;}
+  if(screen!=='play'||busy)return;
+  const g=cellAt(q.x,q.y);if(!g)return;
+  down={x:q.x,y:q.y,r:g.r,c:g.c,mode:'pack',to:null};
+  preview=buildPreview(g.r,g.c);
+  const p=at(g.r,g.c);if(p)p.pop=Math.max(p.pop,.2);
+  sfxTap();
+}
+function onMove(e){
+  if(!down||down.btn||screen!=='play')return;
+  const q=pos(e),dx=q.x-down.x,dy=q.y-down.y;
+  if(Math.sqrt(dx*dx+dy*dy)>cell*.5){
+    const g=cellAt(q.x,q.y);
+    if(g&&Math.abs(g.r-down.r)+Math.abs(g.c-down.c)===1&&st.forklift>0){
+      if(down.mode!=='move'||!down.to||down.to.r!==g.r||down.to.c!==g.c){
+        down.mode='move';down.to=g;preview={kind:'move',r:down.r,c:down.c,to:g};sfxTap();
+      }
+      return;
+    }
+  }
+  if(down.mode==='move'){down.mode='pack';down.to=null;preview=buildPreview(down.r,down.c);}
+}
+function onUp(e){
+  const d=down,pb=pressBtn;down=null;pressBtn=null;
+  if(!d)return;
+  const q=pos(e);
+  if(d.btn){const b=btnAt(q.x,q.y);if(b&&b.id===d.btn&&!b.disabled)handleBtn(b.id);preview=null;return;}
+  preview=null;
+  if(screen!=='play'||busy)return;
+  if(d.mode==='move'&&d.to){doSwap(d.r,d.c,d.to.r,d.to.c);return;}
+  const g=cellAt(q.x,q.y);
+  if(g&&g.r===d.r&&g.c===d.c){keyOn=false;attemptPack(d.r,d.c);}
+}
+function handleBtn(id){
   if(id==='start'){startStage(run.stage);return;}
-  if(id==='guide'){previousScreen=screen;screen='guide';return;}
-  if(id==='closeGuide'){screen=previousScreen;return;}
-  if(id==='mute'){muted=!muted;if(master)master.gain.value=muted?0:.42;return;}
-  if(id==='restart'||id==='replay'){startStage(stageState.index);return;}
-  if(id==='next'){if(stageState.index>=STAGES.length-1){screen='toolShed';return;}startStage(stageState.index+1);return;}
-  if(id==='toolShed'){previousScreen=screen;screen='toolShed';return;}
-  if(id==='back'){screen=previousScreen==='toolShed'?'title':previousScreen;return;}
-  if(id==='closeShift'){closeShift();return;}
-  if(id==='orderSheet'){stageState.orderSheet=!stageState.orderSheet;return;}
-  if(id==='handcart'||id==='crowbar'){
-    if(stageState.charges[id]<=0)return;stageState.armed=stageState.armed===id?null:id;stageState.handcartFrom=null;
-    hint(id==='handcart'?'Tap an item, then a neighbouring space.':'Tap one item or pallet to clear it.');
+  if(id==='reset'){run.stage=0;save();startStage(0);return;}
+  if(id==='guide'){prevScreen=screen;screen='guide';return;}
+  if(id==='closeGuide'){screen=prevScreen;return;}
+  if(id==='mute'){muted=!muted;if(master)master.gain.value=muted?0:.4;return;}
+  if(id==='restart'||id==='replay'){startStage(st.index);return;}
+  if(id==='next'){
+    if(st.index>=STAGES.length-1){run.stage=0;save();screen='title';return;}
+    startStage(st.index+1);return;
   }
+  if(id==='close'){closeShift();return;}
 }
 
-cv.addEventListener('pointerdown',down,{passive:false});cv.addEventListener('pointerup',up,{passive:false});cv.addEventListener('pointercancel',()=>{pointerDown=null;pressedButton=null;});cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('pointerdown',onDown,{passive:false});
+cv.addEventListener('pointermove',onMove,{passive:false});
+cv.addEventListener('pointerup',onUp,{passive:false});
+cv.addEventListener('pointercancel',()=>{down=null;pressBtn=null;preview=null;});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+
 addEventListener('keydown',e=>{
   initAudio();const k=e.key;
-  if(screen==='title'){if(k==='Enter'||k===' ')handleButton('start');return;}
-  if(screen==='guide'){if(k==='Escape'||k==='Enter'||k===' ')handleButton('closeGuide');return;}
-  if(screen==='toolShed'){if(k==='Escape'||k==='Enter')handleButton('back');return;}
-  if(screen==='result'){if(k==='Enter'||k===' ')handleButton('next');return;}
+  if(screen==='title'){if(k==='Enter'||k===' ')handleBtn('start');return;}
+  if(screen==='guide'){if(k==='Escape'||k==='Enter'||k===' ')handleBtn('closeGuide');return;}
+  if(screen==='result'){if(k==='Enter'||k===' ')handleBtn('next');return;}
   if(screen!=='play')return;
-  if(k==='ArrowLeft'){keyboardActive=true;keyCol=Math.max(0,keyCol-1);e.preventDefault();}
-  else if(k==='ArrowRight'){keyboardActive=true;keyCol=Math.min(COLS-1,keyCol+1);e.preventDefault();}
-  else if(k==='ArrowUp'){keyboardActive=true;keyRow=Math.max(0,keyRow-1);e.preventDefault();}
-  else if(k==='ArrowDown'){keyboardActive=true;keyRow=Math.min(ROWS-1,keyRow+1);e.preventDefault();}
-  else if(k==='Enter'||k===' '){keyboardActive=true;attemptAction(keyRow,keyCol);e.preventDefault();}
-  else if(k==='1')handleButton('handcart');else if(k==='2')handleButton('crowbar');else if(k==='3')handleButton('orderSheet');
-  else if(k.toLowerCase()==='i'){previousScreen='play';screen='guide';}
-  else if(k.toLowerCase()==='r')handleButton('restart');else if(k.toLowerCase()==='f'&&stageState.complete)handleButton('closeShift');else if(k.toLowerCase()==='m')handleButton('mute');
+  if(k==='ArrowLeft'){keyOn=true;keyC=Math.max(0,keyC-1);preview=buildPreview(keyR,keyC);e.preventDefault();}
+  else if(k==='ArrowRight'){keyOn=true;keyC=Math.min(COLS-1,keyC+1);preview=buildPreview(keyR,keyC);e.preventDefault();}
+  else if(k==='ArrowUp'){keyOn=true;keyR=Math.max(0,keyR-1);preview=buildPreview(keyR,keyC);e.preventDefault();}
+  else if(k==='ArrowDown'){keyOn=true;keyR=Math.min(ROWS-1,keyR+1);preview=buildPreview(keyR,keyC);e.preventDefault();}
+  else if(k==='Enter'||k===' '){keyOn=true;preview=null;attemptPack(keyR,keyC);e.preventDefault();}
+  else if(k.toLowerCase()==='i'){prevScreen='play';screen='guide';}
+  else if(k.toLowerCase()==='r')handleBtn('restart');
+  else if(k.toLowerCase()==='m')handleBtn('mute');
+  else if(k.toLowerCase()==='f'&&st&&st.done)handleBtn('close');
 });
 
-/* ---------- frame ---------- */
+/* ---------------- frame ---------------- */
 let last=performance.now();
 function frame(now){
-  const dt=Math.min(.05,(now-last)/1000);last=now;update(dt);uiButtons=[];drawBackground();
-  if(screen==='title')drawTitle();else if(screen==='play')drawPlay();else if(screen==='result')drawResult();else if(screen==='toolShed')drawToolShed();else if(screen==='guide')drawGuide();
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  update(dt);buttons=[];drawBg();
+  if(screen==='title')drawTitle();
+  else if(screen==='play')drawPlay();
+  else if(screen==='result')drawResult();
+  else if(screen==='guide')drawGuide();
   requestAnimationFrame(frame);
 }
 
-measureSafeArea();resize();loadRun();requestAnimationFrame(frame);
+measureSafe();load();
+cfg=STAGES[Math.min(run.stage,STAGES.length-1)];COLS=cfg.cols;ROWS=cfg.rows;
+resize();requestAnimationFrame(frame);
 </script>
 </body>
 </html>
