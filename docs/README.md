@@ -1,6 +1,6 @@
 # THE LITTLE DIGGER — DOCS
 
-Play it: <https://junovhs.github.io/gamedesign/> · source: [`../index.html`](../index.html)
+Play it on a phone: <https://junovhs.github.io/gamedesign/> · source: [`../index.html`](../index.html)
 
 **[direction.md](direction.md)** — where the project is, what it is trying to be, and the
 correction about what the prototype's renderer actually does.
@@ -24,6 +24,7 @@ ishoo plan show core-questions
 | DEC-04 | The placeholder voice must not ship | ACCEPTED |
 | DEC-05 | The browser prototype is a design instrument, not the codebase | ACCEPTED |
 | DEC-06 | Art direction moves toward volume (voxel or clay) | **PROPOSED** — not binding |
+| DEC-07 | Prototypes are phone-native web builds | ACCEPTED |
 
 ## Plan: core-questions
 
@@ -43,6 +44,6 @@ they settle is wasted work.
 
 ## Background
 
-- [../little-digger-handoff.md](../little-digger-handoff.md) — the original build brief.
-- [../pivot-concept.md](../pivot-concept.md) — the concept document.
-- [../spencer_game_design_philosophy.md](../spencer_game_design_philosophy.md)
+- [brief.md](brief.md) — the original build brief.
+- [concept.md](concept.md) — the concept document.
+- [philosophy.md](philosophy.md)

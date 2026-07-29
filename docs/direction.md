@@ -7,7 +7,7 @@
 ## 1. WHERE WE ARE
 
 There is a playable prototype at `index.html` (live at <https://junovhs.github.io/gamedesign/>).
-It covers steps 1–4 of the build order in `little-digger-handoff.md`: movement, the hunt,
+It covers steps 1–4 of the build order in `brief.md`: movement, the hunt,
 maps-as-pictures, and the graded dig response.
 
 It was tested on a phone and the verdict was: **pursue this.** Specifically what landed:
@@ -75,7 +75,7 @@ reason to make an engine decision. Q-01, and DEC-06 (still PROPOSED).
 
 ## 4. THE PILLARS, RESTATED
 
-Unchanged from `little-digger-handoff.md`, and now confirmed by play:
+Unchanged from `brief.md`, and now confirmed by play:
 
 1. **Low cognitive load at any moment.** One question in the player's head at a time.
 2. **No invented vocabulary.** A map, a whistle, a rope, a hole.
@@ -111,7 +111,7 @@ governed by DEC-04 and gets its issues when Q-01 settles what a creature is made
 
 ## 6. INDEX
 
-- Decisions: in Ishoo — `ishoo decision list` (DEC-01..06).
+- Decisions: in Ishoo — `ishoo decision list` (DEC-01..07).
 - Open questions: in Ishoo — `ishoo plan show core-questions` (Q-01..06).
-- Original brief: [`../little-digger-handoff.md`](../little-digger-handoff.md)
-- Concept: [`../pivot-concept.md`](../pivot-concept.md)
+- Original brief: [`brief.md`](brief.md)
+- Concept: [`concept.md`](concept.md)

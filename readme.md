@@ -1,68 +1,68 @@
-# PACKHOUSE
+# THE LITTLE DIGGER
 
-A small packing-floor puzzle. One gesture, four rules, and a floor that never dead-ends.
+A small creature that can smell buried treasure. You take it somewhere, music starts, a clock
+starts, and you dig where you think the signal is strongest. Most holes have something small.
+Sometimes there's a map — and a map is a *picture* of a place, which sends you somewhere else.
 
-**Play:** open `index.html` in any browser. Desktop or phone. No install, no build, no server.
+**Play it on your phone:** <https://junovhs.github.io/gamedesign/>
+
+No install, no build, no server. One file, `index.html`, published on push to `main`.
 
 ---
-
-## The rule, in one sentence
-
-Press a group of touching, matching produce; the packed item settles in the **column you pressed**, and if it lands touching another match it packs again.
 
 ## Controls
 
-| Do this | Get this |
-| :--- | :--- |
-| **Press and hold** a piece | The plan: its group, the exact landing cell, what it will chain with, the score |
-| **Release** on the same piece | Pack it |
-| **Drag away** before releasing | Cancel |
-| **Drag onto a neighbour** | Crane swap (costs a load, only within the crane's reach) |
-| **Press a truck** | Send it out — it collects every piece of its crop |
-| **Tap an order** | Swap it for a different one (once per shift) |
+**Phone** — left thumb walks, right thumb looks, **DIG** and **^** (jump) bottom right.
+Tap the picture in the corner to flip between maps you're holding.
 
-## The ladder
+**Desktop** — `wasd` move, mouse look, `space` jump, `e` dig, `tab` flip pictures.
 
-produce → basket → crate → truck. Five or more at once packs a **bulk order** and skips a size. Two trucks side by side leave together and clear the entire floor.
+## What's in the prototype
 
-## Crops
+Steps 1–4 of the build order in [`docs/brief.md`](docs/brief.md):
 
-Before each shift you choose which crops turn up. Each bends exactly one rule:
+- **Movement** with momentum, skid, lean, squash on landing.
+- **The hunt** — walk into the drifting insects, the camera lifts and looks down, a clock
+  starts, six things are buried, digging costs time.
+- **Hot and cold.** Every dig ends in a graded call from the creature — `kweh.` when there's
+  nothing out here, up to `KWEHHH!!!!` on a find. A miss is a measurement. Two or three digs
+  triangulate. No meter, no arrow, no number, ever.
+- **Maps are pictures.** A second camera renders a real landmark from a random angle at a
+  random time of day, posterised onto paper. You recognise the place, you go there, you dig.
 
-- **Redland Apples** — nothing. Utterly predictable.
-- **Sunfield Oranges** — arrive in pairs.
-- **Stone Pears** — pear crates sink to the floor of their column.
-- **Frost Berries** — berry baskets hang in mid air; nothing falls past them.
-- **Twin Dragonfruit** — connect diagonally, but never bulk-pack.
-- **Cider Lemons** — a bulk order leaves one lemon behind.
+The whole thing is a dependency-free software 3-D renderer written for this prototype: real
+six-faced boxes, painter-sorted, at a low internal resolution scaled to the screen shape.
 
-They combine. Frost + Stone is a vertical-control kit. Dragonfruit + Oranges sprawls.
+## Repository
 
-## Stamps
+| | |
+|---|---|
+| `index.html` | the game. one file. |
+| `docs/` | [direction](docs/direction.md), the original [brief](docs/brief.md), [concept](docs/concept.md), [philosophy](docs/philosophy.md) |
+| `old/` | earlier unrelated prototypes. read-only history — do not extend them (DEC-01). |
 
-How a package was made leaves a mark, and orders ask for marks. There is always more than one route to the same order.
+## Decisions and open questions
 
-- **FRESH** — packed as part of a chain
-- **BUMPER** — packed from five or more
-- **HANDLED** — the crane touched something that went in
-- **DEEP** — settled in the bottom two rows
+They live in Ishoo, not in markdown:
 
-Stamps are inherited. A crate made from two handled baskets is handled.
+```
+ishoo decision list             # DEC-01..07
+ishoo plan show core-questions  # Q-01..06, the six open questions
+ishoo status                    # what to do next
+```
 
-## Setups
+Two rules worth knowing before touching anything:
 
-A move that makes no chain but leaves one ready is a **setup**. The floor says LINED UP. Cash setups in on later turns and they pay you crane loads.
+- **DEC-07 — prototypes are phone-native web builds.** If it can't be opened on a phone and
+  played with thumbs, it isn't built. Touch, screen-shape-adaptive resolution and a phone
+  frame-rate budget are part of the prototype, not a later port.
+- **DEC-02 — three minutes to pick up, five hundred hours deep.** Every feature has to earn
+  a permanent gain inside three minutes *and* get more interesting the more you know the
+  world.
 
-## Gear
+## Status
 
-After every shift you take one item from the locker. Three slots, one item each, swap them any time from KIT & CROPS on the title screen.
+Prototype. The look is placeholder, digging is not yet deep enough to carry hundreds of
+hours, and steering under the hunt camera needs work — those are Q-01, Q-04 and Q-02.
 
----
-
-## Design notes
-
-- No move limit, no fail state, no energy. The floor guarantees at least one chain is always available and repairs itself if it ever runs dry.
-- Difficulty widens rather than steepens: later shifts add crops, gear and order types, not a higher bar.
-- Three layers that never touch: **crops** bend the floor's physics, **gear** bends the crane's vocabulary, **stamps** are read-only labels that change no rule at all.
-
-Progress saves to local storage. START OVER on the title screen wipes it.
+The creature's `kweh` is a testing placeholder and does not ship (DEC-04).
