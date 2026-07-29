@@ -1,1236 +1,453 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#171b1b">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0b0d14">
-<title>the little digger</title>
+<title>The Little Digger — render study</title>
 <style>
-  *{-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%;background:#0b0d14;overflow:hidden;overscroll-behavior:none;
-    -webkit-user-select:none;user-select:none;touch-action:none;
-    font-family:ui-monospace,"DejaVu Sans Mono",monospace;color:#fff}
-  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;touch-action:none}
-  canvas#screen{image-rendering:pixelated;image-rendering:crisp-edges;display:block;touch-action:none}
-  #hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
-    font-size:13px;letter-spacing:.5px;color:#cfd6e6;opacity:.75;text-align:center;
-    text-shadow:0 2px 0 #000;pointer-events:none}
-  @media (pointer:coarse){ #hint{display:none} }
-  #click{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-    background:#0b0d14;cursor:pointer;z-index:5;flex-direction:column;gap:14px}
-  #click b{font-size:28px;letter-spacing:3px}
-  #click span{font-size:13px;color:#8d97ad;letter-spacing:1px}
+  :root {
+    color-scheme: dark;
+    --ink: #f7f0dc;
+    --muted: #b8baa9;
+    --panel: rgba(18, 22, 22, .86);
+    --line: rgba(247, 240, 220, .19);
+    --accent: #f2c96d;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%; margin: 0; overflow: hidden;
+    background: #171b1b; color: var(--ink);
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    -webkit-user-select: none; user-select: none; touch-action: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #wash {
+    position: fixed; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(5,8,8,.12), transparent 28%),
+      radial-gradient(circle at 50% 48%, transparent 45%, rgba(6,8,8,.25) 100%);
+  }
+  header {
+    position: fixed;
+    top: max(10px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px; pointer-events: none;
+  }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 10px; border: 1px solid var(--line);
+    border-radius: 999px; background: rgba(15,18,18,.62);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+    text-shadow: 0 1px 2px #000;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+  #fps { color: var(--muted); }
+  #readout {
+    max-width: min(42vw, 360px); text-align: right;
+    text-shadow: 0 2px 4px rgba(0,0,0,.8);
+  }
+  #readout b { display: block; font: 700 clamp(15px, 2.8vw, 27px)/1.05 Georgia, serif; letter-spacing: -.02em; }
+  #readout span { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; letter-spacing: .06em; }
+  #controls {
+    position: fixed;
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px;
+    align-items: end;
+  }
+  #styles, #tools {
+    display: flex; gap: 7px; padding: 6px;
+    border: 1px solid var(--line); border-radius: 16px;
+    background: var(--panel);
+    box-shadow: 0 12px 40px rgba(0,0,0,.28);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  #styles { min-width: 0; }
+  button {
+    min-height: 48px; border: 1px solid transparent; border-radius: 11px;
+    padding: 7px 12px; background: transparent; color: var(--muted);
+    font: 700 11px/1.05 inherit; letter-spacing: .08em; text-transform: uppercase;
+    cursor: pointer; touch-action: manipulation;
+  }
+  #styles button { flex: 1 1 0; min-width: 0; }
+  button small { display: block; margin-top: 4px; font-size: 8px; font-weight: 400; letter-spacing: .06em; opacity: .68; }
+  button[aria-pressed="true"] {
+    color: #201d16; background: var(--accent);
+    border-color: rgba(255,255,255,.38);
+    box-shadow: 0 3px 14px rgba(0,0,0,.24);
+  }
+  #tools button { width: 54px; padding-inline: 5px; font-size: 17px; }
+  #help {
+    position: fixed; left: 50%; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 71px);
+    transform: translateX(-50%); width: max-content; max-width: 82vw;
+    padding: 6px 9px; border-radius: 8px; background: rgba(12,15,15,.55);
+    color: rgba(247,240,220,.72); font-size: 9px; letter-spacing: .06em;
+    pointer-events: none; transition: opacity .4s;
+  }
+  #error {
+    position: fixed; inset: 0; display: none; place-items: center;
+    padding: 30px; background: #171b1b; text-align: center; z-index: 20;
+  }
+  #error b { color: #f2c96d; }
+  @media (orientation: portrait) {
+    header { top: max(12px, env(safe-area-inset-top)); }
+    #controls { grid-template-columns: 1fr; }
+    #tools { position: fixed; right: max(10px, env(safe-area-inset-right)); top: calc(max(10px, env(safe-area-inset-top)) + 48px); }
+    #styles button { padding-inline: 5px; }
+    #help { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 75px); }
+    #readout { max-width: 52vw; }
+  }
+  @media (max-width: 500px) and (orientation: landscape) {
+    button { min-height: 44px; padding-block: 5px; }
+    #controls { right: auto; width: min(76vw, 520px); grid-template-columns: 1fr; }
+    #tools { position: fixed; right: max(10px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); }
+    #help { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 62px); }
+  }
 </style>
 </head>
 <body>
-<div id="wrap"><canvas id="screen"></canvas></div>
-<div id="hint"></div>
-<div id="click"><b>THE LITTLE DIGGER</b><span id="clickhint">click to play &nbsp;·&nbsp; wasd move &nbsp;·&nbsp; mouse look &nbsp;·&nbsp; space jump &nbsp;·&nbsp; e dig</span></div>
+<canvas id="scene" aria-label="Interactive comparison of three rendering styles"></canvas>
+<div id="wash"></div>
+<header>
+  <div class="eyebrow"><i class="dot"></i><span>render study 01</span><span id="fps"></span></div>
+  <div id="readout"><b id="styleName">Lit boxes</b><span id="styleNote">Directional light · hard planes · painted forms</span></div>
+</header>
+<div id="help">drag to orbit · pinch to zoom · compare the same crooked tree</div>
+<div id="controls">
+  <div id="styles" role="group" aria-label="Rendering style">
+    <button data-style="boxes" aria-pressed="true">A · Lit boxes<small>graphic</small></button>
+    <button data-style="voxel" aria-pressed="false">B · Voxel<small>granular</small></button>
+    <button data-style="clay" aria-pressed="false">C · Clay<small>sculpted</small></button>
+  </div>
+  <div id="tools" role="group" aria-label="View controls">
+    <button id="view" aria-label="Toggle map view" title="Toggle map view">⌁</button>
+    <button id="reset" aria-label="Reset camera" title="Reset camera">↺</button>
+  </div>
+</div>
+<div id="error"><p><b>This test needs WebGL.</b><br><br>Please try the normal phone browser with hardware acceleration enabled.</p></div>
 <script>
 "use strict";
-//////////////////////////////////////////////////////////////////////////////
-// low-res software 3d. no libraries, no assets, no network.
-//////////////////////////////////////////////////////////////////////////////
-let IW = 400, IH = 225;                       // internal resolution (recomputed in fit)
-const screenCv = document.getElementById('screen');
-const cv = document.createElement('canvas');
-const g  = cv.getContext('2d');
-const sctx = screenCv.getContext('2d');
-const COARSE = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
-// keep the pixel count roughly constant whatever shape the screen is, so a
-// phone in portrait gets a tall picture instead of a letterboxed sliver.
-const BUDGET = COARSE ? 62000 : 90000;
-const wrapEl = document.getElementById('wrap');
-let lastW = 0, lastH = 0;
-function viewport(){
-  const w = wrapEl.clientWidth  || document.documentElement.clientWidth  || innerWidth;
-  const h = wrapEl.clientHeight || document.documentElement.clientHeight || innerHeight;
-  return {w, h};
+
+const canvas = document.querySelector("#scene");
+const gl = canvas.getContext("webgl", {
+  alpha: false, antialias: true, depth: true, powerPreference: "high-performance"
+});
+if (!gl) document.querySelector("#error").style.display = "grid";
+
+const VS = `
+attribute vec3 aPosition;
+attribute vec3 aNormal;
+uniform mat4 uProjection, uView, uModel;
+uniform mat3 uNormalMatrix;
+varying vec3 vNormal;
+varying vec3 vWorld;
+void main() {
+  vec4 world = uModel * vec4(aPosition, 1.0);
+  vWorld = world.xyz;
+  vNormal = normalize(uNormalMatrix * aNormal);
+  gl_Position = uProjection * uView * world;
+}`;
+const FS = `
+precision mediump float;
+varying vec3 vNormal;
+varying vec3 vWorld;
+uniform vec3 uColor, uSky, uLightDir;
+uniform float uAmbient, uPosterize, uClay, uFog;
+void main() {
+  vec3 n = normalize(vNormal);
+  float diffuse = max(dot(n, normalize(uLightDir)), 0.0);
+  float rim = pow(1.0 - max(n.y, 0.0), 3.0) * uClay;
+  float light = uAmbient + diffuse * (1.0 - uAmbient) + rim * 0.10;
+  if (uPosterize > 1.0) light = floor(light * uPosterize + .25) / uPosterize;
+  vec3 col = uColor * light;
+  float fog = smoothstep(18.0, 38.0, length(vWorld.xz)) * uFog;
+  col = mix(col, uSky, fog);
+  col = pow(col, vec3(.94));
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+function shader(type, source) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, source); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
 }
-function fit(){
-  const vp = viewport(), w = vp.w, h = vp.h, a = w/h;
-  lastW = w; lastH = h;
-  IW = clamp(Math.round(Math.sqrt(BUDGET*a)), 200, 560);
-  IH = clamp(Math.round(Math.sqrt(BUDGET/a)), 160, 560);
-  cv.width = IW; cv.height = IH;
-  screenCv.width = IW; screenCv.height = IH;
-  let sw = w, sh = Math.round(w*IH/IW);
-  if(sh > h){ sh = h; sw = Math.round(h*IW/IH); }
-  if(!COARSE){                                  // crisp integer scaling on desktop
-    const k = Math.max(1, Math.min(Math.floor(w/IW), Math.floor(h/IH)));
-    sw = IW*k; sh = IH*k;
+const program = gl.createProgram();
+gl.attachShader(program, shader(gl.VERTEX_SHADER, VS));
+gl.attachShader(program, shader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(program);
+if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+gl.useProgram(program);
+
+const loc = {};
+["aPosition","aNormal","uProjection","uView","uModel","uNormalMatrix","uColor","uSky",
+ "uLightDir","uAmbient","uPosterize","uClay","uFog"].forEach(n => loc[n] = gl.getAttribLocation(program,n) >= 0
+  ? gl.getAttribLocation(program,n) : gl.getUniformLocation(program,n));
+
+const M4 = {
+  identity: () => [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1],
+  multiply(a,b) {
+    const o = new Array(16).fill(0);
+    for(let c=0;c<4;c++) for(let r=0;r<4;r++)
+      for(let k=0;k<4;k++) o[c*4+r] += a[k*4+r]*b[c*4+k];
+    return o;
+  },
+  perspective(fov, aspect, near, far) {
+    const f=1/Math.tan(fov/2), nf=1/(near-far);
+    return [f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0];
+  },
+  lookAt(eye, target, up=[0,1,0]) {
+    let z=norm(sub(eye,target)), x=norm(cross(up,z)), y=cross(z,x);
+    return [x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0,
+      -dot(x,eye),-dot(y,eye),-dot(z,eye),1];
+  },
+  model(p,s,r=[0,0,0]) {
+    const [sx,cx]=[Math.sin(r[0]),Math.cos(r[0])];
+    const [sy,cy]=[Math.sin(r[1]),Math.cos(r[1])];
+    const [sz,cz]=[Math.sin(r[2]),Math.cos(r[2])];
+    const rx=[1,0,0,0, 0,cx,sx,0, 0,-sx,cx,0, 0,0,0,1];
+    const ry=[cy,0,-sy,0, 0,1,0,0, sy,0,cy,0, 0,0,0,1];
+    const rz=[cz,sz,0,0, -sz,cz,0,0, 0,0,1,0, 0,0,0,1];
+    const sm=[s[0],0,0,0, 0,s[1],0,0, 0,0,s[2],0, 0,0,0,1];
+    const tm=[1,0,0,0, 0,1,0,0, 0,0,1,0, p[0],p[1],p[2],1];
+    return M4.multiply(tm,M4.multiply(rz,M4.multiply(ry,M4.multiply(rx,sm))));
   }
-  screenCv.style.width = sw+'px'; screenCv.style.height = sh+'px';
-  sctx.imageSmoothingEnabled = false; g.imageSmoothingEnabled = false;
-}
-addEventListener('resize', ()=>setTimeout(fit,50));
-addEventListener('orientationchange', ()=>setTimeout(fit,200));
-
-//// math ////////////////////////////////////////////////////////////////////
-const clamp=(v,a,b)=>v<a?a:v>b?b:v;
-const lerp=(a,b,t)=>a+(b-a)*t;
-function hash2(x,y){ let h=Math.sin(x*127.1+y*311.7)*43758.5453; return h-Math.floor(h); }
-function vnoise(x,y){
-  const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi;
-  const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
-  return lerp(lerp(hash2(xi,yi),hash2(xi+1,yi),u), lerp(hash2(xi,yi+1),hash2(xi+1,yi+1),u), v);
-}
-// gentle rolling ground. flat-ish near the middle so running feels clean.
-function groundH(x,z){
-  let h = Math.sin(x*0.035)*1.6 + Math.cos(z*0.041)*1.5 + vnoise(x*0.03,z*0.03)*4.0;
-  h += vnoise(x*0.11,z*0.11)*0.7;
-  const d = Math.hypot(x,z);
-  h *= clamp((d-12)/26, 0.12, 1);
-  return h;
-}
-function groundN(x,z){
-  const e=0.9;
-  const hx = groundH(x+e,z)-groundH(x-e,z);
-  const hz = groundH(x,z+e)-groundH(x,z-e);
-  return [-hx, 2*e, -hz];
-}
-
-//// colour //////////////////////////////////////////////////////////////////
-function shade(c, f){
-  const r=clamp(Math.round(c[0]*f),0,255), gg=clamp(Math.round(c[1]*f),0,255), b=clamp(Math.round(c[2]*f),0,255);
-  return 'rgb('+r+','+gg+','+b+')';
-}
-function mix(a,b,t){ return [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)]; }
-fit();
-
-//// camera / projection /////////////////////////////////////////////////////
-const cam = { x:0, y:6, z:-2.2, yaw:0, pitch:-0.28, fov:1.05, shake:0 };
-let ctx = g, VW = IW, VH = IH, F = 1, CX = 0, CY = 0;
-let cs_y=1, sn_y=0, cs_p=1, sn_p=0, C=cam;
-
-function beginView(target, w, h, camera){
-  ctx = target; VW = w; VH = h; C = camera;
-  // vertical fov normally; on a tall screen, widen until the horizontal fov is sane
-  F = Math.min( (h*0.5)/Math.tan(camera.fov*0.5), (w*0.5)/Math.tan(1.10*0.5) );
-  CX = w*0.5; CY = h*0.5;
-  cs_y = Math.cos(camera.yaw); sn_y = Math.sin(camera.yaw);
-  cs_p = Math.cos(camera.pitch); sn_p = Math.sin(camera.pitch);
-}
-function toCam(x,y,z){
-  const dx=x-C.x, dy=y-C.y, dz=z-C.z;
-  const ex =  dx*cs_y - dz*sn_y;
-  const ez =  dx*sn_y + dz*cs_y;
-  const ey =  dy*cs_p - ez*sn_p;
-  const fz =  dy*sn_p + ez*cs_p;
-  return [ex, ey, fz];
-}
-const NEAR = 0.35;
-function clipNear(pts){
-  const out=[];
-  for(let i=0;i<pts.length;i++){
-    const a=pts[i], b=pts[(i+1)%pts.length];
-    const ain=a[2]>=NEAR, bin=b[2]>=NEAR;
-    if(ain) out.push(a);
-    if(ain!==bin){
-      const t=(NEAR-a[2])/(b[2]-a[2]);
-      out.push([a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, NEAR]);
-    }
-  }
-  return out;
-}
-function fillPoly(camPts, style, seal){
-  const p = clipNear(camPts);
-  if(p.length<3) return;
-  ctx.fillStyle = style;
-  if(seal){ ctx.strokeStyle = style; ctx.lineWidth = 1; }
-  ctx.beginPath();
-  for(let i=0;i<p.length;i++){
-    const s = F/p[i][2];
-    const sx = CX + p[i][0]*s, sy = CY - p[i][1]*s;
-    if(i===0) ctx.moveTo(sx,sy); else ctx.lineTo(sx,sy);
-  }
-  ctx.closePath(); ctx.fill();
-  if(seal) ctx.stroke();
-}
-
-//// draw queue (painter's algorithm) ////////////////////////////////////////
-let queue = [];
-function push(depth, fn){ queue.push({d:depth, f:fn}); }
-function flush(){
-  queue.sort((a,b)=>b.d-a.d);
-  for(let i=0;i<queue.length;i++) queue[i].f();
-  queue.length = 0;
-}
-
-//// boxes ///////////////////////////////////////////////////////////////////
-const FACE = [
-  [[0,1,2,3],[0,1,0],1.00],  // top
-  [[4,5,6,7],[0,-1,0],0.42], // bottom
-  [[3,2,6,7],[0,0,1],0.74],  // +z
-  [[1,0,4,5],[0,0,-1],0.60], // -z
-  [[2,1,5,6],[1,0,0],0.86],  // +x
-  [[0,3,7,4],[-1,0,0],0.66], // -x
-];
-function box(x,y,z,w,h,d,col,yaw,tint){
-  const cy=Math.cos(yaw||0), sy=Math.sin(yaw||0);
-  const hw=w/2, hd=d/2;
-  const local=[[-hw,h,-hd],[hw,h,-hd],[hw,h,hd],[-hw,h,hd],
-               [-hw,0,-hd],[hw,0,-hd],[hw,0,hd],[-hw,0,hd]];
-  const v=[];
-  for(const p of local){
-    const px = p[0]*cy - p[2]*sy + x;
-    const pz = p[0]*sy + p[2]*cy + z;
-    v.push(toCam(px, p[1]+y, pz));
-  }
-  let dep=0; for(const p of v) dep+=p[2]; dep/=8;
-  if(dep < -4) return;
-  push(dep, ()=>{
-    const faces=[];
-    for(const f of FACE){
-      const q=f[0].map(i=>v[i]);
-      let fd=0; for(const p of q) fd+=p[2]; fd/=4;
-      faces.push({q, fd, s:f[2]});
-    }
-    faces.sort((a,b)=>b.fd-a.fd);
-    for(const f of faces){
-      // backface cull in screen space
-      const p=clipNear(f.q); if(p.length<3) continue;
-      const s0=F/p[0][2], s1=F/p[1][2], s2=F/p[2][2];
-      const ax=p[0][0]*s0, ay=-p[0][1]*s0, bx=p[1][0]*s1, by=-p[1][1]*s1, cxx=p[2][0]*s2, cyy=-p[2][1]*s2;
-      if((bx-ax)*(cyy-ay)-(by-ay)*(cxx-ax) <= 0) continue;
-      let c = col;
-      if(tint) c = mix(c, tint[0], tint[1]);
-      const fog = clamp((f.fd-30)/70, 0, 0.8);
-      fillPoly(f.q, shade(mix(c, SKY_FAR, fog), f.s*LIGHT));
-    }
-  });
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// world
-//////////////////////////////////////////////////////////////////////////////
-let SKY_TOP=[104,178,232], SKY_LOW=[186,222,242], SKY_FAR=[176,208,228], LIGHT=1;
-const GRASS_A=[104,168,74], GRASS_B=[132,196,86], GRASS_C=[78,142,66], SAND=[214,196,138];
-
-const landmarks = [];
-function L(name,x,z,build,r,h){ landmarks.push({name,x,z,build,r:r||6,h:h||8}); }
-
-// crooked tree
-function crookedTree(x,z,seed,scale){
-  const s=scale||1, y=groundH(x,z);
-  const lean=(hash2(seed,7)-0.5)*0.9;
-  const bark=[104,72,50], leafA=[62,150,74], leafB=[92,186,88];
-  for(let i=0;i<5;i++){
-    const t=i/5;
-    box(x+lean*i*0.55*s, y+i*1.3*s, z+lean*i*0.25*s, 1.1*s*(1-t*0.4), 1.4*s, 1.1*s*(1-t*0.4), bark, lean*0.4);
-  }
-  const tx=x+lean*2.6*s, tz=z+lean*1.2*s, ty=y+6.3*s;
-  box(tx, ty, tz, 5.4*s, 2.4*s, 5.4*s, leafA, 0.2);
-  box(tx-1.2*s, ty+1.8*s, tz+0.6*s, 4.0*s, 2.0*s, 4.0*s, leafB, -0.3);
-  box(tx+1.5*s, ty+1.0*s, tz-1.1*s, 2.8*s, 1.8*s, 2.8*s, leafA, 0.6);
-}
-function pineTree(x,z,scale){
-  const s=scale||1, y=groundH(x,z);
-  box(x,y,z,0.9*s,2.2*s,0.9*s,[100,70,48],0);
-  for(let i=0;i<4;i++) box(x, y+1.6*s+i*1.5*s, z, (4.4-i*0.9)*s, 1.7*s, (4.4-i*0.9)*s, i%2?[70,160,84]:[54,134,72], i*0.4);
-}
-function boulder(x,z,s,seed){
-  const y=groundH(x,z), c=[150,150,162];
-  box(x,y,z,3.4*s,2.0*s,3.0*s,c,hash2(seed,3)*2);
-  box(x+0.6*s,y+1.7*s,z-0.3*s,2.2*s,1.4*s,2.0*s,[168,168,178],hash2(seed,9)*2);
-}
-
-L('the crooked tree', 34, -42, ()=>{
-  crookedTree(34,-42,3,1.5);
-  pineTree(28,-48,0.8); pineTree(41,-37,0.7);
-  boulder(30,-36,0.7,5);
-}, 8, 10);
-
-L('the stone arch', -48, 22, ()=>{
-  const x=-48,z=22,y=groundH(x,z), c=[196,186,168];
-  box(x-4,y,z,2.6,7.5,2.6,c,0.1);
-  box(x+4,y,z,2.6,7.0,2.6,c,-0.1);
-  box(x,y+7.0,z,11,2.0,3.0,[206,198,180],0);
-  box(x,y+9.0,z,4,1.2,2.2,[176,168,152],0.2);
-  boulder(x-8,z+5,0.8,11); boulder(x+7,z-6,0.6,12);
-}, 9, 11);
-
-L('the old tower', 12, 58, ()=>{
-  const x=12,z=58,y=groundH(x,z);
-  for(let i=0;i<7;i++) box(x,y+i*2.4,z, 6.2-i*0.35, 2.5, 6.2-i*0.35, i%2?[188,178,160]:[172,162,146], i*0.06);
-  box(x,y+17,z,7.2,1.2,7.2,[150,142,128],0);
-  box(x,y+18.2,z,5.2,3.2,5.2,[196,92,84],0.4);
-  box(x+3.2,y+2.2,z+3.0,1.2,1.6,1.2,[92,70,54],0);
-}, 10, 21);
-
-L('the red gate', -18, -56, ()=>{
-  const x=-18,z=-56,y=groundH(x,z), c=[204,84,72];
-  box(x-3.4,y,z,1.4,6.4,1.4,c,0); box(x+3.4,y,z,1.4,6.0,1.4,c,0);
-  box(x,y+6.2,z,9.6,1.1,1.8,[224,104,88],0);
-  box(x,y+5.0,z,7.4,0.7,1.2,[224,104,88],0);
-  pineTree(x-9,z+4,1.1); pineTree(x+10,z-3,0.9);
-}, 8, 8);
-
-L('the pond', 46, 30, ()=>{
-  const x=46,z=30,y=groundH(x,z);
-  // water: flat disc of quads
-  for(let a=0;a<12;a++){
-    const a0=a/12*Math.PI*2, a1=(a+1)/12*Math.PI*2, R=9;
-    const p=[toCam(x,y-0.4,z),
-             toCam(x+Math.cos(a0)*R, y-0.4, z+Math.sin(a0)*R),
-             toCam(x+Math.cos(a1)*R, y-0.4, z+Math.sin(a1)*R)];
-    const d=(p[0][2]+p[1][2]+p[2][2])/3;
-    push(d, ()=>{
-      const t=Math.sin(T*1.4+a)*0.06+0.5;
-      fillPoly(p, shade(mix([64,146,196],[110,196,224],t), LIGHT));
-    });
-  }
-  crookedTree(x-10,z-4,21,1.0); pineTree(x+9,z+6,1.0);
-  boulder(x+2,z-10,0.8,31);
-}, 11, 6);
-
-L('the lonely rock', -34, -14, ()=>{
-  boulder(-34,-14,2.2,41);
-  boulder(-30,-20,0.6,42); boulder(-39,-10,0.5,43);
-}, 8, 7);
-
-// scattered scenery
-const scenery = [];
-(function seedScenery(){
-  for(let i=0;i<220;i++){
-    const a=hash2(i,1)*Math.PI*2, r=8+hash2(i,2)*70;
-    const x=Math.cos(a)*r, z=Math.sin(a)*r;
-    let near=false;
-    for(const l of landmarks) if(Math.hypot(x-l.x,z-l.z)<l.r+3) near=true;
-    if(near) continue;
-    const k=hash2(i,4);
-    scenery.push({x,z, kind: k<0.62?'tuft' : k<0.80?'flower' : k<0.92?'rock':'tree', s:0.5+hash2(i,5)*0.9, seed:i});
-  }
-})();
-function drawScenery(){
-  for(const o of scenery){
-    const dx=o.x-C.x, dz=o.z-C.z; const dd=dx*dx+dz*dz;
-    const far = 90*quality;
-    if(dd>far*far) continue;
-    const y=groundH(o.x,o.z);
-    if(o.kind==='tuft'){
-      if(dd>52*52*quality*quality) continue;
-      box(o.x,y,o.z,0.5*o.s,0.9*o.s,0.5*o.s,[86,158,68],o.seed);
-      box(o.x+0.3*o.s,y,o.z+0.2*o.s,0.35*o.s,0.6*o.s,0.35*o.s,[112,182,80],o.seed*2);
-    } else if(o.kind==='flower'){
-      if(dd>46*46*quality*quality) continue;
-      box(o.x,y,o.z,0.22,0.7*o.s,0.22,[96,164,78],0);
-      const c = hash2(o.seed,8)<0.5?[240,206,96]:[236,124,180];
-      box(o.x,y+0.7*o.s,o.z,0.5*o.s,0.4*o.s,0.5*o.s,c,o.seed);
-    } else if(o.kind==='rock'){
-      boulder(o.x,o.z,0.35*o.s,o.seed);
-    } else {
-      if(hash2(o.seed,6)<0.4) crookedTree(o.x,o.z,o.seed,0.75*o.s);
-      else pineTree(o.x,o.z,0.9*o.s);
-    }
-  }
-}
-
-//// ground //////////////////////////////////////////////////////////////////
-const TILE = 3.0;
-let VIEW = 26;                 // tiles out from the camera, trimmed if the phone struggles
-let quality = 1, emaDt = 1/60;
-function drawGround(){
-  const bx = Math.floor(C.x/TILE), bz = Math.floor(C.z/TILE);
-  const R = VIEW*TILE;
-  const fwdx = sn_y, fwdz = cs_y;  // camera forward on ground
-  for(let i=-VIEW;i<=VIEW;i++){
-    for(let j=-VIEW;j<=VIEW;j++){
-      const tx=(bx+i)*TILE, tz=(bz+j)*TILE;
-      const mx=tx+TILE*0.5-C.x, mz=tz+TILE*0.5-C.z;
-      const dist=Math.hypot(mx,mz);
-      if(dist>R) continue;
-      if(dist>4 && (mx*fwdx+mz*fwdz)/dist < 0.15) continue; // cheap frustum cull
-      const p=[toCam(tx,groundH(tx,tz),tz),
-               toCam(tx+TILE,groundH(tx+TILE,tz),tz),
-               toCam(tx+TILE,groundH(tx+TILE,tz+TILE),tz+TILE),
-               toCam(tx,groundH(tx,tz+TILE),tz+TILE)];
-      if(p[0][2]<NEAR && p[1][2]<NEAR && p[2][2]<NEAR && p[3][2]<NEAR) continue;
-      const d=(p[0][2]+p[1][2]+p[2][2]+p[3][2])*0.25;
-      const n=vnoise(tx*0.09,tz*0.09);
-      let c = n<0.38?GRASS_C : n<0.68?GRASS_A : GRASS_B;
-      if(vnoise(tx*0.02+40,tz*0.02)>0.72) c = mix(c,SAND,0.55);
-      const nn=groundN(tx+TILE/2,tz+TILE/2);
-      const nl=Math.hypot(nn[0],nn[1],nn[2]);
-      const lit = 0.72 + 0.5*clamp((nn[0]*0.45+nn[1]*0.82+nn[2]*0.3)/nl,0,1);
-      const fog = clamp((d-30)/70,0,0.85);
-      push(d, ()=> fillPoly(p, shade(mix(c,SKY_FAR,fog), lit*LIGHT), true));
-    }
-  }
-}
-
-//// sky /////////////////////////////////////////////////////////////////////
-function drawSky(w,h){
-  const grd = ctx.createLinearGradient(0,0,0,h);
-  grd.addColorStop(0, shade(SKY_TOP,LIGHT));
-  grd.addColorStop(1, shade(SKY_LOW,LIGHT));
-  ctx.fillStyle=grd; ctx.fillRect(0,0,w,h);
-  // clouds: cheap parallax bands
-  for(let i=0;i<7;i++){
-    const seed=i*13.7;
-    const yy = h*0.10 + i*7;
-    const w0 = 40+hash2(seed,1)*70;
-    let xx = ((hash2(seed,2)*1000 + T*(2+i*0.4) - C.yaw*(F*0.9)) % (w+260)) - 130;
-    ctx.fillStyle = 'rgba(255,255,255,'+(0.30+hash2(seed,3)*0.35)+')';
-    ctx.fillRect(Math.round(xx), Math.round(yy), Math.round(w0), 5);
-    ctx.fillRect(Math.round(xx+12), Math.round(yy-4), Math.round(w0*0.6), 5);
-  }
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// the creature
-//////////////////////////////////////////////////////////////////////////////
-const P = {
-  x:0, z:6, y:0, vx:0, vz:0, vy:0, yaw:0, onGround:true,
-  speed:0, lean:0, squash:1, bob:0, digT:0, digTotal:0, pecks:0, peckA:0, land:0, tumble:0,
-  earL:0, earR:0, excite:0, headTurn:0, wag:0, spin:0
 };
-function creatureDraw(){
-  const y=P.y;
-  const sq = P.squash, st = 1/sq;
-  const bodyCol=[248,226,142], bellyCol=[255,244,196], darkCol=[214,178,96];
-  const yaw=P.yaw+P.spin, cy=Math.cos(yaw), sy=Math.sin(yaw);
-  const dig = P.digT>0;
-  // PECK. the whole body drops into it and snaps back.
-  const pk = P.peckA;
-  const crouch = dig ? 0.16 + pk*0.42 : 0;
-  const bodyY = y + 0.62*sq - crouch + Math.sin(P.bob)*0.06*Math.min(1,P.speed/6);
-  // legs
-  for(let i=0;i<4;i++){
-    const fx = (i<2? 0.34 : -0.36), fz = (i%2? 0.30 : -0.30);
-    const ph = P.bob + (i<2?0:Math.PI) + (i%2?Math.PI:0);
-    const swing = Math.min(1,P.speed/7) * Math.sin(ph)*0.30;
-    const px = P.x + (fx*cy - fz*sy), pz = P.z + (fx*sy + fz*cy);
-    box(px + swing*cy*0.6, y, pz + swing*sy*0.6, 0.24,0.62*sq,0.24, darkCol, yaw);
+const sub=(a,b)=>a.map((v,i)=>v-b[i]);
+const dot=(a,b)=>a.reduce((n,v,i)=>n+v*b[i],0);
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const norm=a=>{const l=Math.hypot(...a)||1;return a.map(v=>v/l)};
+
+function mesh(positions,normals,indices) {
+  const m={ count:indices.length };
+  m.p=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,m.p); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(positions),gl.STATIC_DRAW);
+  m.n=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,m.n); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(normals),gl.STATIC_DRAW);
+  m.i=gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.i); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.STATIC_DRAW);
+  return m;
+}
+function cubeMesh() {
+  const p=[],n=[],ix=[]; let q=0;
+  const faces=[
+    [[-1,-1, 1],[ 1,-1, 1],[ 1, 1, 1],[-1, 1, 1],[0,0,1]],
+    [[ 1,-1,-1],[-1,-1,-1],[-1, 1,-1],[ 1, 1,-1],[0,0,-1]],
+    [[-1, 1, 1],[ 1, 1, 1],[ 1, 1,-1],[-1, 1,-1],[0,1,0]],
+    [[-1,-1,-1],[ 1,-1,-1],[ 1,-1, 1],[-1,-1, 1],[0,-1,0]],
+    [[ 1,-1, 1],[ 1,-1,-1],[ 1, 1,-1],[ 1, 1, 1],[1,0,0]],
+    [[-1,-1,-1],[-1,-1, 1],[-1, 1, 1],[-1, 1,-1],[-1,0,0]]
+  ];
+  faces.forEach(f=>{f.slice(0,4).forEach(v=>{p.push(...v);n.push(...f[4])});ix.push(q,q+1,q+2,q,q+2,q+3);q+=4});
+  return mesh(p,n,ix);
+}
+function sphereMesh(rings=8,segments=12) {
+  const p=[],n=[],ix=[];
+  for(let y=0;y<=rings;y++) for(let x=0;x<=segments;x++) {
+    const v=y/rings*Math.PI, u=x/segments*Math.PI*2;
+    const a=[Math.sin(v)*Math.cos(u),Math.cos(v),Math.sin(v)*Math.sin(u)];
+    p.push(...a); n.push(...a);
   }
-  // tail
-  const tw = Math.sin(T*8)*0.4*(0.4+P.excite);
-  box(P.x - 0.62*cy, bodyY+0.12, P.z - 0.62*sy, 0.22, 0.5, 0.22, darkCol, yaw+tw);
-  // body
-  box(P.x, bodyY, P.z, 1.12*st, 0.66*sq, 0.78*st, bodyCol, yaw);
-  box(P.x, bodyY+0.02, P.z, 0.90*st, 0.30*sq, 0.60*st, bellyCol, yaw);
-  // head
-  const ht = P.headTurn;
-  const reach = 0.62 + (dig? pk*0.34 : 0);
-  const hx = P.x + reach*Math.cos(yaw+ht), hz = P.z + reach*Math.sin(yaw+ht);
-  const hy = bodyY + 0.52*sq - (dig? pk*0.80 : 0);
-  box(hx, hy, hz, 0.66*st, 0.58*sq, 0.70*st, bodyCol, yaw+ht);
-  // snout
-  box(hx+0.42*Math.cos(yaw+ht), hy+0.10, hz+0.42*Math.sin(yaw+ht), 0.34,0.26,0.34, bellyCol, yaw+ht);
-  // eyes
-  for(const s of [-1,1]){
-    const ex = hx + 0.30*Math.cos(yaw+ht) - s*0.20*Math.sin(yaw+ht);
-    const ez = hz + 0.30*Math.sin(yaw+ht) + s*0.20*Math.cos(yaw+ht);
-    box(ex, hy+0.34, ez, 0.13,0.13,0.13, [34,30,40], yaw+ht);
+  for(let y=0;y<rings;y++) for(let x=0;x<segments;x++) {
+    const a=y*(segments+1)+x,b=a+segments+1; ix.push(a,b,a+1,b,b+1,a+1);
   }
-  // ears — this is the whole treasure sense, so give it room
-  for(const s of [-1,1]){
-    const droop = s<0? P.earL : P.earR;
-    const ex = hx - 0.06*Math.cos(yaw+ht) - s*0.24*Math.sin(yaw+ht);
-    const ez = hz - 0.06*Math.sin(yaw+ht) + s*0.24*Math.cos(yaw+ht);
-    const up = 0.30 + droop*0.55;
-    box(ex, hy+0.50, ez, 0.20, up, 0.24, darkCol, yaw+ht + s*droop*0.35);
-    box(ex, hy+0.50+up, ez, 0.16, 0.16, 0.20, [255,190,180], yaw+ht);
+  return mesh(p,n,ix);
+}
+function terrainMesh() {
+  const cols=28, rows=22, p=[],n=[],ix=[];
+  const h=(x,z)=>Math.sin(x*.31)*.25+Math.cos(z*.27)*.18+Math.sin((x+z)*.19)*.12;
+  for(let z=0;z<=rows;z++) for(let x=0;x<=cols;x++) {
+    const px=(x/cols-.5)*28, pz=(z/rows-.5)*22, y=h(px,pz);
+    const dx=h(px-.1,pz)-h(px+.1,pz), dz=h(px,pz-.1)-h(px,pz+.1);
+    p.push(px,y,pz); n.push(...norm([dx,.2,dz]));
   }
+  for(let z=0;z<rows;z++) for(let x=0;x<cols;x++) {
+    const a=z*(cols+1)+x,b=a+cols+1; ix.push(a,b,a+1,b,b+1,a+1);
+  }
+  return mesh(p,n,ix);
+}
+const meshes={cube:cubeMesh(), sphere:sphereMesh(), terrain:terrainMesh()};
+const rgb=h=>[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255];
+
+let style="boxes", mapView=false, yaw=.58, pitch=.34, distance=23, targetYaw=yaw, targetPitch=pitch, targetDistance=distance;
+let dragging=false, pointerX=0, pointerY=0, pinch=0, helpTimer=0;
+const styles={
+  boxes:{name:"Lit boxes",note:"Directional light · hard planes · painted forms",accent:"#f2c96d",sky:"#a7cfdb",ambient:.40,steps:4,clay:0,fog:.62},
+  voxel:{name:"True voxel",note:"Depth buffer · small units · readable terrain",accent:"#9edb87",sky:"#91b9cf",ambient:.34,steps:5,clay:0,fog:.70},
+  clay:{name:"Sculpted clay",note:"Soft volume · warm light · handmade surface",accent:"#ef9e77",sky:"#d8bea8",ambient:.48,steps:0,clay:1,fog:.52}
+};
+
+function bind(m) {
+  gl.bindBuffer(gl.ARRAY_BUFFER,m.p); gl.enableVertexAttribArray(loc.aPosition); gl.vertexAttribPointer(loc.aPosition,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,m.n); gl.enableVertexAttribArray(loc.aNormal); gl.vertexAttribPointer(loc.aNormal,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.i);
+}
+function normalMatrix(model) {
+  const a=model, x=[a[0],a[1],a[2]], y=[a[4],a[5],a[6]], z=[a[8],a[9],a[10]];
+  return [...norm(x),...norm(y),...norm(z)];
+}
+function draw(kind,p,s,c,r=[0,0,0]) {
+  const m=meshes[kind], model=M4.model(p,s,r); bind(m);
+  gl.uniformMatrix4fv(loc.uModel,false,new Float32Array(model));
+  gl.uniformMatrix3fv(loc.uNormalMatrix,false,new Float32Array(normalMatrix(model)));
+  gl.uniform3fv(loc.uColor,rgb(c));
+  gl.drawElements(gl.TRIANGLES,m.count,gl.UNSIGNED_SHORT,0);
 }
 
-//////////////////////////////////////////////////////////////////////////////
-// holes, treasure, particles
-//////////////////////////////////////////////////////////////////////////////
-const holes=[], parts=[];
-function drawHoles(){
-  for(const h of holes){
-    if(Math.hypot(h.x-C.x,h.z-C.z)>58) continue;
-    const y=groundH(h.x,h.z)+0.03;
-    const p=[]; const n=8;
-    for(let i=0;i<n;i++){ const a=i/n*Math.PI*2;
-      p.push(toCam(h.x+Math.cos(a)*h.r, y, h.z+Math.sin(a)*h.r)); }
-    let d=0; for(const q of p) d+=q[2]; d/=n;
-    if(d<0) continue;
-    push(d-0.02, ()=> fillPoly(p, shade([74,52,38], LIGHT)));
-    // rim of thrown dirt
-    for(let i=0;i<5;i++){
-      const a=i/5*Math.PI*2+h.x;
-      box(h.x+Math.cos(a)*h.r*1.15, y-0.05, h.z+Math.sin(a)*h.r*1.15, 0.3,0.16,0.3,[112,84,58],a);
+const hash=(x,z)=>{const v=Math.sin(x*127.1+z*311.7)*43758.5453;return v-Math.floor(v)};
+function groundBoxes(voxel) {
+  // Keep this comfortably under a thousand draw calls on phone hardware.
+  // Voxel remains granular; lit boxes spends its budget on larger graphic tiles.
+  const size=voxel?1.0:1.55, nx=voxel?14:9, nz=voxel?10:7;
+  for(let z=-nz;z<=nz;z++) for(let x=-nx;x<=nx;x++) {
+    const px=x*size, pz=z*size;
+    if(Math.abs(px)>13.8||Math.abs(pz)>10.8) continue;
+    const h=Math.sin(px*.31)*.25+Math.cos(pz*.27)*.18+Math.sin((px+pz)*.19)*.12;
+    const q=hash(x,z);
+    const color=q>.78?"#8aae68":q>.36?"#74995d":"#63864f";
+    draw("cube",[px,h-.32,pz],[size*.505,.36+Math.max(0,h),size*.505],color);
+  }
+}
+function clayGround() { draw("terrain",[0,-.02,0],[1,1,1],"#8f9f70"); }
+function digPatch(kind) {
+  if(kind==="voxel") {
+    for(let z=-2;z<=2;z++) for(let x=-3;x<=3;x++) if(x*x+z*z<9) {
+      const edge=x*x+z*z>5, c=edge?"#8c6c4d":"#4f3d33";
+      draw("cube",[5+x*.48,.16,2.4+z*.48],[.25,edge?.18:.08,.25],c,[0,(x+z)*.1,0]);
     }
-  }
-}
-function spawnDirt(x,y,z,n,col){
-  for(let i=0;i<n;i++){
-    const a=Math.random()*Math.PI*2, sp=1.5+Math.random()*4;
-    parts.push({x,y,z, vx:Math.cos(a)*sp, vy:2.5+Math.random()*4.5, vz:Math.sin(a)*sp,
-      life:0.5+Math.random()*0.6, c:col||[124,90,60], s:0.10+Math.random()*0.16});
-  }
-}
-function updateParts(dt){
-  for(let i=parts.length-1;i>=0;i--){
-    const p=parts[i];
-    p.vy-=22*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt; p.life-=dt;
-    const gh=groundH(p.x,p.z);
-    if(p.y<gh){ p.y=gh; p.vy*=-0.3; p.vx*=0.6; p.vz*=0.6; }
-    if(p.life<=0) parts.splice(i,1);
-  }
-}
-function drawParts(){ for(const p of parts) box(p.x,p.y,p.z,p.s,p.s,p.s,p.c,0); }
-
-//////////////////////////////////////////////////////////////////////////////
-// audio — small synth, no files
-//////////////////////////////////////////////////////////////////////////////
-let A=null, master=null;
-function audioInit(){
-  if(A) return;
-  A = new (window.AudioContext||window.webkitAudioContext)();
-  master = A.createGain(); master.gain.value=0.32; master.connect(A.destination);
-}
-function tone(freq, dur, type, vol, at, slideTo){
-  if(!A) return;
-  const t=A.currentTime+(at||0);
-  const o=A.createOscillator(), gg=A.createGain();
-  o.type=type||'square'; o.frequency.setValueAtTime(freq,t);
-  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t+dur);
-  gg.gain.setValueAtTime(0.0001,t);
-  gg.gain.exponentialRampToValueAtTime(vol||0.2, t+0.012);
-  gg.gain.exponentialRampToValueAtTime(0.0001, t+dur);
-  o.connect(gg); gg.connect(master); o.start(t); o.stop(t+dur+0.05);
-}
-function noise(dur, vol, at){
-  if(!A) return;
-  const t=A.currentTime+(at||0), n=Math.floor(A.sampleRate*dur);
-  const buf=A.createBuffer(1,n,A.sampleRate), d=buf.getChannelData(0);
-  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
-  const s=A.createBufferSource(); s.buffer=buf;
-  const gg=A.createGain(); gg.gain.value=vol||0.2;
-  const f=A.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1100;
-  s.connect(f); f.connect(gg); gg.connect(master); s.start(t);
-}
-function chirp(stage){
-  const base=[300,420,560,760][stage];
-  tone(base, 0.08, 'square', 0.10, 0, base*1.35);
-  if(stage>=2) tone(base*1.5, 0.06, 'square', 0.07, 0.07);
-}
-// the voice. this is how the game talks to you.
-//  0 kweh.   flat, bored, nothing out here
-//  1 kweh?   something, somewhere
-//  2 kweh!   warmer
-//  3 KWEH!!  hot
-//  4 KWEH!!! standing on it
-function kweh(grade){
-  if(!A) return;
-  const base = [172, 210, 268, 340, 430][grade];
-  const v    = [0.12, 0.15, 0.19, 0.24, 0.30][grade];
-  if(grade===0){                       // flat and downward. deflating.
-    tone(base, 0.26, 'sawtooth', v, 0, base*0.78);
-  } else if(grade===1){                // curls up at the end. a question.
-    tone(base, 0.14, 'sawtooth', v, 0, base*0.96);
-    tone(base*1.02, 0.20, 'sawtooth', v, 0.13, base*1.5);
-  } else if(grade===2){
-    tone(base, 0.11, 'sawtooth', v, 0, base*1.28);
-    tone(base*1.3, 0.16, 'sawtooth', v*0.9, 0.10, base*1.34);
-  } else {                             // hot: stacked yelps, faster and higher
-    const n = grade===3? 3 : 5;
-    for(let i=0;i<n;i++){
-      const f = base*(1 + i*0.22);
-      tone(f, 0.10, 'sawtooth', v, i*0.085, f*1.42);
-      tone(f*2, 0.07, 'square', v*0.35, i*0.085);
-    }
-    if(grade===4) tone(base*3, 0.5, 'square', 0.07, 0.42, base*4);
-  }
-}
-function peckSound(i, speed){
-  noise(0.05, 0.16);
-  tone(140 - i*14, 0.07, 'triangle', 0.16, 0, 70);
-  tone(900 + i*160, 0.03, 'square', 0.05, 0.01);
-}
-// hunt music
-const SCALE=[0,2,4,7,9,12,14,16];
-let musicStep=0, musicNext=0, musicOn=false, musicIntensity=0;
-function musicTick(now){
-  if(!musicOn || !A) return;
-  const bpm = 132 + musicIntensity*26;
-  const beat = 60/bpm/2;
-  while(musicNext < now+0.15){
-    const s=musicStep;
-    const root=110*Math.pow(2, ((s>>4)%2)*0.0 );
-    const at = Math.max(0, musicNext-now);
-    // bass
-    if(s%4===0) tone(root*(s%16<8?1:1.125), beat*1.6, 'triangle', 0.16, at);
-    // arp
-    const n=SCALE[(s*3)%SCALE.length];
-    tone(root*4*Math.pow(2,n/12), beat*0.8, 'square', 0.055+musicIntensity*0.05, at);
-    if(musicIntensity>0.5 && s%2===0) tone(root*6*Math.pow(2,SCALE[(s*5)%SCALE.length]/12), beat*0.5, 'square', 0.035, at);
-    // hat
-    if(s%2===1) noise(0.03, 0.05, at);
-    musicNext += beat; musicStep++;
-  }
-}
-function fanfare(big){
-  const notes = big? [0,4,7,12,16,19,24] : [0,4,7,12];
-  notes.forEach((n,i)=> tone(262*Math.pow(2,n/12), 0.28, 'square', 0.18, i*0.075));
-  if(big) notes.forEach((n,i)=> tone(392*Math.pow(2,n/12), 0.4, 'triangle', 0.12, 0.5+i*0.06));
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// the hunt
-//////////////////////////////////////////////////////////////////////////////
-const HUNT_TIME = 100;
-// the whole hot-and-cold scale, in metres from the hole to the nearest buried thing
-function gradeOf(d){ return d>16 ? 0 : d>9 ? 1 : d>5.5 ? 2 : d>3 ? 3 : 4; }
-let hunt = null;          // {x,z,r,t,buried:[],found:[],maps:0}
-let huntCooldown = 0;
-let site = null;          // the glowing insects marking where a hunt can start
-let huntsSinceMap = 0;
-let banked = { finds:0, maps:0, notable:0 };
-let mapsHeld = [];        // {canvas,x,z,label}
-let activeMap = null;
-let toast = [], flash=0, celebrate=0;
-
-const SMALL_FINDS = ['a copper coin','a bent nail','a blue button','a sweet root','an old key',
-  'a snail shell','a glass bead','a chipped cup','a bird whistle','half a biscuit','a smooth pebble'];
-const NOTABLE_FINDS = ['a silver locket','a brass telescope','a jar of honey','a painted egg',
-  'a little bronze bell','a ring of old iron keys'];
-
-function pickSite(){
-  const a=Math.random()*Math.PI*2, r=18+Math.random()*44;
-  site = { x:Math.cos(a)*r, z:Math.sin(a)*r, r:14 };
-}
-pickSite();
-
-function startHunt(){
-  audioInit();
-  hunt = { x:site.x, z:site.z, r:site.r, t:HUNT_TIME, buried:[], found:[], maps:0, notable:0 };
-  // one guaranteed notable, one map slot, rest small
-  const n = 6;
-  let forceMap = (huntsSinceMap>=3) || (Math.random()<0.30);
-  let doubleMap = forceMap && Math.random()<0.16;
-  for(let i=0;i<n;i++){
-    const a=Math.random()*Math.PI*2, r=Math.sqrt(Math.random())*(site.r-2);
-    let kind='small';
-    if(i===0) kind='notable';
-    if(i===1 && forceMap) kind='map';
-    if(i===2 && doubleMap) kind='map';
-    hunt.buried.push({ x:site.x+Math.cos(a)*r, z:site.z+Math.sin(a)*r, kind });
-  }
-  musicOn=true; musicNext=A?A.currentTime:0; musicStep=0; musicIntensity=0;
-  // the camera lifts and looks down. you are in it now.
-  huntCam = 0; camIntro = 1.0; flash = 0.85; cam.shake = 3.0;
-  tone(392,0.09,'square',0.22,0);   tone(523,0.09,'square',0.22,0.08);
-  tone(659,0.09,'square',0.22,0.16);tone(880,0.30,'square',0.24,0.24);
-  noise(0.35,0.18,0);
-  cry(1);
-}
-function endHunt(){
-  musicOn=false;
-  const f=hunt.found.length;
-  banked.finds+=f; banked.maps+=hunt.maps; banked.notable+=hunt.notable;
-  if(hunt.maps===0) huntsSinceMap++; else huntsSinceMap=0;
-  say(f? ('you dug up '+f+(f===1?' thing':' things')) : 'nothing this time', 3.4);
-  hunt=null; huntCooldown=6; pickSite();
-  tone(392,0.3,'triangle',0.16,0); tone(262,0.5,'triangle',0.14,0.18);
-}
-function say(txt, dur){ toast.push({txt, t:dur||2.5, t0:dur||2.5}); }
-
-//// digging /////////////////////////////////////////////////////////////////
-// how fast it pecks. grows with everything you've ever dug up. never shown.
-function totalFinds(){ return banked.finds + (hunt? hunt.found.length : 0); }
-function digSpeed(){ return 1 + Math.min(3, Math.floor(totalFinds()/4))*0.28; }
-function peckCount(){ return 3 + Math.min(2, Math.floor(totalFinds()/8)); }
-
-const cries = [];   // floating "kweh" text, in world space
-function cry(grade, big){
-  const txt = ['kweh.','kweh?','kweh!','KWEH!!','KWEH!!!'][grade];
-  cries.push({ x:P.x, y:P.y+1.9, z:P.z, txt: big? 'KWEHHH!!!!' : txt,
-               grade: big?4:grade, life:big?1.9:1.15, vy: 1.5+grade*0.35 });
-  kweh(big?4:grade);
-  P.excite = 1;
-  if(grade>=3){ P.spin = (grade===4? 1:0.55); cam.shake = Math.max(cam.shake, grade===4?2.2:1.2); }
-}
-
-function tryDig(){
-  if(P.digT>0 || !P.onGround) return;
-  audioInit();
-  P.digTotal = 1.15 / digSpeed();
-  P.digT = P.digTotal;
-  P.pecks = 0;
-  P.vx*=0.2; P.vz*=0.2;
-}
-function peck(i){
-  const x=P.x + Math.cos(P.yaw)*0.8, z=P.z + Math.sin(P.yaw)*0.8;
-  P.peckA = 1;
-  spawnDirt(x, groundH(x,z)+0.15, z, 7);
-  peckSound(i, digSpeed());
-  cam.shake = Math.max(cam.shake, 0.9);
-}
-function finishDig(){
-  const x=P.x + Math.cos(P.yaw)*0.8, z=P.z + Math.sin(P.yaw)*0.8;
-  holes.push({x,z,r:0.85});
-  if(holes.length>60) holes.shift();
-  spawnDirt(x, groundH(x,z)+0.2, z, 18);
-  noise(0.18, 0.22); tone(90,0.16,'triangle',0.2,0,60);
-  cam.shake = 1.6;
-  if(!hunt){
-    // outside a hunt: is this the place a map showed?
-    for(let i=0;i<mapsHeld.length;i++){
-      const m=mapsHeld[i];
-      if(Math.hypot(x-m.x, z-m.z) < 6){
-        mapsHeld.splice(i,1);
-        if(activeMap===m) activeMap=null;
-        say('the picture was of this exact spot', 4.0);
-        flash=1; celebrate=2.2; fanfare(true);
-        spawnDirt(x, groundH(x,z)+0.5, z, 60, [252,214,96]);
-        banked.notable++;
-        cry(4, true);
-        return;
-      }
-    }
-    // it still tells you how close the picture's spot is
-    let dm=1e9;
-    for(const m of mapsHeld) dm = Math.min(dm, Math.hypot(x-m.x, z-m.z));
-    if(dm<1e8) cry(gradeOf(dm));
-    return;
-  }
-  let hit=-1, best=1e9, nearest=1e9;
-  for(let i=0;i<hunt.buried.length;i++){
-    const b=hunt.buried[i], d=Math.hypot(b.x-x,b.z-z);
-    nearest = Math.min(nearest, d);
-    if(d<1.6 && d<best){ best=d; hit=i; }
-  }
-  if(hit<0){ cry(gradeOf(nearest)); return; }
-  const b = hunt.buried.splice(hit,1)[0];
-  hunt.found.push(b);
-  spawnDirt(x, groundH(x,z)+0.4, z, 26, [230,196,120]);
-  cry(4, true);
-  if(b.kind==='map'){
-    hunt.maps++;
-    const m = makeMap();
-    mapsHeld.push(m); activeMap=m;
-    flash=1; celebrate = hunt.maps>=2 ? 3.2 : 1.6;
-    musicIntensity = 1;
-    fanfare(hunt.maps>=2);
-    say(hunt.maps>=2 ? 'ANOTHER ONE' : 'a folded picture', hunt.maps>=2?4:3);
-    spawnDirt(x, groundH(x,z)+0.6, z, 50, [244,230,180]);
-  } else if(b.kind==='notable'){
-    hunt.notable++;
-    fanfare(false); flash=0.6; celebrate=1.0;
-    say(NOTABLE_FINDS[(Math.random()*NOTABLE_FINDS.length)|0], 2.6);
-    musicIntensity = Math.max(musicIntensity, 0.6);
+  } else if(kind==="clay") {
+    draw("sphere",[5,.15,2.4],[2.0,.18,1.45],"#5b4235");
+    for(let i=0;i<11;i++){const a=i/11*Math.PI*2;draw("sphere",[5+Math.cos(a)*1.8,.25,2.4+Math.sin(a)*1.3],[.38,.20,.30],"#9f7354");}
   } else {
-    tone(660,0.10,'square',0.16,0); tone(880,0.10,'square',0.14,0.08);
-    say(SMALL_FINDS[(Math.random()*SMALL_FINDS.length)|0], 2.0);
-    musicIntensity = Math.max(musicIntensity, 0.35);
+    draw("cube",[5,.10,2.4],[2.0,.10,1.45],"#554137",[0,.12,0]);
+    for(let i=0;i<7;i++) draw("cube",[3.8+i*.40,.26,1.25+(i%2)*.18],[.14,.16,.14],"#a87950",[0,i*.21,0]);
   }
 }
-
-//// map pictures ////////////////////////////////////////////////////////////
-const MAPW=132, MAPH=84;
-function makeMap(){
-  const lm = landmarks[(Math.random()*landmarks.length)|0];
-  const diff = Math.random();
-  // frame the thing properly: distance scales with how big it is
-  const k = diff<0.4 ? 1.5+Math.random()*0.4 : diff<0.75 ? 2.0+Math.random()*0.7 : 2.6+Math.random()*1.2;
-  const dist = clamp(lm.h*k, 12, 46);
-  const ang = Math.random()*Math.PI*2;
-  const px = lm.x + Math.cos(ang)*dist, pz = lm.z + Math.sin(ang)*dist;
-  const yaw = Math.atan2(lm.z-pz, lm.x-px);
-  const mc = document.createElement('canvas'); mc.width=MAPW; mc.height=MAPH;
-  const mctx = mc.getContext('2d');
-
-  // time of day + weather push difficulty without changing the geometry
-  const oldSkyT=SKY_TOP, oldSkyL=SKY_LOW, oldFar=SKY_FAR, oldLight=LIGHT;
-  const mood = diff<0.4 ? 0 : diff<0.75 ? 1 : 2;
-  if(mood===1){ SKY_TOP=[246,168,120]; SKY_LOW=[252,222,168]; SKY_FAR=[240,196,158]; LIGHT=0.92; }
-  if(mood===2){ SKY_TOP=[74,84,150]; SKY_LOW=[204,148,168]; SKY_FAR=[146,132,172]; LIGHT=0.74; }
-
-  const eye = groundH(px,pz) + (mood===2? 3.2:2.4);
-  const aimY = groundH(lm.x,lm.z) + lm.h*0.52;
-  const mcam = { x:px, y:eye, z:pz, yaw,
-                 pitch: clamp(Math.atan2(aimY-eye, dist)-0.06, -0.25, 0.5), fov:0.92 };
-  beginView(mctx, MAPW, MAPH, mcam);
-  drawSky(MAPW, MAPH);
-  drawGround();
-  for(const l of landmarks) l.build();
-  drawScenery();
-  flush();
-
-  // painterly-ish treatment: posterise, warm the paper, vignette
-  const img = mctx.getImageData(0,0,MAPW,MAPH), d=img.data;
-  for(let i=0;i<d.length;i+=4){
-    for(let k=0;k<3;k++) d[i+k] = Math.round(d[i+k]/34)*34;
-    d[i]   = clamp(d[i]*1.06+10,0,255);
-    d[i+1] = clamp(d[i+1]*1.00+6,0,255);
-    d[i+2] = clamp(d[i+2]*0.92+2,0,255);
+function treeBoxes() {
+  const bark=["#76503b","#825941"], leaf=["#477855","#5d9861","#77ad69"];
+  for(let i=0;i<6;i++) draw("cube",[-1.9+i*.32,1+i*1.25,-.1+i*.05],[.54,.78,.54],bark[i%2],[0,0,-.22]);
+  const top=[.0,8.1,.2];
+  [[0,0,0,2.8,1.35,2.3,0],[-1.8,.5,.2,1.7,1.15,1.6,1],[1.8,.65,-.35,1.65,1.1,1.5,2],[.4,1.55,.35,2.0,1.0,1.7,1]]
+    .forEach(v=>draw("cube",[top[0]+v[0],top[1]+v[1],top[2]+v[2]],[v[3],v[4],v[5]],leaf[v[6]],[0,v[0]*.12,0]));
+  draw("cube",[-4.1,1.3,-1.1],[1.9,.22,.22],bark[0],[0,.12,-.58]);
+}
+function treeVoxel() {
+  for(let i=0;i<16;i++) {
+    const y=.38+i*.48, x=-2.15+i*.14;
+    draw("cube",[x,y,0],[.34,.34,.34],i%3?"#704a34":"#8a5a3d",[0,0,0]);
+    if(i%3===0) draw("cube",[x+.48,y+.12,.05],[.28,.28,.28],"#6a432f");
   }
-  mctx.putImageData(img,0,0);
-  const px2=mctx.createLinearGradient(0,0,0,MAPH);
-  px2.addColorStop(0,'rgba(196,150,80,0.16)'); px2.addColorStop(1,'rgba(120,80,40,0.22)');
-  mctx.fillStyle=px2; mctx.fillRect(0,0,MAPW,MAPH);
-  mctx.strokeStyle='rgba(88,58,32,0.55)'; mctx.lineWidth=3; mctx.strokeRect(1.5,1.5,MAPW-3,MAPH-3);
-
-  SKY_TOP=oldSkyT; SKY_LOW=oldSkyL; SKY_FAR=oldFar; LIGHT=oldLight;
-  return { canvas:mc, x:px, z:pz };
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// input
-//////////////////////////////////////////////////////////////////////////////
-//// touch //////////////////////////////////////////////////////////////////
-// left thumb steers, right thumb looks, two buttons. nothing else.
-const touchUI = { on:false, stick:{id:-1,ox:0,oy:0,x:0,y:0}, look:{id:-1,x:0,y:0},
-                  digHeld:0, jump:false, digPulse:0, jumpPulse:0 };
-function shortEdge(){ return Math.min(IW, IH); }
-function btnDig(){  const r = clamp(shortEdge()*0.135, 22, 42); return { x: IW-r*1.3, y: IH-r*1.3, r }; }
-function btnJump(){ const d=btnDig(); return { x: d.x - d.r*1.75, y: d.y - d.r*1.05, r: d.r*0.72 }; }
-function stickHome(){ const r = clamp(shortEdge()*0.17, 26, 52); return { x: r*1.35, y: IH - r*1.3, r }; }
-function inCircle(p,c){ const dx=p.x-c.x, dy=p.y-c.y; return dx*dx+dy*dy <= c.r*c.r*1.5; }
-function toInternal(t){
-  const r = screenCv.getBoundingClientRect();
-  return { x:(t.clientX-r.left)/r.width*IW, y:(t.clientY-r.top)/r.height*IH };
-}
-function onTouchStart(e){
-  touchUI.on = true; audioInit();
-  for(const t of e.changedTouches){
-    const p = toInternal(t);
-    if(inCircle(p, btnDig())){ touchUI.digHeld = t.identifier; touchUI.digPulse = 1; tryDig(); continue; }
-    if(inCircle(p, btnJump())){ touchUI.jump = true; touchUI.jumpPulse = 1; continue; }
-    if(p.x < IW*0.48 && touchUI.stick.id < 0){
-      const h = stickHome();
-      touchUI.stick = { id:t.identifier, ox:h.x, oy:h.y, x:p.x, y:p.y };
-      continue;
-    }
-    if(activeMap && mapsHeld.length>1){
-      const mw = Math.min(MAPW, Math.round(IW*0.34)), mh = Math.round(mw*MAPH/MAPW);
-      if(p.x>4 && p.x<6+mw && p.y>5 && p.y<7+mh){
-        activeMap = mapsHeld[(mapsHeld.indexOf(activeMap)+1)%mapsHeld.length];
-        continue;
-      }
-    }
-    if(touchUI.look.id < 0) touchUI.look = { id:t.identifier, x:p.x, y:p.y };
-  }
-  e.preventDefault();
-}
-function onTouchMove(e){
-  for(const t of e.changedTouches){
-    const p = toInternal(t);
-    if(t.identifier === touchUI.stick.id){ touchUI.stick.x=p.x; touchUI.stick.y=p.y; }
-    else if(t.identifier === touchUI.look.id){
-      cam.yaw   += (p.x - touchUI.look.x) * 0.011;
-      cam.pitch  = clamp(cam.pitch - (p.y - touchUI.look.y) * 0.009, -0.85, 0.35);
-      touchUI.look.x = p.x; touchUI.look.y = p.y;
+  for(let y=-2;y<=2;y++) for(let x=-4;x<=4;x++) for(let z=-3;z<=3;z++) {
+    const d=x*x/15+y*y/4+z*z/8;
+    if(d<1.15 && hash(x+y,z)>.22) {
+      const c=hash(x,z+y)>.55?"#5f9b5e":"#3f754e";
+      draw("cube",[.05+x*.58,8.15+y*.54,z*.56],[.30,.30,.30],c);
     }
   }
-  e.preventDefault();
+  for(let i=0;i<6;i++) draw("cube",[-3.0-i*.46,4.3-i*.35,-.1],[.30,.30,.30],"#744c34");
 }
-function onTouchEnd(e){
-  for(const t of e.changedTouches){
-    if(t.identifier === touchUI.stick.id) touchUI.stick.id = -1;
-    if(t.identifier === touchUI.look.id)  touchUI.look.id  = -1;
-    if(t.identifier === touchUI.digHeld)  touchUI.digHeld  = 0;
+function treeClay() {
+  const bark=["#805844","#936954"], leaves=["#668f61","#7ba66b","#8db574"];
+  for(let i=0;i<6;i++) draw("sphere",[-2.0+i*.31,1+i*1.20,0],[.62,.96,.62],bark[i%2],[0,0,-.23]);
+  draw("sphere",[-3.8,3.35,-.05],[1.9,.34,.34],bark[0],[0,.08,-.56]);
+  [[0,8.1,0,2.7,1.7,2.2,0],[-1.9,8.2,.2,1.75,1.35,1.55,1],[1.8,8.5,-.2,1.8,1.45,1.65,2],[.15,9.4,.25,2.0,1.25,1.7,1]]
+    .forEach(v=>draw("sphere",[v[0],v[1],v[2]],[v[3],v[4],v[5]],leaves[v[6]]));
+}
+function smallDetails(kind) {
+  const smooth=kind==="clay", k=smooth?"sphere":"cube";
+  [[-7,-2],[8,-3],[-8,4],[8,6],[-5,6]].forEach((p,i)=>{
+    const c=i%2?"#c98d65":"#b4a07e";
+    draw(k,[p[0],.38,p[1]],[.55,.45,.55],c,[0,i*.7,0]);
+  });
+  for(let i=0;i<16;i++) {
+    const x=-11+i*1.35,z=6.5+Math.sin(i*2.1)*.5;
+    draw(k,[x,.45,z],[smooth?.18:.12,.55,smooth?.18:.12],i%3?"#8dac65":"#d7b55f",[0,i*.2,0]);
   }
-  e.preventDefault();
+  // Tiny creature for scale, deliberately quiet.
+  draw(k,[1.9,.66,4.7],[.75,.58,.92],"#ead590");
+  draw(k,[1.65,1.36,4.55],[.52,.50,.52],"#f2dfa0");
+  draw(k,[1.30,1.52,4.52],[.15,.46,.16],"#c79563",[0,0,-.25]);
+  draw(k,[2.02,1.60,4.52],[.15,.50,.16],"#c79563",[0,0,.25]);
 }
-screenCv.addEventListener('touchstart', onTouchStart, {passive:false});
-screenCv.addEventListener('touchmove',  onTouchMove,  {passive:false});
-screenCv.addEventListener('touchend',   onTouchEnd,   {passive:false});
-screenCv.addEventListener('touchcancel',onTouchEnd,   {passive:false});
-// a stick reading, -1..1 on each axis
-function stickVec(){
-  if(touchUI.stick.id < 0) return null;
-  const h = stickHome();
-  let dx = touchUI.stick.x - h.x, dy = touchUI.stick.y - h.y;
-  const len = Math.hypot(dx,dy);
-  if(len < h.r*0.18) return null;
-  const k = Math.min(1, len/(h.r*0.95)) / len;
-  return { x: dx*k, y: dy*k };
+function renderScene() {
+  const st=styles[style], w=canvas.width, h=canvas.height;
+  gl.viewport(0,0,w,h); gl.clearColor(...rgb(st.sky),1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+  gl.uniform3fv(loc.uSky,rgb(st.sky));
+  gl.uniform3fv(loc.uLightDir,new Float32Array(norm([-.55,.86,.42])));
+  gl.uniform1f(loc.uAmbient,st.ambient); gl.uniform1f(loc.uPosterize,st.steps);
+  gl.uniform1f(loc.uClay,st.clay); gl.uniform1f(loc.uFog,st.fog);
+  const shapeDistance=distance*(w/h<.72?1.55:1);
+  const posterYaw=.76, posterPitch=.58, posterDistance=shapeDistance*1.35;
+  const eye=mapView
+    ? [Math.sin(posterYaw)*Math.cos(posterPitch)*posterDistance,
+       Math.sin(posterPitch)*posterDistance+4,
+       Math.cos(posterYaw)*Math.cos(posterPitch)*posterDistance]
+    : [Math.sin(yaw)*Math.cos(pitch)*shapeDistance,Math.sin(pitch)*shapeDistance+4,Math.cos(yaw)*Math.cos(pitch)*shapeDistance];
+  const target=mapView?[.8,2.4,1.0]:[0,4.0,0];
+  gl.uniformMatrix4fv(loc.uProjection,false,new Float32Array(M4.perspective(mapView?.60:.68,w/h,.1,100)));
+  gl.uniformMatrix4fv(loc.uView,false,new Float32Array(M4.lookAt(eye,target,[0,1,0])));
+  if(style==="clay") clayGround(); else groundBoxes(style==="voxel");
+  digPatch(style);
+  if(style==="boxes") treeBoxes(); else if(style==="voxel") treeVoxel(); else treeClay();
+  smallDetails(style);
 }
 
-const keys={};
-addEventListener('keydown',e=>{
-  keys[e.code]=true;
-  if(e.code==='Space') e.preventDefault();
-  if(e.code==='KeyE') tryDig();
-  if(e.code==='Tab'){ e.preventDefault();
-    if(mapsHeld.length){ const i=mapsHeld.indexOf(activeMap); activeMap = mapsHeld[(i+1)%mapsHeld.length]; } }
+function applyStyle(next) {
+  style=next; const st=styles[style];
+  document.documentElement.style.setProperty("--accent",st.accent);
+  document.querySelector("#styleName").textContent=st.name;
+  document.querySelector("#styleNote").textContent=st.note;
+  document.querySelectorAll("[data-style]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.style===style)));
+  document.body.dataset.style=style;
+}
+document.querySelectorAll("[data-style]").forEach(b=>b.addEventListener("click",()=>applyStyle(b.dataset.style)));
+document.querySelector("#view").addEventListener("click",()=>{
+  mapView=!mapView; document.querySelector("#view").setAttribute("aria-pressed",String(mapView));
+  document.querySelector("#view").textContent=mapView?"◫":"⌁";
+  document.querySelector("#styleNote").textContent=mapView?"Map test · can you still name the place?":styles[style].note;
 });
-addEventListener('keyup',e=>keys[e.code]=false);
-const overlay=document.getElementById('click');
-function startPlay(){
-  audioInit();
-  if(A && A.state==='suspended') A.resume();
-  if(!COARSE){ try{ screenCv.requestPointerLock(); }catch(e){} }
-  overlay.style.display='none';
-  fit();
-}
-overlay.addEventListener('click', startPlay);
-overlay.addEventListener('touchend', e=>{ e.preventDefault(); startPlay(); }, {passive:false});
-screenCv.addEventListener('click',()=>{
-  if(!COARSE && document.pointerLockElement!==screenCv) screenCv.requestPointerLock();
+document.querySelector("#reset").addEventListener("click",()=>{
+  targetYaw=yaw=.58; targetPitch=pitch=.34; targetDistance=distance=23; mapView=false;
+  document.querySelector("#view").setAttribute("aria-pressed","false"); document.querySelector("#view").textContent="⌁";
 });
-if(COARSE) document.getElementById('hint').style.display='none';
-if(COARSE) document.getElementById('clickhint').textContent =
-  'tap to play · left thumb walks · right thumb looks · buttons dig and jump';
-addEventListener('mousemove',e=>{
-  if(document.pointerLockElement!==screenCv) return;
-  cam.yaw += e.movementX*0.0032;
-  cam.pitch = clamp(cam.pitch - e.movementY*0.0026, -0.85, 0.35);
+canvas.addEventListener("pointerdown",e=>{dragging=true;pointerX=e.clientX;pointerY=e.clientY;canvas.setPointerCapture(e.pointerId);helpTimer=1});
+canvas.addEventListener("pointermove",e=>{
+  if(!dragging)return;
+  targetYaw-=(e.clientX-pointerX)*.007; targetPitch=Math.max(.12,Math.min(1.05,targetPitch+(e.clientY-pointerY)*.005));
+  pointerX=e.clientX;pointerY=e.clientY;
 });
+canvas.addEventListener("pointerup",()=>dragging=false);
+canvas.addEventListener("pointercancel",()=>dragging=false);
+canvas.addEventListener("wheel",e=>{targetDistance=Math.max(12,Math.min(28,targetDistance+e.deltaY*.015));e.preventDefault()},{passive:false});
+canvas.addEventListener("touchstart",e=>{if(e.touches.length===2)pinch=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY)},{passive:true});
+canvas.addEventListener("touchmove",e=>{if(e.touches.length===2){const n=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);targetDistance=Math.max(12,Math.min(28,targetDistance+(pinch-n)*.035));pinch=n}},{passive:true});
 
-//////////////////////////////////////////////////////////////////////////////
-// update
-//////////////////////////////////////////////////////////////////////////////
-let T=0, last=performance.now();
-let signalStage=0, lastChirp=0, chirpGap=1.6;
-let huntCam=0, camIntro=0;
-
-function nearestBuried(){
-  let best=1e9, bx=0, bz=0;
-  if(hunt) for(const b of hunt.buried){
-    const d=Math.hypot(b.x-P.x, b.z-P.z);
-    if(d<best){ best=d; bx=b.x; bz=b.z; }
-  }
-  if(!hunt) for(const m of mapsHeld){
-    const d=Math.hypot(m.x-P.x, m.z-P.z);
-    if(d<best*1.0 && d<14){ best=d; bx=m.x; bz=m.z; }  // it knows when you're standing in the picture
-  }
-  return {d:best, x:bx, z:bz};
+let last=performance.now(), frames=0, fpsClock=last;
+function resize() {
+  const dpr=Math.min(devicePixelRatio||1,1.5), w=Math.round(innerWidth*dpr), h=Math.round(innerHeight*dpr);
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
 }
-
-function update(dt){
-  T+=dt;
-
-  // ---- movement: momentum, skid, lean -------------------------------------
-  let ix=0, iz=0;
-  if(keys.KeyW) iz+=1; if(keys.KeyS) iz-=1;
-  if(keys.KeyA) ix-=1; if(keys.KeyD) ix+=1;
-  const sv = stickVec();
-  if(sv){ ix = sv.x; iz = -sv.y; }
-  const digging = P.digT>0;
-  if(digging){ ix=0; iz=0; }
-  const l=Math.hypot(ix,iz); if(l>0){ ix/=l; iz/=l; }
-  // camera-relative
-  const fx= Math.sin(cam.yaw), fz=Math.cos(cam.yaw);
-  const rx= Math.cos(cam.yaw), rz=-Math.sin(cam.yaw);
-  const wx = fx*iz + rx*ix, wz = fz*iz + rz*ix;
-
-  const MAXSP=11.5, ACC=52, FRIC=8.2;
-  if(l>0){
-    P.vx += wx*ACC*dt; P.vz += wz*ACC*dt;
-    const sp=Math.hypot(P.vx,P.vz);
-    if(sp>MAXSP){ P.vx=P.vx/sp*MAXSP; P.vz=P.vz/sp*MAXSP; }
-  } else {
-    const f=Math.exp(-FRIC*dt); P.vx*=f; P.vz*=f;
-  }
-  P.speed = Math.hypot(P.vx,P.vz);
-
-  // skid dust when turning hard at speed
-  if(P.speed>5 && l>0){
-    const dot = (P.vx*wx+P.vz*wz)/P.speed;
-    if(dot<0.55 && Math.random()<0.5) spawnDirt(P.x,P.y+0.05,P.z,1,[186,196,170]);
-  }
-
-  P.x += P.vx*dt; P.z += P.vz*dt;
-  const R=88;
-  const rr=Math.hypot(P.x,P.z);
-  if(rr>R){ P.x=P.x/rr*R; P.z=P.z/rr*R; P.vx*=0.4; P.vz*=0.4; }
-
-  // facing follows velocity, with lean into the turn
-  if(P.speed>0.4){
-    const want=Math.atan2(P.vz,P.vx);
-    let d=want-P.yaw; while(d>Math.PI)d-=Math.PI*2; while(d<-Math.PI)d+=Math.PI*2;
-    P.yaw += d*Math.min(1, dt*13);
-    P.lean = lerp(P.lean, clamp(d*2.2,-0.5,0.5), dt*8);
-  } else P.lean = lerp(P.lean,0,dt*6);
-  P.bob += P.speed*dt*2.6;
-
-  // jump / gravity / landing
-  const gh = groundH(P.x,P.z);
-  if(touchUI.digHeld && !digging && P.onGround) tryDig();
-  if((keys.Space || touchUI.jump) && P.onGround && !digging){
-    touchUI.jump = false;
-    P.vy = 9.4; P.onGround=false; P.squash=0.82;
-    tone(420,0.10,'square',0.10,0,700);
-  }
-  P.vy -= 26*dt; P.y += P.vy*dt;
-  if(P.y<=gh){
-    if(!P.onGround){
-      const impact = Math.min(1, -P.vy/16);
-      P.squash = 1 - impact*0.42; P.land=impact;
-      cam.shake = Math.max(cam.shake, impact*3.2);
-      spawnDirt(P.x, gh, P.z, Math.round(3+impact*10), [188,198,168]);
-      noise(0.09, 0.10+impact*0.12);
-      if(impact>0.75){ P.tumble=0.5; tone(200,0.14,'triangle',0.14,0,120); }
-    }
-    P.y=gh; P.vy=0; P.onGround=true;
-  }
-  P.squash = lerp(P.squash, P.onGround? 1 : 1.10, dt*11);
-  P.tumble = Math.max(0, P.tumble-dt);
-
-  // ---- digging: peck, peck, peck, then it tells you --------------------------
-  P.peckA = Math.max(0, P.peckA - dt*11);
-  P.spin  = Math.max(0, P.spin  - dt*3.2);
-  if(digging){
-    P.digT -= dt;
-    const n = peckCount();
-    const prog = 1 - P.digT/P.digTotal;
-    const due = Math.min(n, Math.floor(prog*n*1.18));
-    while(P.pecks < due){ peck(P.pecks); P.pecks++; }
-    if(P.digT<=0){ P.digT=0; finishDig(); }
-  }
-  // floating kwehs
-  for(let i=cries.length-1;i>=0;i--){
-    const c=cries[i]; c.life-=dt; c.y += c.vy*dt; c.vy *= Math.pow(0.15,dt);
-    if(c.life<=0) cries.splice(i,1);
-  }
-
-  // ---- the treasure sense (animation + sound only) ------------------------
-  const nb = nearestBuried();
-  let stage = -1;
-  if(nb.d<1e8){
-    stage = nb.d>19 ? 0 : nb.d>10 ? 1 : nb.d>4 ? 2 : 3;
-  }
-  signalStage = stage;
-  const want = stage<0?0 : [0.12,0.45,0.78,1.0][stage];
-  P.excite = lerp(P.excite, want, dt*1.6);
-  P.earL = lerp(P.earL, want + (stage>=2? Math.sin(T*9)*0.10:0), dt*7);
-  P.earR = lerp(P.earR, want + (stage>=2? Math.sin(T*9+1.1)*0.10:0), dt*7);
-  // head turns toward it when close; never an arrow, just a look
-  let ht=0;
-  if(stage>=1){
-    const want2 = Math.atan2(nb.z-P.z, nb.x-P.x);
-    let d2 = want2-P.yaw; while(d2>Math.PI)d2-=Math.PI*2; while(d2<-Math.PI)d2+=Math.PI*2;
-    ht = clamp(d2, -0.9, 0.9) * (stage===1?0.30: stage===2?0.62:0.85);
-  }
-  if(stage===3) ht += Math.sin(T*17)*0.25;
-  P.headTurn = lerp(P.headTurn, ht, dt*6);
-  // idle wiggle when right on top of it
-  if(stage===3 && P.speed<0.5 && P.onGround && !digging){
-    P.x += Math.cos(T*7)*dt*0.5; P.z += Math.sin(T*7)*dt*0.5;
-  }
-  // an occasional idle noise. it is NOT the hot-and-cold signal — digging is.
-  if(stage>=0 && P.digT<=0){
-    chirpGap = stage>=3? 2.2 : 5.5;
-    if(T-lastChirp > chirpGap){ lastChirp=T; chirp(Math.min(1,stage)); }
-  }
-
-  // ---- hunt state ---------------------------------------------------------
-  if(hunt){
-    hunt.t -= dt;
-    musicIntensity = Math.max(musicIntensity*Math.pow(0.5,dt*0.7), hunt.t<25?0.55:0);
-    const out = Math.hypot(P.x-hunt.x, P.z-hunt.z) > hunt.r+8;
-    if(hunt.t<=0 || out) endHunt();
-  } else {
-    huntCooldown -= dt;
-    if(huntCooldown<=0 && Math.hypot(P.x-site.x,P.z-site.z) < site.r*0.7) startHunt();
-  }
-
-  // ---- camera -------------------------------------------------------------
-  // out in the world: over the shoulder. in a hunt: lifted up, looking down,
-  // the way the chocobo game frames the dig.
-  huntCam = lerp(huntCam, hunt?1:0, dt*(hunt?2.6:3.2));
-  camIntro = Math.max(0, camIntro - dt*1.25);
-  const swoop = camIntro*camIntro;
-  const back = lerp(8.2, 9.0, huntCam) + swoop*7;
-  const up   = lerp(3.6, 11.6, huntCam) + swoop*9;
-  cam.pitch  = clamp(cam.pitch, -0.85, 0.35);
-  const pitchFloor = lerp(-0.85, -0.62, huntCam);
-  const pitchCeil  = lerp( 0.35, -0.42, huntCam);
-  cam.pitch = clamp(cam.pitch, pitchFloor, pitchCeil);
-  const tx = P.x - Math.sin(cam.yaw)*back;
-  const tz = P.z - Math.cos(cam.yaw)*back;
-  const ty = P.y + up;
-  const k = 1-Math.exp(-dt*(hunt?7:9));
-  cam.x = lerp(cam.x, tx, k); cam.z = lerp(cam.z, tz, k); cam.y = lerp(cam.y, ty, k);
-  const camFloor = groundH(cam.x,cam.z)+1.4;
-  if(cam.y<camFloor) cam.y=camFloor;
-  cam.shake = Math.max(0, cam.shake - dt*7);
-
-  touchUI.jump = false;
-  updateParts(dt);
-  for(let i=toast.length-1;i>=0;i--){ toast[i].t-=dt; if(toast[i].t<=0) toast.splice(i,1); }
-  flash = Math.max(0, flash-dt*2.2);
-  celebrate = Math.max(0, celebrate-dt);
+function frame(now) {
+  resize();
+  const smooth=1-Math.exp(-(now-last)*.012);
+  yaw+=(targetYaw-yaw)*smooth; pitch+=(targetPitch-pitch)*smooth; distance+=(targetDistance-distance)*smooth;
+  renderScene();
+  frames++;
+  if(now-fpsClock>1000){document.querySelector("#fps").textContent=Math.round(frames*1000/(now-fpsClock))+" fps";frames=0;fpsClock=now}
+  if(helpTimer&&now-last>0) document.querySelector("#help").style.opacity=Math.max(0,1-(now-fpsClock+1000)/5000);
+  last=now; requestAnimationFrame(frame);
 }
-
-//////////////////////////////////////////////////////////////////////////////
-// hud
-//////////////////////////////////////////////////////////////////////////////
-function text(s,x,y,col,align){
-  g.font='8px ui-monospace, monospace';
-  g.textAlign=align||'left';
-  g.fillStyle='rgba(0,0,0,0.55)'; g.fillText(s,x+1,y+1);
-  g.fillStyle=col||'#fff'; g.fillText(s,x,y);
-}
-// the kwehs, drawn in the world above the creature
-const CRY_COL = ['#b9c4d6','#dfe6f0','#ffe9a8','#ffc65e','#ff8a3d'];
-function drawCries(){
-  for(const c of cries){
-    const p = toCam(c.x, c.y, c.z);
-    if(p[2] < 0.5) continue;
-    const s = F/p[2];
-    const sx = CX + p[0]*s, sy = CY - p[1]*s;
-    const pop = clamp((1 - (c.life/ (c.grade>=3?1.9:1.15)))*6, 0, 1);   // snap in
-    const fade = clamp(c.life*2.2, 0, 1);
-    const size = Math.round((7 + c.grade*3.5) * (0.6+0.4*pop) * clamp(s/9,0.55,1.7));
-    g.save();
-    g.globalAlpha = fade;
-    g.font = 'bold '+size+'px ui-monospace, monospace';
-    g.textAlign = 'center';
-    const wob = c.grade>=3 ? Math.sin(T*30)*c.grade*0.6 : 0;
-    g.fillStyle = 'rgba(0,0,0,0.7)';
-    g.fillText(c.txt, sx+1+wob, sy+1);
-    g.fillStyle = CRY_COL[c.grade];
-    g.fillText(c.txt, sx+wob, sy);
-    g.restore();
-  }
-}
-function ring(c, fill, stroke, lw){
-  g.beginPath(); g.arc(c.x, c.y, c.r, 0, Math.PI*2);
-  if(fill){ g.fillStyle=fill; g.fill(); }
-  if(stroke){ g.strokeStyle=stroke; g.lineWidth=lw||2; g.stroke(); }
-}
-function drawTouchUI(){
-  if(!touchUI.on) return;
-  const h = stickHome(), sv = stickVec();
-  g.globalAlpha = touchUI.stick.id>=0 ? 0.85 : 0.4;
-  ring(h, 'rgba(12,16,26,0.35)', 'rgba(255,255,255,0.55)', 2);
-  const kx = h.x + (sv? sv.x*h.r*0.62 : 0), ky = h.y + (sv? sv.y*h.r*0.62 : 0);
-  ring({x:kx,y:ky,r:h.r*0.40}, 'rgba(255,246,214,0.85)', 'rgba(40,34,28,0.7)', 2);
-  const d = btnDig(), j = btnJump();
-  g.globalAlpha = 0.85;
-  ring(d, touchUI.digHeld? 'rgba(255,214,110,0.92)' : 'rgba(214,150,74,0.62)', 'rgba(255,255,255,0.75)', 2);
-  ring(j, touchUI.jump? 'rgba(180,230,255,0.9)' : 'rgba(96,150,190,0.55)', 'rgba(255,255,255,0.65)', 2);
-  g.globalAlpha = 1;
-  g.textAlign='center'; g.fillStyle='#2a2018';
-  g.font='bold '+Math.round(d.r*0.62)+'px ui-monospace, monospace';
-  g.fillText('DIG', d.x, d.y + d.r*0.22);
-  g.fillStyle='#eaf6ff';
-  g.font='bold '+Math.round(j.r*0.72)+'px ui-monospace, monospace';
-  g.fillText('^', j.x, j.y + j.r*0.30);
-}
-function drawHUD(){
-  drawCries();
-  // clock: a bar that empties. no words.
-  if(hunt){
-    const w=120, x=(IW-w)/2, y=10;
-    const f=clamp(hunt.t/HUNT_TIME,0,1);
-    g.fillStyle='rgba(0,0,0,0.4)'; g.fillRect(x-2,y-2,w+4,8);
-    const urgent = hunt.t<20 && Math.sin(T*12)>0;
-    g.fillStyle = urgent? '#ff8a5c' : '#ffe27a';
-    g.fillRect(x,y,Math.round(w*f),4);
-    // things still down there, as dots
-    for(let i=0;i<hunt.buried.length;i++){
-      g.fillStyle='rgba(255,255,255,0.30)'; g.fillRect(x+i*6, y+7, 4,2);
-    }
-    for(let i=0;i<hunt.found.length;i++){
-      g.fillStyle='#ffe27a'; g.fillRect(x+ (hunt.buried.length+i)*6, y+7, 4,2);
-    }
-  } else if(huntCooldown<=0){
-    // the drifting insects over the next site, drawn as a soft screen hint when far
-    const d=Math.hypot(P.x-site.x,P.z-site.z);
-    if(d>site.r) text('·', IW/2, 20, '#fff', 'center');
-  }
-
-  // held picture
-  if(activeMap){
-    const mw = Math.min(MAPW, Math.round(IW*0.34)), mh = Math.round(mw*MAPH/MAPW);
-    const x=5, y=6;
-    g.save();
-    g.shadowColor='rgba(0,0,0,0.6)'; g.shadowBlur=6;
-    g.drawImage(activeMap.canvas, x, y, mw, mh);
-    g.restore();
-    if(mapsHeld.length>1){
-      const lbl = mapsHeld.indexOf(activeMap)+1+'/'+mapsHeld.length + (touchUI.on? ' tap' : ' [tab]');
-      text(lbl, x+2, y+mh+9, '#e8d9b0');
-    }
-    const d=Math.hypot(P.x-activeMap.x, P.z-activeMap.z);
-    if(d<7) text('dig here', x+mw/2, y+mh+ (mapsHeld.length>1?19:9), '#ffe27a','center');
-  }
-
-  // finds so far, quiet, bottom right
-  if(banked.finds||banked.maps||hunt) {
-    text('★'+ (banked.notable + (hunt?hunt.notable:0)) + '   ▣'+ (banked.maps + (hunt?hunt.maps:0)),
-      IW-6, IH-8, '#e8e2cf', 'right');
-  }
-
-  // toasts
-  let ty=IH-30;
-  for(let i=toast.length-1;i>=0;i--){
-    const t=toast[i];
-    const a=clamp(t.t/0.6,0,1);
-    g.globalAlpha=a;
-    text(t.txt, IW/2, ty, '#fff8e0','center');
-    g.globalAlpha=1;
-    ty-=11;
-  }
-
-  if(huntCam>0.02){
-    const vg = g.createRadialGradient(IW/2,IH/2,IH*0.34, IW/2,IH/2,IH*0.95);
-    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(20,14,30,'+(0.55*huntCam)+')');
-    g.fillStyle=vg; g.fillRect(0,0,IW,IH);
-  }
-  if(touchUI.on && IH > IW*1.25)
-    text('turn your phone sideways', IW/2, 22, 'rgba(255,255,255,0.8)', 'center');
-  drawTouchUI();
-  if(flash>0){ g.fillStyle='rgba(255,246,214,'+(flash*0.5)+')'; g.fillRect(0,0,IW,IH); }
-  if(celebrate>0){
-    for(let i=0;i<40;i++){
-      const a=hash2(i,celebrate|0)*Math.PI*2 + T*2;
-      const r=(1-celebrate/3.2)*160 + hash2(i,3)*40;
-      g.fillStyle = ['#ffd75e','#ff8fb1','#8fe0ff','#b4ff8f'][i%4];
-      g.fillRect(IW/2+Math.cos(a)*r, IH/2+Math.sin(a)*r*0.6 - (1-celebrate)*30, 3,3);
-    }
-  }
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// frame
-//////////////////////////////////////////////////////////////////////////////
-function frame(now){
-  const dt = Math.min(0.05, (now-last)/1000); last=now;
-  { const vp = viewport(); if(vp.w!==lastW || vp.h!==lastH) fit(); }
-  // keep the frame rate, not the draw distance
-  emaDt = lerp(emaDt, dt, 0.06);
-  if(emaDt > 1/26 && quality > 0.55) quality -= 0.012;
-  else if(emaDt < 1/52 && quality < 1) quality += 0.006;
-  VIEW = Math.round(lerp(15, 26, quality));
-  update(dt);
-  if(A) musicTick(A.currentTime);
-
-  const sc = { x:cam.x, y:cam.y + (Math.random()-0.5)*cam.shake*0.05,
-               z:cam.z, yaw:cam.yaw + (Math.random()-0.5)*cam.shake*0.004,
-               pitch:cam.pitch, fov:cam.fov };
-  beginView(g, IW, IH, sc);
-  drawSky(IW,IH);
-  drawGround();
-  for(const l of landmarks) l.build();
-  drawScenery();
-  drawHoles();
-
-  // hunt site marker: glowing insects, never a UI ring
-  const s = hunt? hunt : (huntCooldown<=0? site : null);
-  if(s){
-    const N = hunt? 44 : 26;
-    for(let i=0;i<N;i++){
-      const a=i/N*Math.PI*2 + T*0.25 + Math.sin(T*0.9+i)*0.3;
-      const rr= hunt? s.r*(0.94+0.06*Math.sin(T*1.6+i*1.7))
-                    : s.r*(0.55+0.45*Math.sin(T*0.6+i*1.7));
-      const bx=s.x+Math.cos(a)*rr, bz=s.z+Math.sin(a)*rr;
-      const by=groundH(bx,bz)+1.0+Math.sin(T*2.2+i)*0.5;
-      box(bx,by,bz,0.17,0.17,0.17,[255,236,140],0);
-    }
-  }
-  drawParts();
-  creatureDraw();
-  flush();
-  drawHUD();
-
-  sctx.drawImage(cv,0,0);
-  requestAnimationFrame(frame);
-}
+applyStyle("boxes");
+document.body.dataset.ready="true";
+window.__renderStudy={
+  setStyle:applyStyle,
+  get state(){return {style,mapView,ready:document.body.dataset.ready==="true",canvas:[canvas.width,canvas.height]}}
+};
 requestAnimationFrame(frame);
-
-document.getElementById('hint').textContent =
-  'wasd move · mouse look · space jump · e dig · tab flip pictures';
 </script>
 </body>
 </html>
