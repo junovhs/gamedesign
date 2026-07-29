@@ -1,907 +1,1236 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>DOWNSHAFT</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0d14">
+<title>the little digger</title>
 <style>
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#0a0710;
-    font-family:ui-monospace,Menlo,Consolas,monospace;-webkit-user-select:none;user-select:none;touch-action:manipulation}
-  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
-  #stage{position:relative}
-  canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
-  #ui{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
-  .panel{pointer-events:auto;width:100%;height:100%;background:rgba(10,7,16,.9);
-    display:flex;align-items:center;justify-content:center;padding:4%}
-  .card{width:100%;max-width:460px;max-height:100%;overflow:auto;background:#241a2e;
-    border:4px solid #0a0710;box-shadow:6px 6px 0 #0a0710;padding:14px}
-  .card::-webkit-scrollbar{width:8px}.card::-webkit-scrollbar-thumb{background:#5a4470}
-  h1{margin:0 0 4px;font-size:26px;letter-spacing:5px;color:#e8b830;text-shadow:3px 3px 0 #0a0710}
-  h2{margin:0 0 10px;font-size:15px;letter-spacing:3px;color:#5ed986}
-  p.s{margin:0 0 12px;font-size:11px;line-height:1.6;color:#a094b8;letter-spacing:.5px}
-  .st{font-size:11px;color:#c4b8dc;margin:3px 0;letter-spacing:1px}
-  .st b{color:#e8b830}
-  .row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}
-  button.b{pointer-events:auto;cursor:pointer;font-family:inherit;font-weight:bold;font-size:11px;
-    letter-spacing:2px;padding:11px 10px;background:#5ed986;color:#0d2b18;border:3px solid #0a0710;
-    box-shadow:4px 4px 0 #0a0710;flex:1;min-width:104px;text-transform:uppercase;transition:transform .05s,box-shadow .05s}
-  button.b:active{transform:translate(4px,4px);box-shadow:0 0 0 #0a0710}
-  button.b.a{background:#f09a52;color:#3a1c08}
-  button.b.g{background:#3d3050;color:#c4b8dc}
-  button.b:disabled{background:#332a44;color:#6d6188;cursor:default}
-  .it{display:flex;gap:9px;align-items:center;padding:8px;margin-bottom:6px;background:#1b1424;border:3px solid #0a0710}
-  .it .t{flex:1}
-  .it .n{font-size:11px;letter-spacing:1px;color:#e8b830;margin-bottom:3px}
-  .it .d{font-size:10px;line-height:1.5;color:#a094b8}
-  .it button.b{flex:0 0 auto;min-width:72px;padding:9px 6px}
-  .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
-  .fc{background:#1b1424;border:3px solid #0a0710;padding:6px;text-align:center}
-  .fc .q{font-size:22px;color:#3d3050}
-  .fc .l{font-size:8px;letter-spacing:.5px;color:#6d6188;margin-top:3px}
-  .fc.got .l{color:#e8b830}
-  canvas.icon{width:48px;height:48px;image-rendering:pixelated;margin:0 auto;display:block}
+  *{-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:#0b0d14;overflow:hidden;overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;touch-action:none;
+    font-family:ui-monospace,"DejaVu Sans Mono",monospace;color:#fff}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;touch-action:none}
+  canvas#screen{image-rendering:pixelated;image-rendering:crisp-edges;display:block;touch-action:none}
+  #hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+    font-size:13px;letter-spacing:.5px;color:#cfd6e6;opacity:.75;text-align:center;
+    text-shadow:0 2px 0 #000;pointer-events:none}
+  @media (pointer:coarse){ #hint{display:none} }
+  #click{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:#0b0d14;cursor:pointer;z-index:5;flex-direction:column;gap:14px}
+  #click b{font-size:28px;letter-spacing:3px}
+  #click span{font-size:13px;color:#8d97ad;letter-spacing:1px}
 </style>
 </head>
 <body>
-<div id="wrap"><div id="stage"><canvas id="cv"></canvas><div id="ui"></div></div></div>
+<div id="wrap"><canvas id="screen"></canvas></div>
+<div id="hint"></div>
+<div id="click"><b>THE LITTLE DIGGER</b><span id="clickhint">click to play &nbsp;·&nbsp; wasd move &nbsp;·&nbsp; mouse look &nbsp;·&nbsp; space jump &nbsp;·&nbsp; e dig</span></div>
 <script>
 "use strict";
-/* ============================================================
-   DOWNSHAFT
-   You are a miner on a rope. You break a vein of ore and the
-   rubble above it drops into the hole. You drop with it.
-   That is the whole game: pick the vein that drops you furthest.
-   ============================================================ */
-
-const TILE = 16, COLS = 10, VIS = 13, HUD = 26;
-const W = COLS*TILE, H = HUD + VIS*TILE;   // 160 x 234
-
-const cv = document.getElementById('cv'), ctx = cv.getContext('2d',{alpha:false});
-const uiEl = document.getElementById('ui'), stage = document.getElementById('stage');
-let SCALE = 3;
+//////////////////////////////////////////////////////////////////////////////
+// low-res software 3d. no libraries, no assets, no network.
+//////////////////////////////////////////////////////////////////////////////
+let IW = 400, IH = 225;                       // internal resolution (recomputed in fit)
+const screenCv = document.getElementById('screen');
+const cv = document.createElement('canvas');
+const g  = cv.getContext('2d');
+const sctx = screenCv.getContext('2d');
+const COARSE = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+// keep the pixel count roughly constant whatever shape the screen is, so a
+// phone in portrait gets a tall picture instead of a letterboxed sliver.
+const BUDGET = COARSE ? 62000 : 90000;
+const wrapEl = document.getElementById('wrap');
+let lastW = 0, lastH = 0;
+function viewport(){
+  const w = wrapEl.clientWidth  || document.documentElement.clientWidth  || innerWidth;
+  const h = wrapEl.clientHeight || document.documentElement.clientHeight || innerHeight;
+  return {w, h};
+}
 function fit(){
-  SCALE = Math.max(2, Math.floor(Math.min(window.innerWidth/W, window.innerHeight/H)));
-  cv.width = W; cv.height = H;
-  cv.style.width = (W*SCALE)+'px'; cv.style.height = (H*SCALE)+'px';
-  stage.style.width = (W*SCALE)+'px'; stage.style.height = (H*SCALE)+'px';
-  ctx.imageSmoothingEnabled = false;
+  const vp = viewport(), w = vp.w, h = vp.h, a = w/h;
+  lastW = w; lastH = h;
+  IW = clamp(Math.round(Math.sqrt(BUDGET*a)), 200, 560);
+  IH = clamp(Math.round(Math.sqrt(BUDGET/a)), 160, 560);
+  cv.width = IW; cv.height = IH;
+  screenCv.width = IW; screenCv.height = IH;
+  let sw = w, sh = Math.round(w*IH/IW);
+  if(sh > h){ sh = h; sw = Math.round(h*IW/IH); }
+  if(!COARSE){                                  // crisp integer scaling on desktop
+    const k = Math.max(1, Math.min(Math.floor(w/IW), Math.floor(h/IH)));
+    sw = IW*k; sh = IH*k;
+  }
+  screenCv.style.width = sw+'px'; screenCv.style.height = sh+'px';
+  sctx.imageSmoothingEnabled = false; g.imageSmoothingEnabled = false;
 }
-window.addEventListener('resize', fit); fit();
+addEventListener('resize', ()=>setTimeout(fit,50));
+addEventListener('orientationchange', ()=>setTimeout(fit,200));
 
-/* ---------------- pixel font: 3x5 ---------------- */
-const FONT = {
- A:'25755',B:'65656',C:'34443',D:'65556',E:'74647',F:'74644',G:'34553',H:'55755',I:'72227',
- J:'11152',K:'55655',L:'44447',M:'57755',N:'65555',O:'25552',P:'65644',Q:'25563',R:'65655',
- S:'34216',T:'72222',U:'55553',V:'55552',W:'55775',X:'55255',Y:'55222',Z:'71247',
- '0':'75557','1':'26227','2':'61247','3':'71317','4':'55711','5':'74717','6':'74757',
- '7':'71222','8':'75757','9':'75717',' ':'00000','.':'00002','-':'00700',':':'02020',
- '!':'22202','/':'11244','+':'02720','%':'51245','?':'61202',',':'00024','$':'27671',
- '(':'12221',')':'42224','x':'00520',"'":'22000','#':'57575'
-};
-function textW(s,sc){ return s.length*4*sc - sc; }
-function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x|0,y|0,w|0,h|0); }
-function text(s,x,y,c,sc){
-  sc = sc||1; s = String(s).toUpperCase();
-  let cx = x|0;
-  for (const ch of s){
-    const g = FONT[ch] || FONT['?'];
-    for (let r=0;r<5;r++){
-      const bits = +g[r];
-      for (let b=0;b<3;b++) if (bits & (4>>b)) px(cx+b*sc, y+r*sc, sc, sc, c);
+//// math ////////////////////////////////////////////////////////////////////
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+function hash2(x,y){ let h=Math.sin(x*127.1+y*311.7)*43758.5453; return h-Math.floor(h); }
+function vnoise(x,y){
+  const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi;
+  const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+  return lerp(lerp(hash2(xi,yi),hash2(xi+1,yi),u), lerp(hash2(xi,yi+1),hash2(xi+1,yi+1),u), v);
+}
+// gentle rolling ground. flat-ish near the middle so running feels clean.
+function groundH(x,z){
+  let h = Math.sin(x*0.035)*1.6 + Math.cos(z*0.041)*1.5 + vnoise(x*0.03,z*0.03)*4.0;
+  h += vnoise(x*0.11,z*0.11)*0.7;
+  const d = Math.hypot(x,z);
+  h *= clamp((d-12)/26, 0.12, 1);
+  return h;
+}
+function groundN(x,z){
+  const e=0.9;
+  const hx = groundH(x+e,z)-groundH(x-e,z);
+  const hz = groundH(x,z+e)-groundH(x,z-e);
+  return [-hx, 2*e, -hz];
+}
+
+//// colour //////////////////////////////////////////////////////////////////
+function shade(c, f){
+  const r=clamp(Math.round(c[0]*f),0,255), gg=clamp(Math.round(c[1]*f),0,255), b=clamp(Math.round(c[2]*f),0,255);
+  return 'rgb('+r+','+gg+','+b+')';
+}
+function mix(a,b,t){ return [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)]; }
+fit();
+
+//// camera / projection /////////////////////////////////////////////////////
+const cam = { x:0, y:6, z:-2.2, yaw:0, pitch:-0.28, fov:1.05, shake:0 };
+let ctx = g, VW = IW, VH = IH, F = 1, CX = 0, CY = 0;
+let cs_y=1, sn_y=0, cs_p=1, sn_p=0, C=cam;
+
+function beginView(target, w, h, camera){
+  ctx = target; VW = w; VH = h; C = camera;
+  // vertical fov normally; on a tall screen, widen until the horizontal fov is sane
+  F = Math.min( (h*0.5)/Math.tan(camera.fov*0.5), (w*0.5)/Math.tan(1.10*0.5) );
+  CX = w*0.5; CY = h*0.5;
+  cs_y = Math.cos(camera.yaw); sn_y = Math.sin(camera.yaw);
+  cs_p = Math.cos(camera.pitch); sn_p = Math.sin(camera.pitch);
+}
+function toCam(x,y,z){
+  const dx=x-C.x, dy=y-C.y, dz=z-C.z;
+  const ex =  dx*cs_y - dz*sn_y;
+  const ez =  dx*sn_y + dz*cs_y;
+  const ey =  dy*cs_p - ez*sn_p;
+  const fz =  dy*sn_p + ez*cs_p;
+  return [ex, ey, fz];
+}
+const NEAR = 0.35;
+function clipNear(pts){
+  const out=[];
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i], b=pts[(i+1)%pts.length];
+    const ain=a[2]>=NEAR, bin=b[2]>=NEAR;
+    if(ain) out.push(a);
+    if(ain!==bin){
+      const t=(NEAR-a[2])/(b[2]-a[2]);
+      out.push([a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, NEAR]);
     }
-    cx += 4*sc;
-  }
-}
-function textSh(s,x,y,c,sc){ text(s,x+sc,y+sc,'#0a0710',sc); text(s,x,y,c,sc); }
-
-/* ---------------- audio ---------------- */
-let AC=null, MG=null, MUTED=false, nbuf=null;
-function ac(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)();
-  MG=AC.createGain(); MG.gain.value=.45; MG.connect(AC.destination);}catch(e){AC=null;} } return AC; }
-function tone(f,d,ty,v,f2){ if(MUTED||!ac())return; const t=AC.currentTime;
-  const o=AC.createOscillator(),g=AC.createGain(); o.type=ty||'square';
-  o.frequency.setValueAtTime(f,t); if(f2)o.frequency.exponentialRampToValueAtTime(Math.max(20,f2),t+d);
-  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v||.14,t+.005);
-  g.gain.exponentialRampToValueAtTime(.0008,t+d); o.connect(g); g.connect(MG); o.start(t); o.stop(t+d+.02); }
-function noise(d,v,lp){ if(MUTED||!ac())return; const t=AC.currentTime;
-  if(!nbuf){ nbuf=AC.createBuffer(1,AC.sampleRate*.5,AC.sampleRate); const a=nbuf.getChannelData(0);
-    for(let i=0;i<a.length;i++)a[i]=Math.random()*2-1; }
-  const s=AC.createBufferSource(); s.buffer=nbuf;
-  const f=AC.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(lp||1000,t);
-  const g=AC.createGain(); g.gain.setValueAtTime(v||.14,t); g.gain.exponentialRampToValueAtTime(.0008,t+d);
-  s.connect(f); f.connect(g); g.connect(MG); s.start(t); s.stop(t+d); }
-const SCALE_N=[0,3,5,7,10,12,15,17,19,22,24,27,29,31,34,36];
-function note(i,v){ tone(147*Math.pow(2,SCALE_N[Math.min(i,SCALE_N.length-1)]/12),.11,'square',v||.13); }
-
-/* ---------------- ore + layers ---------------- */
-// Each ore is a real thing with its own look, not just a hue.
-const ORE = [
-  {id:0, n:'COAL',     hi:'#5a5a72', mid:'#3a3a4c', lo:'#1e1e2a', spot:'#14141c', val:1},
-  {id:1, n:'COPPER',   hi:'#f0a05c', mid:'#c9702f', lo:'#7d3f14', spot:'#5ed986', val:2},
-  {id:2, n:'IRON',     hi:'#c98c72', mid:'#96604a', lo:'#5a3325', spot:'#e0b9a4', val:2},
-  {id:3, n:'GOLD',     hi:'#ffe066', mid:'#e0ac26', lo:'#96700e', spot:'#fff3b0', val:5},
-  {id:4, n:'EMERALD',  hi:'#6ee89a', mid:'#2fa85a', lo:'#166134', spot:'#c4ffd9', val:7},
-  {id:5, n:'AMETHYST', hi:'#c090f0', mid:'#8b4fc4', lo:'#512a7d', spot:'#e8d0ff', val:9},
-];
-const LAYERS = [
-  {n:'TOPSOIL',   from:0,    ores:[0,1,2],     wall:'#4a3524', bg:'#231810', dark:'#171009', air:.030, rock:.010},
-  {n:'CLAY',      from:100,  ores:[0,1,2,3],   wall:'#8a4a35', bg:'#3d1f16', dark:'#26120c', air:.026, rock:.028},
-  {n:'LIMESTONE', from:250,  ores:[0,2,3,4],   wall:'#75757f', bg:'#2f2f3a', dark:'#1d1d26', air:.022, rock:.048},
-  {n:'ICE',       from:450,  ores:[0,3,4,5],   wall:'#4a7a94', bg:'#1c3341', dark:'#101f2a', air:.019, rock:.068},
-  {n:'BASALT',    from:700,  ores:[0,3,4,5],   wall:'#463046', bg:'#1e131e', dark:'#130b13', air:.016, rock:.090},
-  {n:'THE CORE',  from:1000, ores:[3,4,5],     wall:'#7a2a18', bg:'#2e0d08', dark:'#1c0704', air:.014, rock:.110},
-];
-function layerIdx(d){ let i=0; for(let k=0;k<LAYERS.length;k++) if(d>=LAYERS[k].from) i=k; return i; }
-function layerAt(d){ return LAYERS[layerIdx(d)]; }
-
-/* ---------------- buried finds (16x16 sprites) ---------------- */
-const FP = ['#0a0710','#e8dcc0','#b09878','#5ed986','#e8b830','#c9502f','#8bc4f0','#8b4fc4'];
-const FINDS = [
- {n:'SKULL', from:0, s:[
- '................','.....111111.....','...1122221111...','..112222211111..',
- '..122022201111..','..122022201111..','..1220222011111.','..12222220011111',
- '..1222222001111.','..111222200111..','...1121212111...','....11111111....',
- '.....1.1.1.1....','................','................','................']},
- {n:'JAR', from:100, s:[
- '................','.....555555.....','....55555555....','.....522225.....',
- '....55522555....','...5522222255...','..552222222255..','..522244422255..',
- '..522244422255..','..552222222255..','...5522222255...','....55555555....',
- '.....555555.....','................','................','................']},
- {n:'AMMONITE', from:250, s:[
- '................','.....111111.....','...1122222211...','..112211112211..',
- '.11221122112211.','.12211221122111.','.12212211221121.','.12212211221121.',
- '.12211221122121.','.11221122112211.','..112211112211..','...1122222211...',
- '.....111111.....','................','................','................']},
- {n:'LANTERN', from:450, s:[
- '................','......1111......','.....100001.....','......1001......',
- '....11111111....','...1044444401...','...1044444401...','...1044444401...',
- '...1044444401...','...1044444401...','....11111111....','.....100001.....',
- '......1111......','................','................','................']},
- {n:'IDOL', from:700, s:[
- '................','....11111111....','...1222222221...','..122222222221..',
- '..122077022221..','..122077022221..','..122222222221..','..122200222221..',
- '..122022202221..','..122200022221..','...1222222221...','....11111111....',
- '.....1.11.1.....','................','................','................']},
- {n:'METEORITE', from:1000, s:[
- '................','......1111......','....11555511....','...1155555511...',
- '..115544445511..','..15544444455 1.','.1554444444551..','.1544444444451..',
- '.1554444444551..','..15544444551...','..115544445511..','...1155555511...',
- '....11111111....','................','................','................']},
-];
-
-/* ---------------- save ---------------- */
-const KEY='downshaft:v1';
-const NEW = () => ({cash:0, best:0, runs:0, depot:0, finds:[], lamp:0, drill:0, dyn:0, boots:0, cart:0});
-let SV = NEW(), mem = null;
-async function load(){ try{ const r=await window.storage.get(KEY); if(r&&r.value) return JSON.parse(r.value);}catch(e){} return mem; }
-async function save(){ mem=JSON.parse(JSON.stringify(SV)); try{ await window.storage.set(KEY, JSON.stringify(SV)); }catch(e){} }
-
-const MAXAIR = () => 30 + SV.lamp*12;
-const DRILLS = () => SV.drill;
-const DYNS   = () => SV.dyn;
-
-/* ---------------- world ---------------- */
-const rows = new Map();
-let findSeeds = new Map();     // row -> {c, r, fi}
-function hash(a,b,s){ let h=(a*374761393 + b*668265263 + (s||0)*2246822519) >>> 0;
-  h=(h^(h>>13))>>>0; h=(h*1274126177)>>>0; return (h^(h>>16))>>>0; }
-let SEED = 1;
-
-function planFinds(r){
-  // one buried thing roughly every 55 rows, anchored to a 2x2 space
-  const band = Math.floor(r/55);
-  if (findSeeds.has(band)) return findSeeds.get(band);
-  const h = hash(band, 7, SEED);
-  const fr = band*55 + 12 + (h % 30);
-  const fc = (h>>8) % (COLS-1);
-  const avail = FINDS.map((f,i)=>i).filter(i=>fr>=FINDS[i].from);
-  const fi = avail.length ? avail[(h>>16)%avail.length] : 0;
-  const o = {r:fr, c:fc, fi};
-  findSeeds.set(band, o); return o;
-}
-function genRow(r){
-  const L = layerAt(r), arr = new Array(COLS);
-  for (let c=0;c<COLS;c++){
-    const h1 = hash(c,r,SEED), h2 = hash(c,r,SEED+991);
-    const q = (h1 % 1000)/1000;
-    if (r > 3 && q < L.rock){ arr[c] = {k:'rock', s:h2}; continue; }
-    if (r > 3 && q < L.rock + L.air){ arr[c] = {k:'air', s:h2}; continue; }
-    // ore veins: coarse blobs 2 wide x 3 tall, roughened by per-tile noise
-    const blob = hash(Math.floor(c/2), Math.floor(r/3), SEED+55);
-    let idx = blob % L.ores.length;
-    if ((h2 % 100) < 20) idx = (h2>>7) % L.ores.length;
-    arr[c] = {k:'ore', m:L.ores[idx], s:h2};
-  }
-  // stamp a buried find into the rock
-  for (const band of [Math.floor(r/55)-1, Math.floor(r/55)]){
-    if (band < 0) continue;
-    const f = planFinds(band*55);
-    if (r >= f.r && r < f.r+2){
-      for (let dc=0;dc<2;dc++){
-        const c = f.c+dc;
-        if (c<COLS) arr[c] = {k:'find', fi:f.fi, fr:f.r, fc:f.c, dx:dc, dy:r-f.r, s:1};
-      }
-    }
-  }
-  return arr;
-}
-function getRow(r){ if(r<0) return null; let a=rows.get(r); if(!a){ a=genRow(r); rows.set(r,a);} return a; }
-function T(c,r){ if(c<0||c>=COLS||r<0) return undefined; return getRow(r)[c]; }
-function setT(c,r,v){ getRow(r)[c]=v; }
-
-/* ---------------- run state ---------------- */
-const g = {
-  air:0, cash:0, depth:0, start:0, runFinds:[],
-  drills:0, dyns:0, armed:null,
-  miner:{c:4, r:0, rr:0, cc:4}, busy:false, digs:0,
-  nextDepot:100, lastLayer:-1,
-};
-let mode='boot';
-let parts=[], floats=[], shake=0, flash=0, hitstop=0, banner=null, bannerT=0;
-let camY=0, camTarget=0, fallSpeed=0, sparks=[];
-let hoverCluster=null, hoverDrop=0, hoverVal=0, hoverKind='';
-let now=0, last=0, toastT=0, toastMsg='';
-let digSwing=0, landSquash=0, minerFlash=0;
-
-function toast(m){ toastMsg=m; toastT=now+1400; }
-
-/* ---------------- clusters ---------------- */
-function nb(c,r){ return [[c,r-1],[c,r+1],[c-1,r],[c+1,r]]; }
-function cluster(c,r){
-  const t = T(c,r); if (!t || t.k!=='ore') return [];
-  const seen=new Set(), out=[], stk=[[c,r]];
-  while (stk.length){
-    const [x,y]=stk.pop(); if (x<0||x>=COLS||y<0) continue;
-    const k=x+','+y; if (seen.has(k)) continue;
-    const q=T(x,y); if (!q||q.k!=='ore'||q.m!==t.m) continue;
-    seen.add(k); out.push([x,y]);
-    for (const n of nb(x,y)) stk.push(n);
   }
   return out;
 }
-
-/* ---------------- gravity: rubble falls, the miner rides it ---------------- */
-function snap(){
-  const r0 = Math.max(0, g.miner.r-40), r1 = g.miner.r+26;
-  const cols=[];
-  for (let c=0;c<COLS;c++){ const a=[]; for(let r=r0;r<=r1;r++) a.push(T(c,r)); cols.push(a); }
-  return {r0,r1,cols, mc:g.miner.c, mr:g.miner.r-r0};
-}
-function gravity(s){
-  let guard=0, changed=true;
-  while (changed && guard++<300){
-    changed=false;
-    for (let c=0;c<COLS;c++){
-      const col=s.cols[c]; let write=col.length-1;
-      for (let r=col.length-1;r>=0;r--){
-        if (c===s.mc && r===s.mr){ write=Math.min(write,r-1); continue; }
-        const t=col[r];
-        if (t){ if (write!==r){ col[write]=t; col[r]=null; t.drop=(t.drop||0)+(write-r); changed=true; } write--; }
-      }
-    }
-    const col=s.cols[s.mc];
-    if (s.mr+1 < col.length && !col[s.mr+1]){ s.mr++; changed=true; }
-    else {
-      for (const d of [-1,1,1,-1]){
-        const nc=s.mc+d; if (nc<0||nc>=COLS) continue;
-        const oc=s.cols[nc];
-        if (!oc[s.mr] && s.mr+1<oc.length && !oc[s.mr+1]){ s.mc=nc; s.mr++; changed=true; break; }
-      }
-    }
+function fillPoly(camPts, style, seal){
+  const p = clipNear(camPts);
+  if(p.length<3) return;
+  ctx.fillStyle = style;
+  if(seal){ ctx.strokeStyle = style; ctx.lineWidth = 1; }
+  ctx.beginPath();
+  for(let i=0;i<p.length;i++){
+    const s = F/p[i][2];
+    const sx = CX + p[i][0]*s, sy = CY - p[i][1]*s;
+    if(i===0) ctx.moveTo(sx,sy); else ctx.lineTo(sx,sy);
   }
-  return s;
-}
-function commit(s){
-  for (let c=0;c<COLS;c++) for (let i=0;i<s.cols[c].length;i++) setT(c, s.r0+i, s.cols[c][i]);
-  const fell = (s.r0+s.mr) - g.miner.r;
-  g.miner.c = s.mc; g.miner.r = s.r0+s.mr;
-  return fell;
-}
-function previewDrop(cells){
-  const s = snap();
-  const rm = new Set(cells.map(([c,r])=>c+','+r));
-  for (let c=0;c<COLS;c++) for (let i=0;i<s.cols[c].length;i++)
-    if (rm.has(c+','+(s.r0+i))) s.cols[c][i]=null;
-  gravity(s);
-  return (s.r0+s.mr) - g.miner.r;
+  ctx.closePath(); ctx.fill();
+  if(seal) ctx.stroke();
 }
 
-/* ---------------- juice ---------------- */
-function debris(x,y,pal,n,pow){
-  for (let i=0;i<n;i++){
-    const a=Math.random()*Math.PI*2, sp=(.4+Math.random()*1.5)*(pow||1);
-    parts.push({x:x+Math.random()*TILE-TILE/2, y:y+Math.random()*TILE-TILE/2,
-      vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-.9, s:1+((Math.random()*2)|0), life:1,
-      c:[pal.hi,pal.mid,pal.lo][(Math.random()*3)|0]});
-  }
-  if (parts.length>420) parts.splice(0,parts.length-420);
-}
-function dust(x,y,n){ for(let i=0;i<(n||5);i++)
-  parts.push({x:x+(Math.random()-.5)*TILE*2, y:y, vx:(Math.random()-.5)*1.3, vy:-Math.random()*.7,
-    s:1, life:.7, c:'#6d6188'}); }
-function fl(x,y,t,c){ floats.push({x,y,t,c,life:1,vy:-.5}); }
-
-/* ---------------- dig ---------------- */
-function dig(c,r){
-  const t = T(c,r); if (!t) return;
-  if (g.armed==='drill'){
-    if (g.drills<=0) return;
-    g.drills--; g.armed=null;
-    breakTiles([[c,r]], true);
-    noise(.2,.24,2600); tone(200,.14,'sawtooth',.14,90);
-    shake=Math.max(shake,4); return;
-  }
-  if (g.armed==='dyn'){
-    if (g.dyns<=0) return;
-    g.dyns--; g.armed=null;
-    const list=[];
-    for(let dc=-1;dc<=1;dc++) for(let dr=-1;dr<=1;dr++){
-      const nc=c+dc, nr=r+dr; if(nc>=0&&nc<COLS&&nr>=0&&T(nc,nr)) list.push([nc,nr]);
-    }
-    breakTiles(list, true);
-    noise(.5,.32,900); tone(70,.45,'sawtooth',.2,32);
-    shake=12; flash=.55; hitstop=110; return;
-  }
-  if (t.k==='rock'){ toast('SOLID ROCK'); tone(90,.09,'square',.09); shake=Math.max(shake,2); return; }
-  if (t.k==='air'){
-    if (g.air>=MAXAIR()){ toast('LAMP IS FULL'); return; }
-    g.air = Math.min(MAXAIR(), g.air+7);
-    setT(c,r,null);
-    const [sx,sy]=scr(c,r);
-    debris(sx+8,sy+8,{hi:'#d8fff0',mid:'#7fe8d0',lo:'#3fa898'},10,1.4);
-    fl(sx+8,sy,'+7 AIR','#7fe8d0'); flash=Math.max(flash,.2);
-    tone(660,.14,'triangle',.15,1180); tone(990,.16,'sine',.08);
-    settle(); return;
-  }
-  if (t.k==='find'){
-    setT(c,r,null); g.air--; g.digs++;
-    const [sx,sy]=scr(c,r);
-    debris(sx+8,sy+8,{hi:'#e8dcc0',mid:'#b09878',lo:'#6a5a44'},9,1.2);
-    noise(.12,.16,1800); tone(420,.1,'square',.12);
-    shake=Math.max(shake,3);
-    // whole thing free?
-    let done=true;
-    for(let dc=0;dc<2;dc++) for(let dr=0;dr<2;dr++){
-      const q=T(t.fc+dc, t.fr+dr);
-      if (q && q.k==='find' && q.fi===t.fi) done=false;
-    }
-    if (done){
-      const F=FINDS[t.fi];
-      if (!g.runFinds.includes(t.fi)) g.runFinds.push(t.fi);
-      flash=.7; shake=10; hitstop=140;
-      fl(sx+8, sy-6, F.n, '#e8b830');
-      toast('DUG OUT: '+F.n);
-      [0,90,180,300].forEach((d,i)=>setTimeout(()=>tone(392*Math.pow(2,i/5),.28,'triangle',.13),d));
-    }
-    settle(); return;
-  }
-  // ore
-  const cl = cluster(c,r);
-  if (cl.length<2){ toast('NEED A VEIN OF 2 OR MORE'); tone(120,.07,'sine',.08); return; }
-  g.air--; g.digs++;
-  breakTiles(cl, false);
-}
-function breakTiles(list, free){
-  let v=0, n=0;
-  list.forEach(([c,r],i)=>{
-    const t=T(c,r); if(!t) return;
-    const [sx,sy]=scr(c,r);
-    if (t.k==='ore'){
-      const o=ORE[t.m]; v += o.val; n++;
-      debris(sx+8,sy+8,o,5,1);
-      note(i, .12);
-    } else if (t.k==='rock'){
-      debris(sx+8,sy+8,{hi:'#7a7a88',mid:'#4a4a56',lo:'#26262e'},6,1.2);
-    } else if (t.k==='air'){
-      g.air=Math.min(MAXAIR(), g.air+7); debris(sx+8,sy+8,{hi:'#d8fff0',mid:'#7fe8d0',lo:'#3fa898'},8,1.3);
-    } else if (t.k==='find'){
-      debris(sx+8,sy+8,{hi:'#e8dcc0',mid:'#b09878',lo:'#6a5a44'},6,1);
-    }
-    setT(c,r,null);
-  });
-  if (v>0){
-    const gain = Math.round(v*(1+SV.cart*0.25)*(1+g.depth/260));
-    g.cash += gain;
-    const [sx,sy]=scr(list[0][0], list[0][1]);
-    fl(sx+8, sy, '+'+gain, n>=6?'#ffe066':'#e8dcc0');
-  }
-  digSwing = 1;
-  shake = Math.max(shake, 1.5+Math.min(6, list.length*.5));
-  noise(.1,.13,1600);
-  settle();
-}
-function settle(){
-  const s = snap();
-  gravity(s);
-  const fell = commit(s);
-  if (fell>0){
-    fallSpeed = Math.max(fallSpeed, fell);
-    g.depth = g.miner.r;
-    if (g.depth>SV.best){ SV.best=g.depth; }
-    tone(300,.12+Math.min(.5,fell*.05),'sine',.1, 120);
-    if (fell>=4) noise(.25,.12,600);
-  }
-  g.busy = true;
-  setTimeout(()=>{ g.busy=false; }, 60);
-  checkEvents(fell);
-}
-function checkEvents(fell){
-  const li = layerIdx(g.depth);
-  if (li !== g.lastLayer){
-    g.lastLayer = li;
-    banner = LAYERS[li].n; bannerT = now+2000;
-    flash=Math.max(flash,.3); shake=Math.max(shake,5);
-    tone(196,.5,'triangle',.12); tone(294,.5,'triangle',.09);
-  }
-  if (g.air<=0){ g.air=0; return endRun(false); }
-  if (g.depth >= g.nextDepot){
-    g.nextDepot = Math.floor(g.depth/100)*100 + 100;
-    openDepot();
-  }
+//// draw queue (painter's algorithm) ////////////////////////////////////////
+let queue = [];
+function push(depth, fn){ queue.push({d:depth, f:fn}); }
+function flush(){
+  queue.sort((a,b)=>b.d-a.d);
+  for(let i=0;i<queue.length;i++) queue[i].f();
+  queue.length = 0;
 }
 
-/* ---------------- run flow ---------------- */
-function startRun(from){
-  rows.clear(); findSeeds.clear();
-  SEED = 1 + ((Math.random()*1e6)|0);
-  g.air = MAXAIR(); g.cash=0; g.start=from; g.depth=from; g.digs=0;
-  g.runFinds=[]; g.drills=DRILLS(); g.dyns=DYNS(); g.armed=null;
-  g.miner.c=4; g.miner.r=from; g.miner.rr=from; g.miner.cc=4;
-  g.nextDepot = Math.floor(from/100)*100+100;
-  g.lastLayer = -1;
-  // carve a small pocket so the miner starts standing in open air
-  for (let r=Math.max(0,from-2); r<=from; r++)
-    for (let c=0;c<COLS;c++) setT(c,r,null);
-  parts=[]; floats=[]; sparks=[]; fallSpeed=0;
-  camY = from*TILE - (VIS*TILE)*0.42;
-  const s0 = gravity(snap()); commit(s0);
-  g.depth = g.miner.r; g.miner.rr = g.miner.r;
-  SV.runs++; save();
-  mode='run'; clearUI();
-  checkEvents(0);
-}
-function openDepot(){
-  mode='depot';
-  flash=.4; shake=6;
-  tone(392,.4,'triangle',.12); tone(523,.45,'triangle',.1);
-  const d=g.depth;
-  ui(`<div class="panel"><div class="card">
-    <h2>DEPOT ${Math.floor(d/100)*100} M</h2>
-    <p class="s">A cage bolted into the shaft wall. From here the winch can take you and your ore back up.</p>
-    <div class="st">ORE IN THE CART <b>$${g.cash}</b></div>
-    <div class="st">LAMP <b>${g.air}</b> of ${MAXAIR()} digs</div>
-    <div class="st">DUG OUT THIS TRIP <b>${g.runFinds.length}</b></div>
-    <div style="height:10px"></div>
-    <div class="row"><button class="b" id="up">RIDE UP — KEEP $${g.cash}, OPEN THIS DEPOT</button></div>
-    <div class="row"><button class="b a" id="on">KEEP DIGGING — LOSE IT ALL IF THE LAMP DIES</button></div>
-  </div></div>`);
-  on('#up', ()=>endRun(true));
-  on('#on', ()=>{ mode='run'; clearUI(); toast('KEEP GOING'); });
-}
-function endRun(cashed){
-  const d = Math.floor(g.depth/100)*100;
-  if (cashed){
-    SV.cash += g.cash;
-    if (d > SV.depot) SV.depot = d;
-  }
-  for (const fi of g.runFinds) if (!SV.finds.includes(fi)) SV.finds.push(fi);
-  save();
-  mode = cashed ? 'up' : 'dark';
-  if (!cashed){ tone(180,.9,'sawtooth',.15,60); noise(.7,.14,380); shake=14; }
-  if (cashed){ ui(`<div class="panel"><div class="card">
-    <h2>BACK UP TOP</h2>
-    <div class="st">DEPTH REACHED <b>${g.depth} M</b></div>
-    <div class="st">ORE SOLD <b>$${g.cash}</b></div>
-    <div class="st">DUG OUT <b>${g.runFinds.length}</b></div>
-    <div style="height:10px"></div>
-    <div class="row"><button class="b" id="k">CARRY ON</button></div>
-  </div></div>`); on('#k', surface); }
-  else { ui(`<div class="panel"><div class="card">
-    <h2 style="color:#f09a52">THE LAMP WENT OUT</h2>
-    <p class="s">You felt your way back up in the dark. The cart did not come with you. Whatever you dug free was already in your pockets.</p>
-    <div class="st">DEPTH REACHED <b>${g.depth} M</b></div>
-    <div class="st">ORE LOST <b>$${g.cash}</b></div>
-    <div style="height:10px"></div>
-    <div class="row"><button class="b" id="a">DOWN AGAIN</button></div>
-    <div class="row"><button class="b g" id="s">TOP</button></div>
-  </div></div>`); on('#a', ()=>startRun(SV.depot)); on('#s', surface); }
-}
-
-/* ---------------- menus ---------------- */
-function clearUI(){ uiEl.innerHTML=''; }
-function ui(h){ clearUI(); const d=document.createElement('div'); d.innerHTML=h.trim(); uiEl.appendChild(d.firstChild); }
-function on(sel,fn){ const n=uiEl.querySelector(sel); if(n) n.onclick=()=>{ ac(); tone(700,.04,'square',.09); fn(); }; }
-
-const SHOP = [
- {id:'lamp', n:'BIGGER LAMP', d:'12 more digs before the light goes.', c:()=>[120,300,700,1500][SV.lamp]||0, max:()=>SV.lamp>=4, buy:()=>SV.lamp++},
- {id:'drill',n:'HAND DRILL',  d:'One use per trip. Bores through anything, even solid rock.', c:()=>[260,650,1400][SV.drill]||0, max:()=>SV.drill>=3, buy:()=>SV.drill++},
- {id:'dyn',  n:'DYNAMITE',    d:'One stick per trip. Blows a three by three hole.', c:()=>[500,1200,2600][SV.dyn]||0, max:()=>SV.dyn>=3, buy:()=>SV.dyn++},
- {id:'cart', n:'BIGGER CART', d:'Ore sells for a quarter more each level.', c:()=>[400,1000,2200,4600][SV.cart]||0, max:()=>SV.cart>=4, buy:()=>SV.cart++},
+//// boxes ///////////////////////////////////////////////////////////////////
+const FACE = [
+  [[0,1,2,3],[0,1,0],1.00],  // top
+  [[4,5,6,7],[0,-1,0],0.42], // bottom
+  [[3,2,6,7],[0,0,1],0.74],  // +z
+  [[1,0,4,5],[0,0,-1],0.60], // -z
+  [[2,1,5,6],[1,0,0],0.86],  // +x
+  [[0,3,7,4],[-1,0,0],0.66], // -x
 ];
-function surface(){
-  mode='surface';
-  const opts=[];
-  for(let d=0; d<=SV.depot; d+=100) opts.push(d);
-  const btns = opts.slice(-4).reverse().map(d=>`<button class="b ${d===SV.depot?'':'g'}" data-d="${d}">${d===0?'THE TOP':d+' M'}</button>`).join('');
-  ui(`<div class="panel"><div class="card">
-    <h1>DOWNSHAFT</h1>
-    <p class="s">Break a vein and the rubble above drops into the hole. You drop with it. Pick the vein that drops you furthest — every dig costs lamp oil, and the lamp is all you have.</p>
-    <div class="st">CASH <b>$${SV.cash}</b> &nbsp; DEEPEST <b>${SV.best} M</b> &nbsp; DUG OUT <b>${SV.finds.length}/6</b></div>
-    <div style="height:10px"></div>
-    <div class="st" style="color:#5ed986">CLIMB DOWN TO</div>
-    <div class="row" id="ds">${btns}</div>
-    <div class="row"><button class="b a" id="sh">TOOL SHED</button><button class="b g" id="fi">FINDS</button></div>
-    <div class="row"><button class="b g" id="mu">${MUTED?'SOUND OFF':'SOUND ON'}</button></div>
-  </div></div>`);
-  uiEl.querySelectorAll('#ds button').forEach(b=>b.onclick=()=>{ ac(); tone(700,.04,'square',.09); startRun(+b.dataset.d); });
-  on('#sh', shop); on('#fi', finds); on('#mu', ()=>{ MUTED=!MUTED; surface(); });
-}
-function shop(){
-  mode='shop';
-  const rowsH = SHOP.map(s=>{
-    const m=s.max(), c=s.c(), can=!m&&SV.cash>=c;
-    return `<div class="it"><div class="t"><div class="n">${s.n}</div><div class="d">${s.d}</div></div>
-      <button class="b ${can?'':'g'}" data-id="${s.id}" ${can?'':'disabled'}>${m?'MAX':'$'+c}</button></div>`;
-  }).join('');
-  ui(`<div class="panel"><div class="card"><h2>TOOL SHED</h2>
-    <div class="st">CASH <b>$${SV.cash}</b></div><div style="height:8px"></div>
-    ${rowsH}<div class="row"><button class="b" id="b">BACK</button></div></div></div>`);
-  uiEl.querySelectorAll('.it button').forEach(b=>{ if(b.disabled) return;
-    b.onclick=()=>{ ac(); const s=SHOP.find(x=>x.id===b.dataset.id); const c=s.c();
-      if(SV.cash<c) return; SV.cash-=c; s.buy(); save();
-      tone(523,.09,'triangle',.14); tone(784,.14,'sine',.1); shop(); }; });
-  on('#b', surface);
-}
-function finds(){
-  mode='finds';
-  const cells = FINDS.map((f,i)=>{
-    const got = SV.finds.includes(i);
-    return `<div class="fc ${got?'got':''}">${got
-      ? `<canvas class="icon" data-fi="${i}" width="16" height="16"></canvas>`
-      : `<div class="q">?</div>`}<div class="l">${got?f.n:f.from+' M+'}</div></div>`;
-  }).join('');
-  ui(`<div class="panel"><div class="card"><h2>FINDS ${SV.finds.length}/6</h2>
-    <p class="s">Things sitting in the rock waiting to be chipped free. Each one costs four digs to get out. You keep them even if the lamp dies.</p>
-    <div class="fg">${cells}</div>
-    <div class="row"><button class="b" id="b">BACK</button></div></div></div>`);
-  uiEl.querySelectorAll('canvas.icon').forEach(cn=>{
-    const c2=cn.getContext('2d'), f=FINDS[+cn.dataset.fi];
-    for(let y=0;y<16;y++) for(let x=0;x<16;x++){
-      const ch=f.s[y][x]; if(ch==='.'||ch===' ') continue;
-      c2.fillStyle=FP[+ch]||FP[1]; c2.fillRect(x,y,1,1);
+function box(x,y,z,w,h,d,col,yaw,tint){
+  const cy=Math.cos(yaw||0), sy=Math.sin(yaw||0);
+  const hw=w/2, hd=d/2;
+  const local=[[-hw,h,-hd],[hw,h,-hd],[hw,h,hd],[-hw,h,hd],
+               [-hw,0,-hd],[hw,0,-hd],[hw,0,hd],[-hw,0,hd]];
+  const v=[];
+  for(const p of local){
+    const px = p[0]*cy - p[2]*sy + x;
+    const pz = p[0]*sy + p[2]*cy + z;
+    v.push(toCam(px, p[1]+y, pz));
+  }
+  let dep=0; for(const p of v) dep+=p[2]; dep/=8;
+  if(dep < -4) return;
+  push(dep, ()=>{
+    const faces=[];
+    for(const f of FACE){
+      const q=f[0].map(i=>v[i]);
+      let fd=0; for(const p of q) fd+=p[2]; fd/=4;
+      faces.push({q, fd, s:f[2]});
+    }
+    faces.sort((a,b)=>b.fd-a.fd);
+    for(const f of faces){
+      // backface cull in screen space
+      const p=clipNear(f.q); if(p.length<3) continue;
+      const s0=F/p[0][2], s1=F/p[1][2], s2=F/p[2][2];
+      const ax=p[0][0]*s0, ay=-p[0][1]*s0, bx=p[1][0]*s1, by=-p[1][1]*s1, cxx=p[2][0]*s2, cyy=-p[2][1]*s2;
+      if((bx-ax)*(cyy-ay)-(by-ay)*(cxx-ax) <= 0) continue;
+      let c = col;
+      if(tint) c = mix(c, tint[0], tint[1]);
+      const fog = clamp((f.fd-30)/70, 0, 0.8);
+      fillPoly(f.q, shade(mix(c, SKY_FAR, fog), f.s*LIGHT));
     }
   });
-  on('#b', surface);
 }
 
-/* ---------------- screen coords ---------------- */
-function scr(c,r){ return [c*TILE, HUD + r*TILE - camY]; }
-function tileAt(sx,sy){
-  if (sy<HUD) return null;
-  const c = Math.floor(sx/TILE), r = Math.floor((sy - HUD + camY)/TILE);
-  if (c<0||c>=COLS||r<0) return null;
-  return [c,r];
-}
+//////////////////////////////////////////////////////////////////////////////
+// world
+//////////////////////////////////////////////////////////////////////////////
+let SKY_TOP=[104,178,232], SKY_LOW=[186,222,242], SKY_FAR=[176,208,228], LIGHT=1;
+const GRASS_A=[104,168,74], GRASS_B=[132,196,86], GRASS_C=[78,142,66], SAND=[214,196,138];
 
-/* ---------------- input ---------------- */
-function local(e){ const b=cv.getBoundingClientRect();
-  return [(e.clientX-b.left)*(W/b.width), (e.clientY-b.top)*(H/b.height)]; }
-cv.addEventListener('pointermove', e=>{
-  if (e.pointerType==='touch') return;
-  if (mode!=='run'){ hoverCluster=null; return; }
-  const [x,y]=local(e), t=tileAt(x,y);
-  if (!t){ hoverCluster=null; return; }
-  setHover(t[0],t[1]);
-});
-cv.addEventListener('pointerleave', ()=>{ hoverCluster=null; });
-function setHover(c,r){
-  const q=T(c,r);
-  if (!q){ hoverCluster=null; return; }
-  if (q.k==='ore'){
-    const cl=cluster(c,r);
-    if (cl.length<2){ hoverCluster=null; return; }
-    hoverCluster=cl; hoverKind='ore';
-    hoverDrop=previewDrop(cl);
-    let v=0; for(const [a,b] of cl) v+=ORE[T(a,b).m].val;
-    hoverVal=Math.round(v*(1+SV.cart*0.25)*(1+g.depth/260));
-  } else if (q.k==='air'||q.k==='find'||q.k==='rock'){
-    hoverCluster=[[c,r]]; hoverKind=q.k; hoverDrop=previewDrop([[c,r]]); hoverVal=0;
-  } else hoverCluster=null;
-}
-cv.addEventListener('pointerdown', e=>{
-  ac(); if (AC&&AC.state==='suspended') AC.resume();
-  const [x,y]=local(e);
-  if (mode==='boot'){ surface(); return; }
-  if (mode!=='run') return;
-  if (y<HUD){ hudClick(x,y); return; }
-  if (g.busy) return;
-  const t=tileAt(x,y); if(!t) return;
-  dig(t[0],t[1]);
-  hoverCluster=null;
-});
-function hudClick(x,y){
-  // tool buttons live on the right of the HUD
-  if (y>13 && x>W-40 && x<W-21){ if(g.drills>0){ g.armed = g.armed==='drill'?null:'drill'; tone(880,.06,'square',.1);} }
-  else if (y>13 && x>W-20){ if(g.dyns>0){ g.armed = g.armed==='dyn'?null:'dyn'; tone(880,.06,'square',.1);} }
-}
+const landmarks = [];
+function L(name,x,z,build,r,h){ landmarks.push({name,x,z,build,r:r||6,h:h||8}); }
 
-/* ---------------- tile art ---------------- */
-function drawOre(x,y,o,s){
-  px(x,y,TILE,TILE,o.mid);
-  px(x,y,TILE,2,o.hi); px(x,y,2,TILE,o.hi);
-  px(x,y+TILE-2,TILE,2,o.lo); px(x+TILE-2,y,2,TILE,o.lo);
-  px(x+TILE-2,y,2,2,o.mid); px(x,y+TILE-2,2,2,o.mid);
-  const a=s%4, b=(s>>3)%4, c=(s>>6)%3;
-  if (o.id===0){ // coal: rounded lumps
-    px(x+3+a,y+4+b,4,3,o.spot); px(x+8,y+9-c,3,3,o.spot); px(x+4,y+10,2,2,o.spot);
-  } else if (o.id===1){ // copper: diagonal streak + verdigris
-    px(x+3,y+9-a,3,2,o.hi); px(x+6,y+7-a,3,2,o.hi); px(x+9,y+5-a,3,2,o.hi);
-    px(x+10,y+10,2,2,o.spot);
-  } else if (o.id===2){ // iron: heavy speckle
-    px(x+4+a,y+4,2,2,o.spot); px(x+9,y+7+b,2,2,o.spot); px(x+5,y+10,2,2,o.spot); px(x+11,y+3,1,1,o.spot);
-  } else if (o.id===3){ // gold: bright flecks
-    px(x+4+a,y+5,2,2,o.spot); px(x+9,y+8,3,2,o.spot); px(x+6,y+11,2,1,o.spot); px(x+11,y+4,1,2,o.hi);
-  } else { // gems: a cut facet
-    px(x+5,y+4,6,2,o.lo); px(x+4,y+6,8,4,o.hi); px(x+5,y+10,6,2,o.lo);
-    px(x+6,y+7,3,2,o.spot);
+// crooked tree
+function crookedTree(x,z,seed,scale){
+  const s=scale||1, y=groundH(x,z);
+  const lean=(hash2(seed,7)-0.5)*0.9;
+  const bark=[104,72,50], leafA=[62,150,74], leafB=[92,186,88];
+  for(let i=0;i<5;i++){
+    const t=i/5;
+    box(x+lean*i*0.55*s, y+i*1.3*s, z+lean*i*0.25*s, 1.1*s*(1-t*0.4), 1.4*s, 1.1*s*(1-t*0.4), bark, lean*0.4);
   }
+  const tx=x+lean*2.6*s, tz=z+lean*1.2*s, ty=y+6.3*s;
+  box(tx, ty, tz, 5.4*s, 2.4*s, 5.4*s, leafA, 0.2);
+  box(tx-1.2*s, ty+1.8*s, tz+0.6*s, 4.0*s, 2.0*s, 4.0*s, leafB, -0.3);
+  box(tx+1.5*s, ty+1.0*s, tz-1.1*s, 2.8*s, 1.8*s, 2.8*s, leafA, 0.6);
 }
-function drawRock(x,y,s){
-  px(x,y,TILE,TILE,'#3f3f4a'); px(x,y,TILE,2,'#5c5c6c'); px(x,y,2,TILE,'#5c5c6c');
-  px(x,y+TILE-2,TILE,2,'#22222c'); px(x+TILE-2,y,2,TILE,'#22222c');
-  px(x+3,y+3,2,2,'#22222c'); px(x+11,y+3,2,2,'#22222c');
-  px(x+3,y+11,2,2,'#22222c'); px(x+11,y+11,2,2,'#22222c');
-  px(x+6,y+6,4,4,'#4c4c58');
+function pineTree(x,z,scale){
+  const s=scale||1, y=groundH(x,z);
+  box(x,y,z,0.9*s,2.2*s,0.9*s,[100,70,48],0);
+  for(let i=0;i<4;i++) box(x, y+1.6*s+i*1.5*s, z, (4.4-i*0.9)*s, 1.7*s, (4.4-i*0.9)*s, i%2?[70,160,84]:[54,134,72], i*0.4);
 }
-function drawAir(x,y,s,t){
-  const p = Math.sin(t/220 + s)*1;
-  px(x+3,y+3,10,10,'#2a5a5a');
-  px(x+4,y+4+p,8,8,'#7fe8d0');
-  px(x+5,y+5+p,4,3,'#d8fff0');
-  px(x+9,y+9+p,2,2,'#d8fff0');
-}
-function drawFindTile(x,y,t){
-  const F=FINDS[t.fi];
-  // each tile shows its quarter of the 16x16 sprite, doubled
-  const ox=t.dx*8, oy=t.dy*8;
-  px(x,y,TILE,TILE,'#4a3a2a');
-  for(let sy=0;sy<8;sy++) for(let sx=0;sx<8;sx++){
-    const ch=F.s[oy+sy][ox+sx];
-    if (ch==='.'||ch===' ') continue;
-    px(x+sx*2, y+sy*2, 2, 2, FP[+ch]||FP[1]);
-  }
-  px(x,y,TILE,1,'#6a5a44'); px(x,y,1,TILE,'#6a5a44');
-}
-const MINER_SP = [
- "....0000....","..00111100..",".0111111110.",".0111111180.",".0000000000.",
- "..03333330..","..03433430..","..03333330..","..00555500..",".0555555550.",
- ".0355555530.","..06666660..","..06600660..","..07700770.."];
-const MP = {'0':'#0a0710','1':'#e8b830','2':'#a37a12','3':'#e0a878','4':'#2a1810',
-            '5':'#3a6ec9','6':'#2a4a8c','7':'#7a4a28','8':'#fff3b0'};
-function drawMiner(x,y,sq){
-  const h=MINER_SP.length, w=12;
-  const sy = 1 + sq*0.35, sx = 1 - sq*0.25;
-  for(let r=0;r<h;r++) for(let c=0;c<w;c++){
-    const ch=MINER_SP[r][c]; if(ch==='.') continue;
-    const dx = x + Math.round((c-w/2)*sx), dy = y + Math.round((r-h)*sy) + h;
-    px(dx, dy, Math.max(1,Math.round(sx)), Math.max(1,Math.round(sy)), MP[ch]);
-  }
+function boulder(x,z,s,seed){
+  const y=groundH(x,z), c=[150,150,162];
+  box(x,y,z,3.4*s,2.0*s,3.0*s,c,hash2(seed,3)*2);
+  box(x+0.6*s,y+1.7*s,z-0.3*s,2.2*s,1.4*s,2.0*s,[168,168,178],hash2(seed,9)*2);
 }
 
-/* ---------------- render ---------------- */
-function render(){
-  const L = layerAt(g.depth);
-  px(0,0,W,H,L.bg);
-  ctx.save();
-  const sx = shake>.3 ? (Math.random()-.5)*shake : 0;
-  const sy = shake>.3 ? (Math.random()-.5)*shake : 0;
-  ctx.translate(Math.round(sx), Math.round(sy));
+L('the crooked tree', 34, -42, ()=>{
+  crookedTree(34,-42,3,1.5);
+  pineTree(28,-48,0.8); pineTree(41,-37,0.7);
+  boulder(30,-36,0.7,5);
+}, 8, 10);
 
-  // wall behind the dug shaft, with strata bands so layers read at a glance
-  const topRow = Math.floor(camY/TILE)-1, botRow = topRow + VIS + 2;
-  for (let r=topRow;r<=botRow;r++){
-    if (r<0) continue;
-    const y = HUD + r*TILE - camY;
-    const LL = layerAt(r);
-    px(0, y, W, TILE, LL.dark);
-    // strata streaks
-    const hh = hash(0,r,SEED+3);
-    px((hh%W), y+3, 3+(hh%5), 1, LL.bg);
-    px(((hh>>5)%W), y+10, 2+((hh>>4)%6), 1, LL.bg);
-    if (r % 100 === 0 && r>0){
-      // depot: planks bolted across the shaft
-      px(0,y+TILE-5,W,5,'#7a4a28'); px(0,y+TILE-5,W,1,'#a3703f');
-      for(let i=0;i<W;i+=8) px(i+2,y+TILE-4,1,3,'#4a2a14');
-      px(2,y+TILE-11,4,6,'#e8b830'); px(3,y+TILE-10,2,4,'#fff3b0');
-      textSh(String(r), 10, y+TILE-11, '#e8b830', 1);
+L('the stone arch', -48, 22, ()=>{
+  const x=-48,z=22,y=groundH(x,z), c=[196,186,168];
+  box(x-4,y,z,2.6,7.5,2.6,c,0.1);
+  box(x+4,y,z,2.6,7.0,2.6,c,-0.1);
+  box(x,y+7.0,z,11,2.0,3.0,[206,198,180],0);
+  box(x,y+9.0,z,4,1.2,2.2,[176,168,152],0.2);
+  boulder(x-8,z+5,0.8,11); boulder(x+7,z-6,0.6,12);
+}, 9, 11);
+
+L('the old tower', 12, 58, ()=>{
+  const x=12,z=58,y=groundH(x,z);
+  for(let i=0;i<7;i++) box(x,y+i*2.4,z, 6.2-i*0.35, 2.5, 6.2-i*0.35, i%2?[188,178,160]:[172,162,146], i*0.06);
+  box(x,y+17,z,7.2,1.2,7.2,[150,142,128],0);
+  box(x,y+18.2,z,5.2,3.2,5.2,[196,92,84],0.4);
+  box(x+3.2,y+2.2,z+3.0,1.2,1.6,1.2,[92,70,54],0);
+}, 10, 21);
+
+L('the red gate', -18, -56, ()=>{
+  const x=-18,z=-56,y=groundH(x,z), c=[204,84,72];
+  box(x-3.4,y,z,1.4,6.4,1.4,c,0); box(x+3.4,y,z,1.4,6.0,1.4,c,0);
+  box(x,y+6.2,z,9.6,1.1,1.8,[224,104,88],0);
+  box(x,y+5.0,z,7.4,0.7,1.2,[224,104,88],0);
+  pineTree(x-9,z+4,1.1); pineTree(x+10,z-3,0.9);
+}, 8, 8);
+
+L('the pond', 46, 30, ()=>{
+  const x=46,z=30,y=groundH(x,z);
+  // water: flat disc of quads
+  for(let a=0;a<12;a++){
+    const a0=a/12*Math.PI*2, a1=(a+1)/12*Math.PI*2, R=9;
+    const p=[toCam(x,y-0.4,z),
+             toCam(x+Math.cos(a0)*R, y-0.4, z+Math.sin(a0)*R),
+             toCam(x+Math.cos(a1)*R, y-0.4, z+Math.sin(a1)*R)];
+    const d=(p[0][2]+p[1][2]+p[2][2])/3;
+    push(d, ()=>{
+      const t=Math.sin(T*1.4+a)*0.06+0.5;
+      fillPoly(p, shade(mix([64,146,196],[110,196,224],t), LIGHT));
+    });
+  }
+  crookedTree(x-10,z-4,21,1.0); pineTree(x+9,z+6,1.0);
+  boulder(x+2,z-10,0.8,31);
+}, 11, 6);
+
+L('the lonely rock', -34, -14, ()=>{
+  boulder(-34,-14,2.2,41);
+  boulder(-30,-20,0.6,42); boulder(-39,-10,0.5,43);
+}, 8, 7);
+
+// scattered scenery
+const scenery = [];
+(function seedScenery(){
+  for(let i=0;i<220;i++){
+    const a=hash2(i,1)*Math.PI*2, r=8+hash2(i,2)*70;
+    const x=Math.cos(a)*r, z=Math.sin(a)*r;
+    let near=false;
+    for(const l of landmarks) if(Math.hypot(x-l.x,z-l.z)<l.r+3) near=true;
+    if(near) continue;
+    const k=hash2(i,4);
+    scenery.push({x,z, kind: k<0.62?'tuft' : k<0.80?'flower' : k<0.92?'rock':'tree', s:0.5+hash2(i,5)*0.9, seed:i});
+  }
+})();
+function drawScenery(){
+  for(const o of scenery){
+    const dx=o.x-C.x, dz=o.z-C.z; const dd=dx*dx+dz*dz;
+    const far = 90*quality;
+    if(dd>far*far) continue;
+    const y=groundH(o.x,o.z);
+    if(o.kind==='tuft'){
+      if(dd>52*52*quality*quality) continue;
+      box(o.x,y,o.z,0.5*o.s,0.9*o.s,0.5*o.s,[86,158,68],o.seed);
+      box(o.x+0.3*o.s,y,o.z+0.2*o.s,0.35*o.s,0.6*o.s,0.35*o.s,[112,182,80],o.seed*2);
+    } else if(o.kind==='flower'){
+      if(dd>46*46*quality*quality) continue;
+      box(o.x,y,o.z,0.22,0.7*o.s,0.22,[96,164,78],0);
+      const c = hash2(o.seed,8)<0.5?[240,206,96]:[236,124,180];
+      box(o.x,y+0.7*o.s,o.z,0.5*o.s,0.4*o.s,0.5*o.s,c,o.seed);
+    } else if(o.kind==='rock'){
+      boulder(o.x,o.z,0.35*o.s,o.seed);
+    } else {
+      if(hash2(o.seed,6)<0.4) crookedTree(o.x,o.z,o.seed,0.75*o.s);
+      else pineTree(o.x,o.z,0.9*o.s);
     }
   }
+}
 
-  // tiles
-  const hov = new Set();
-  if (hoverCluster) for(const [c,r] of hoverCluster) hov.add(c+','+r);
-  for (let r=topRow;r<=botRow;r++){
-    if (r<0) continue;
-    const row = getRow(r), y = HUD + r*TILE - camY;
-    for (let c=0;c<COLS;c++){
-      const t = row[c]; if(!t) continue;
-      const x = c*TILE;
-      const dy = t.drop ? -t.drop*TILE*t.dropA : 0;
-      if (t.k==='ore') drawOre(x, y+dy, ORE[t.m], t.s);
-      else if (t.k==='rock') drawRock(x, y+dy, t.s);
-      else if (t.k==='air') drawAir(x, y+dy, t.s, now);
-      else if (t.k==='find') drawFindTile(x, y+dy, t);
-      if (hov.has(c+','+r)){
-        const f = (Math.sin(now/90)*.5+.5);
-        const col = f>.5 ? '#ffffff' : '#e8b830';
-        px(x,y+dy,TILE,1,col); px(x,y+dy+TILE-1,TILE,1,col);
-        px(x,y+dy,1,TILE,col); px(x+TILE-1,y+dy,1,TILE,col);
+//// ground //////////////////////////////////////////////////////////////////
+const TILE = 3.0;
+let VIEW = 26;                 // tiles out from the camera, trimmed if the phone struggles
+let quality = 1, emaDt = 1/60;
+function drawGround(){
+  const bx = Math.floor(C.x/TILE), bz = Math.floor(C.z/TILE);
+  const R = VIEW*TILE;
+  const fwdx = sn_y, fwdz = cs_y;  // camera forward on ground
+  for(let i=-VIEW;i<=VIEW;i++){
+    for(let j=-VIEW;j<=VIEW;j++){
+      const tx=(bx+i)*TILE, tz=(bz+j)*TILE;
+      const mx=tx+TILE*0.5-C.x, mz=tz+TILE*0.5-C.z;
+      const dist=Math.hypot(mx,mz);
+      if(dist>R) continue;
+      if(dist>4 && (mx*fwdx+mz*fwdz)/dist < 0.15) continue; // cheap frustum cull
+      const p=[toCam(tx,groundH(tx,tz),tz),
+               toCam(tx+TILE,groundH(tx+TILE,tz),tz),
+               toCam(tx+TILE,groundH(tx+TILE,tz+TILE),tz+TILE),
+               toCam(tx,groundH(tx,tz+TILE),tz+TILE)];
+      if(p[0][2]<NEAR && p[1][2]<NEAR && p[2][2]<NEAR && p[3][2]<NEAR) continue;
+      const d=(p[0][2]+p[1][2]+p[2][2]+p[3][2])*0.25;
+      const n=vnoise(tx*0.09,tz*0.09);
+      let c = n<0.38?GRASS_C : n<0.68?GRASS_A : GRASS_B;
+      if(vnoise(tx*0.02+40,tz*0.02)>0.72) c = mix(c,SAND,0.55);
+      const nn=groundN(tx+TILE/2,tz+TILE/2);
+      const nl=Math.hypot(nn[0],nn[1],nn[2]);
+      const lit = 0.72 + 0.5*clamp((nn[0]*0.45+nn[1]*0.82+nn[2]*0.3)/nl,0,1);
+      const fog = clamp((d-30)/70,0,0.85);
+      push(d, ()=> fillPoly(p, shade(mix(c,SKY_FAR,fog), lit*LIGHT), true));
+    }
+  }
+}
+
+//// sky /////////////////////////////////////////////////////////////////////
+function drawSky(w,h){
+  const grd = ctx.createLinearGradient(0,0,0,h);
+  grd.addColorStop(0, shade(SKY_TOP,LIGHT));
+  grd.addColorStop(1, shade(SKY_LOW,LIGHT));
+  ctx.fillStyle=grd; ctx.fillRect(0,0,w,h);
+  // clouds: cheap parallax bands
+  for(let i=0;i<7;i++){
+    const seed=i*13.7;
+    const yy = h*0.10 + i*7;
+    const w0 = 40+hash2(seed,1)*70;
+    let xx = ((hash2(seed,2)*1000 + T*(2+i*0.4) - C.yaw*(F*0.9)) % (w+260)) - 130;
+    ctx.fillStyle = 'rgba(255,255,255,'+(0.30+hash2(seed,3)*0.35)+')';
+    ctx.fillRect(Math.round(xx), Math.round(yy), Math.round(w0), 5);
+    ctx.fillRect(Math.round(xx+12), Math.round(yy-4), Math.round(w0*0.6), 5);
+  }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// the creature
+//////////////////////////////////////////////////////////////////////////////
+const P = {
+  x:0, z:6, y:0, vx:0, vz:0, vy:0, yaw:0, onGround:true,
+  speed:0, lean:0, squash:1, bob:0, digT:0, digTotal:0, pecks:0, peckA:0, land:0, tumble:0,
+  earL:0, earR:0, excite:0, headTurn:0, wag:0, spin:0
+};
+function creatureDraw(){
+  const y=P.y;
+  const sq = P.squash, st = 1/sq;
+  const bodyCol=[248,226,142], bellyCol=[255,244,196], darkCol=[214,178,96];
+  const yaw=P.yaw+P.spin, cy=Math.cos(yaw), sy=Math.sin(yaw);
+  const dig = P.digT>0;
+  // PECK. the whole body drops into it and snaps back.
+  const pk = P.peckA;
+  const crouch = dig ? 0.16 + pk*0.42 : 0;
+  const bodyY = y + 0.62*sq - crouch + Math.sin(P.bob)*0.06*Math.min(1,P.speed/6);
+  // legs
+  for(let i=0;i<4;i++){
+    const fx = (i<2? 0.34 : -0.36), fz = (i%2? 0.30 : -0.30);
+    const ph = P.bob + (i<2?0:Math.PI) + (i%2?Math.PI:0);
+    const swing = Math.min(1,P.speed/7) * Math.sin(ph)*0.30;
+    const px = P.x + (fx*cy - fz*sy), pz = P.z + (fx*sy + fz*cy);
+    box(px + swing*cy*0.6, y, pz + swing*sy*0.6, 0.24,0.62*sq,0.24, darkCol, yaw);
+  }
+  // tail
+  const tw = Math.sin(T*8)*0.4*(0.4+P.excite);
+  box(P.x - 0.62*cy, bodyY+0.12, P.z - 0.62*sy, 0.22, 0.5, 0.22, darkCol, yaw+tw);
+  // body
+  box(P.x, bodyY, P.z, 1.12*st, 0.66*sq, 0.78*st, bodyCol, yaw);
+  box(P.x, bodyY+0.02, P.z, 0.90*st, 0.30*sq, 0.60*st, bellyCol, yaw);
+  // head
+  const ht = P.headTurn;
+  const reach = 0.62 + (dig? pk*0.34 : 0);
+  const hx = P.x + reach*Math.cos(yaw+ht), hz = P.z + reach*Math.sin(yaw+ht);
+  const hy = bodyY + 0.52*sq - (dig? pk*0.80 : 0);
+  box(hx, hy, hz, 0.66*st, 0.58*sq, 0.70*st, bodyCol, yaw+ht);
+  // snout
+  box(hx+0.42*Math.cos(yaw+ht), hy+0.10, hz+0.42*Math.sin(yaw+ht), 0.34,0.26,0.34, bellyCol, yaw+ht);
+  // eyes
+  for(const s of [-1,1]){
+    const ex = hx + 0.30*Math.cos(yaw+ht) - s*0.20*Math.sin(yaw+ht);
+    const ez = hz + 0.30*Math.sin(yaw+ht) + s*0.20*Math.cos(yaw+ht);
+    box(ex, hy+0.34, ez, 0.13,0.13,0.13, [34,30,40], yaw+ht);
+  }
+  // ears — this is the whole treasure sense, so give it room
+  for(const s of [-1,1]){
+    const droop = s<0? P.earL : P.earR;
+    const ex = hx - 0.06*Math.cos(yaw+ht) - s*0.24*Math.sin(yaw+ht);
+    const ez = hz - 0.06*Math.sin(yaw+ht) + s*0.24*Math.cos(yaw+ht);
+    const up = 0.30 + droop*0.55;
+    box(ex, hy+0.50, ez, 0.20, up, 0.24, darkCol, yaw+ht + s*droop*0.35);
+    box(ex, hy+0.50+up, ez, 0.16, 0.16, 0.20, [255,190,180], yaw+ht);
+  }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// holes, treasure, particles
+//////////////////////////////////////////////////////////////////////////////
+const holes=[], parts=[];
+function drawHoles(){
+  for(const h of holes){
+    if(Math.hypot(h.x-C.x,h.z-C.z)>58) continue;
+    const y=groundH(h.x,h.z)+0.03;
+    const p=[]; const n=8;
+    for(let i=0;i<n;i++){ const a=i/n*Math.PI*2;
+      p.push(toCam(h.x+Math.cos(a)*h.r, y, h.z+Math.sin(a)*h.r)); }
+    let d=0; for(const q of p) d+=q[2]; d/=n;
+    if(d<0) continue;
+    push(d-0.02, ()=> fillPoly(p, shade([74,52,38], LIGHT)));
+    // rim of thrown dirt
+    for(let i=0;i<5;i++){
+      const a=i/5*Math.PI*2+h.x;
+      box(h.x+Math.cos(a)*h.r*1.15, y-0.05, h.z+Math.sin(a)*h.r*1.15, 0.3,0.16,0.3,[112,84,58],a);
+    }
+  }
+}
+function spawnDirt(x,y,z,n,col){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, sp=1.5+Math.random()*4;
+    parts.push({x,y,z, vx:Math.cos(a)*sp, vy:2.5+Math.random()*4.5, vz:Math.sin(a)*sp,
+      life:0.5+Math.random()*0.6, c:col||[124,90,60], s:0.10+Math.random()*0.16});
+  }
+}
+function updateParts(dt){
+  for(let i=parts.length-1;i>=0;i--){
+    const p=parts[i];
+    p.vy-=22*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt; p.life-=dt;
+    const gh=groundH(p.x,p.z);
+    if(p.y<gh){ p.y=gh; p.vy*=-0.3; p.vx*=0.6; p.vz*=0.6; }
+    if(p.life<=0) parts.splice(i,1);
+  }
+}
+function drawParts(){ for(const p of parts) box(p.x,p.y,p.z,p.s,p.s,p.s,p.c,0); }
+
+//////////////////////////////////////////////////////////////////////////////
+// audio — small synth, no files
+//////////////////////////////////////////////////////////////////////////////
+let A=null, master=null;
+function audioInit(){
+  if(A) return;
+  A = new (window.AudioContext||window.webkitAudioContext)();
+  master = A.createGain(); master.gain.value=0.32; master.connect(A.destination);
+}
+function tone(freq, dur, type, vol, at, slideTo){
+  if(!A) return;
+  const t=A.currentTime+(at||0);
+  const o=A.createOscillator(), gg=A.createGain();
+  o.type=type||'square'; o.frequency.setValueAtTime(freq,t);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t+dur);
+  gg.gain.setValueAtTime(0.0001,t);
+  gg.gain.exponentialRampToValueAtTime(vol||0.2, t+0.012);
+  gg.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.connect(gg); gg.connect(master); o.start(t); o.stop(t+dur+0.05);
+}
+function noise(dur, vol, at){
+  if(!A) return;
+  const t=A.currentTime+(at||0), n=Math.floor(A.sampleRate*dur);
+  const buf=A.createBuffer(1,n,A.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+  const s=A.createBufferSource(); s.buffer=buf;
+  const gg=A.createGain(); gg.gain.value=vol||0.2;
+  const f=A.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1100;
+  s.connect(f); f.connect(gg); gg.connect(master); s.start(t);
+}
+function chirp(stage){
+  const base=[300,420,560,760][stage];
+  tone(base, 0.08, 'square', 0.10, 0, base*1.35);
+  if(stage>=2) tone(base*1.5, 0.06, 'square', 0.07, 0.07);
+}
+// the voice. this is how the game talks to you.
+//  0 kweh.   flat, bored, nothing out here
+//  1 kweh?   something, somewhere
+//  2 kweh!   warmer
+//  3 KWEH!!  hot
+//  4 KWEH!!! standing on it
+function kweh(grade){
+  if(!A) return;
+  const base = [172, 210, 268, 340, 430][grade];
+  const v    = [0.12, 0.15, 0.19, 0.24, 0.30][grade];
+  if(grade===0){                       // flat and downward. deflating.
+    tone(base, 0.26, 'sawtooth', v, 0, base*0.78);
+  } else if(grade===1){                // curls up at the end. a question.
+    tone(base, 0.14, 'sawtooth', v, 0, base*0.96);
+    tone(base*1.02, 0.20, 'sawtooth', v, 0.13, base*1.5);
+  } else if(grade===2){
+    tone(base, 0.11, 'sawtooth', v, 0, base*1.28);
+    tone(base*1.3, 0.16, 'sawtooth', v*0.9, 0.10, base*1.34);
+  } else {                             // hot: stacked yelps, faster and higher
+    const n = grade===3? 3 : 5;
+    for(let i=0;i<n;i++){
+      const f = base*(1 + i*0.22);
+      tone(f, 0.10, 'sawtooth', v, i*0.085, f*1.42);
+      tone(f*2, 0.07, 'square', v*0.35, i*0.085);
+    }
+    if(grade===4) tone(base*3, 0.5, 'square', 0.07, 0.42, base*4);
+  }
+}
+function peckSound(i, speed){
+  noise(0.05, 0.16);
+  tone(140 - i*14, 0.07, 'triangle', 0.16, 0, 70);
+  tone(900 + i*160, 0.03, 'square', 0.05, 0.01);
+}
+// hunt music
+const SCALE=[0,2,4,7,9,12,14,16];
+let musicStep=0, musicNext=0, musicOn=false, musicIntensity=0;
+function musicTick(now){
+  if(!musicOn || !A) return;
+  const bpm = 132 + musicIntensity*26;
+  const beat = 60/bpm/2;
+  while(musicNext < now+0.15){
+    const s=musicStep;
+    const root=110*Math.pow(2, ((s>>4)%2)*0.0 );
+    const at = Math.max(0, musicNext-now);
+    // bass
+    if(s%4===0) tone(root*(s%16<8?1:1.125), beat*1.6, 'triangle', 0.16, at);
+    // arp
+    const n=SCALE[(s*3)%SCALE.length];
+    tone(root*4*Math.pow(2,n/12), beat*0.8, 'square', 0.055+musicIntensity*0.05, at);
+    if(musicIntensity>0.5 && s%2===0) tone(root*6*Math.pow(2,SCALE[(s*5)%SCALE.length]/12), beat*0.5, 'square', 0.035, at);
+    // hat
+    if(s%2===1) noise(0.03, 0.05, at);
+    musicNext += beat; musicStep++;
+  }
+}
+function fanfare(big){
+  const notes = big? [0,4,7,12,16,19,24] : [0,4,7,12];
+  notes.forEach((n,i)=> tone(262*Math.pow(2,n/12), 0.28, 'square', 0.18, i*0.075));
+  if(big) notes.forEach((n,i)=> tone(392*Math.pow(2,n/12), 0.4, 'triangle', 0.12, 0.5+i*0.06));
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// the hunt
+//////////////////////////////////////////////////////////////////////////////
+const HUNT_TIME = 100;
+// the whole hot-and-cold scale, in metres from the hole to the nearest buried thing
+function gradeOf(d){ return d>16 ? 0 : d>9 ? 1 : d>5.5 ? 2 : d>3 ? 3 : 4; }
+let hunt = null;          // {x,z,r,t,buried:[],found:[],maps:0}
+let huntCooldown = 0;
+let site = null;          // the glowing insects marking where a hunt can start
+let huntsSinceMap = 0;
+let banked = { finds:0, maps:0, notable:0 };
+let mapsHeld = [];        // {canvas,x,z,label}
+let activeMap = null;
+let toast = [], flash=0, celebrate=0;
+
+const SMALL_FINDS = ['a copper coin','a bent nail','a blue button','a sweet root','an old key',
+  'a snail shell','a glass bead','a chipped cup','a bird whistle','half a biscuit','a smooth pebble'];
+const NOTABLE_FINDS = ['a silver locket','a brass telescope','a jar of honey','a painted egg',
+  'a little bronze bell','a ring of old iron keys'];
+
+function pickSite(){
+  const a=Math.random()*Math.PI*2, r=18+Math.random()*44;
+  site = { x:Math.cos(a)*r, z:Math.sin(a)*r, r:14 };
+}
+pickSite();
+
+function startHunt(){
+  audioInit();
+  hunt = { x:site.x, z:site.z, r:site.r, t:HUNT_TIME, buried:[], found:[], maps:0, notable:0 };
+  // one guaranteed notable, one map slot, rest small
+  const n = 6;
+  let forceMap = (huntsSinceMap>=3) || (Math.random()<0.30);
+  let doubleMap = forceMap && Math.random()<0.16;
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, r=Math.sqrt(Math.random())*(site.r-2);
+    let kind='small';
+    if(i===0) kind='notable';
+    if(i===1 && forceMap) kind='map';
+    if(i===2 && doubleMap) kind='map';
+    hunt.buried.push({ x:site.x+Math.cos(a)*r, z:site.z+Math.sin(a)*r, kind });
+  }
+  musicOn=true; musicNext=A?A.currentTime:0; musicStep=0; musicIntensity=0;
+  // the camera lifts and looks down. you are in it now.
+  huntCam = 0; camIntro = 1.0; flash = 0.85; cam.shake = 3.0;
+  tone(392,0.09,'square',0.22,0);   tone(523,0.09,'square',0.22,0.08);
+  tone(659,0.09,'square',0.22,0.16);tone(880,0.30,'square',0.24,0.24);
+  noise(0.35,0.18,0);
+  cry(1);
+}
+function endHunt(){
+  musicOn=false;
+  const f=hunt.found.length;
+  banked.finds+=f; banked.maps+=hunt.maps; banked.notable+=hunt.notable;
+  if(hunt.maps===0) huntsSinceMap++; else huntsSinceMap=0;
+  say(f? ('you dug up '+f+(f===1?' thing':' things')) : 'nothing this time', 3.4);
+  hunt=null; huntCooldown=6; pickSite();
+  tone(392,0.3,'triangle',0.16,0); tone(262,0.5,'triangle',0.14,0.18);
+}
+function say(txt, dur){ toast.push({txt, t:dur||2.5, t0:dur||2.5}); }
+
+//// digging /////////////////////////////////////////////////////////////////
+// how fast it pecks. grows with everything you've ever dug up. never shown.
+function totalFinds(){ return banked.finds + (hunt? hunt.found.length : 0); }
+function digSpeed(){ return 1 + Math.min(3, Math.floor(totalFinds()/4))*0.28; }
+function peckCount(){ return 3 + Math.min(2, Math.floor(totalFinds()/8)); }
+
+const cries = [];   // floating "kweh" text, in world space
+function cry(grade, big){
+  const txt = ['kweh.','kweh?','kweh!','KWEH!!','KWEH!!!'][grade];
+  cries.push({ x:P.x, y:P.y+1.9, z:P.z, txt: big? 'KWEHHH!!!!' : txt,
+               grade: big?4:grade, life:big?1.9:1.15, vy: 1.5+grade*0.35 });
+  kweh(big?4:grade);
+  P.excite = 1;
+  if(grade>=3){ P.spin = (grade===4? 1:0.55); cam.shake = Math.max(cam.shake, grade===4?2.2:1.2); }
+}
+
+function tryDig(){
+  if(P.digT>0 || !P.onGround) return;
+  audioInit();
+  P.digTotal = 1.15 / digSpeed();
+  P.digT = P.digTotal;
+  P.pecks = 0;
+  P.vx*=0.2; P.vz*=0.2;
+}
+function peck(i){
+  const x=P.x + Math.cos(P.yaw)*0.8, z=P.z + Math.sin(P.yaw)*0.8;
+  P.peckA = 1;
+  spawnDirt(x, groundH(x,z)+0.15, z, 7);
+  peckSound(i, digSpeed());
+  cam.shake = Math.max(cam.shake, 0.9);
+}
+function finishDig(){
+  const x=P.x + Math.cos(P.yaw)*0.8, z=P.z + Math.sin(P.yaw)*0.8;
+  holes.push({x,z,r:0.85});
+  if(holes.length>60) holes.shift();
+  spawnDirt(x, groundH(x,z)+0.2, z, 18);
+  noise(0.18, 0.22); tone(90,0.16,'triangle',0.2,0,60);
+  cam.shake = 1.6;
+  if(!hunt){
+    // outside a hunt: is this the place a map showed?
+    for(let i=0;i<mapsHeld.length;i++){
+      const m=mapsHeld[i];
+      if(Math.hypot(x-m.x, z-m.z) < 6){
+        mapsHeld.splice(i,1);
+        if(activeMap===m) activeMap=null;
+        say('the picture was of this exact spot', 4.0);
+        flash=1; celebrate=2.2; fanfare(true);
+        spawnDirt(x, groundH(x,z)+0.5, z, 60, [252,214,96]);
+        banked.notable++;
+        cry(4, true);
+        return;
       }
     }
+    // it still tells you how close the picture's spot is
+    let dm=1e9;
+    for(const m of mapsHeld) dm = Math.min(dm, Math.hypot(x-m.x, z-m.z));
+    if(dm<1e8) cry(gradeOf(dm));
+    return;
   }
+  let hit=-1, best=1e9, nearest=1e9;
+  for(let i=0;i<hunt.buried.length;i++){
+    const b=hunt.buried[i], d=Math.hypot(b.x-x,b.z-z);
+    nearest = Math.min(nearest, d);
+    if(d<1.6 && d<best){ best=d; hit=i; }
+  }
+  if(hit<0){ cry(gradeOf(nearest)); return; }
+  const b = hunt.buried.splice(hit,1)[0];
+  hunt.found.push(b);
+  spawnDirt(x, groundH(x,z)+0.4, z, 26, [230,196,120]);
+  cry(4, true);
+  if(b.kind==='map'){
+    hunt.maps++;
+    const m = makeMap();
+    mapsHeld.push(m); activeMap=m;
+    flash=1; celebrate = hunt.maps>=2 ? 3.2 : 1.6;
+    musicIntensity = 1;
+    fanfare(hunt.maps>=2);
+    say(hunt.maps>=2 ? 'ANOTHER ONE' : 'a folded picture', hunt.maps>=2?4:3);
+    spawnDirt(x, groundH(x,z)+0.6, z, 50, [244,230,180]);
+  } else if(b.kind==='notable'){
+    hunt.notable++;
+    fanfare(false); flash=0.6; celebrate=1.0;
+    say(NOTABLE_FINDS[(Math.random()*NOTABLE_FINDS.length)|0], 2.6);
+    musicIntensity = Math.max(musicIntensity, 0.6);
+  } else {
+    tone(660,0.10,'square',0.16,0); tone(880,0.10,'square',0.14,0.08);
+    say(SMALL_FINDS[(Math.random()*SMALL_FINDS.length)|0], 2.0);
+    musicIntensity = Math.max(musicIntensity, 0.35);
+  }
+}
 
-  // speed lines while falling
-  const falling = Math.abs(g.miner.r - g.miner.rr) > .35;
-  if (falling){
-    for (let i=0;i<10;i++){
-      const lx = (hash(i, Math.floor(now/40), 5) % W);
-      const ly = (hash(i, Math.floor(now/40), 9) % (H-HUD)) + HUD;
-      px(lx, ly, 1, 5+ (i%4)*3, 'rgba(255,255,255,.20)');
+//// map pictures ////////////////////////////////////////////////////////////
+const MAPW=132, MAPH=84;
+function makeMap(){
+  const lm = landmarks[(Math.random()*landmarks.length)|0];
+  const diff = Math.random();
+  // frame the thing properly: distance scales with how big it is
+  const k = diff<0.4 ? 1.5+Math.random()*0.4 : diff<0.75 ? 2.0+Math.random()*0.7 : 2.6+Math.random()*1.2;
+  const dist = clamp(lm.h*k, 12, 46);
+  const ang = Math.random()*Math.PI*2;
+  const px = lm.x + Math.cos(ang)*dist, pz = lm.z + Math.sin(ang)*dist;
+  const yaw = Math.atan2(lm.z-pz, lm.x-px);
+  const mc = document.createElement('canvas'); mc.width=MAPW; mc.height=MAPH;
+  const mctx = mc.getContext('2d');
+
+  // time of day + weather push difficulty without changing the geometry
+  const oldSkyT=SKY_TOP, oldSkyL=SKY_LOW, oldFar=SKY_FAR, oldLight=LIGHT;
+  const mood = diff<0.4 ? 0 : diff<0.75 ? 1 : 2;
+  if(mood===1){ SKY_TOP=[246,168,120]; SKY_LOW=[252,222,168]; SKY_FAR=[240,196,158]; LIGHT=0.92; }
+  if(mood===2){ SKY_TOP=[74,84,150]; SKY_LOW=[204,148,168]; SKY_FAR=[146,132,172]; LIGHT=0.74; }
+
+  const eye = groundH(px,pz) + (mood===2? 3.2:2.4);
+  const aimY = groundH(lm.x,lm.z) + lm.h*0.52;
+  const mcam = { x:px, y:eye, z:pz, yaw,
+                 pitch: clamp(Math.atan2(aimY-eye, dist)-0.06, -0.25, 0.5), fov:0.92 };
+  beginView(mctx, MAPW, MAPH, mcam);
+  drawSky(MAPW, MAPH);
+  drawGround();
+  for(const l of landmarks) l.build();
+  drawScenery();
+  flush();
+
+  // painterly-ish treatment: posterise, warm the paper, vignette
+  const img = mctx.getImageData(0,0,MAPW,MAPH), d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    for(let k=0;k<3;k++) d[i+k] = Math.round(d[i+k]/34)*34;
+    d[i]   = clamp(d[i]*1.06+10,0,255);
+    d[i+1] = clamp(d[i+1]*1.00+6,0,255);
+    d[i+2] = clamp(d[i+2]*0.92+2,0,255);
+  }
+  mctx.putImageData(img,0,0);
+  const px2=mctx.createLinearGradient(0,0,0,MAPH);
+  px2.addColorStop(0,'rgba(196,150,80,0.16)'); px2.addColorStop(1,'rgba(120,80,40,0.22)');
+  mctx.fillStyle=px2; mctx.fillRect(0,0,MAPW,MAPH);
+  mctx.strokeStyle='rgba(88,58,32,0.55)'; mctx.lineWidth=3; mctx.strokeRect(1.5,1.5,MAPW-3,MAPH-3);
+
+  SKY_TOP=oldSkyT; SKY_LOW=oldSkyL; SKY_FAR=oldFar; LIGHT=oldLight;
+  return { canvas:mc, x:px, z:pz };
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// input
+//////////////////////////////////////////////////////////////////////////////
+//// touch //////////////////////////////////////////////////////////////////
+// left thumb steers, right thumb looks, two buttons. nothing else.
+const touchUI = { on:false, stick:{id:-1,ox:0,oy:0,x:0,y:0}, look:{id:-1,x:0,y:0},
+                  digHeld:0, jump:false, digPulse:0, jumpPulse:0 };
+function shortEdge(){ return Math.min(IW, IH); }
+function btnDig(){  const r = clamp(shortEdge()*0.135, 22, 42); return { x: IW-r*1.3, y: IH-r*1.3, r }; }
+function btnJump(){ const d=btnDig(); return { x: d.x - d.r*1.75, y: d.y - d.r*1.05, r: d.r*0.72 }; }
+function stickHome(){ const r = clamp(shortEdge()*0.17, 26, 52); return { x: r*1.35, y: IH - r*1.3, r }; }
+function inCircle(p,c){ const dx=p.x-c.x, dy=p.y-c.y; return dx*dx+dy*dy <= c.r*c.r*1.5; }
+function toInternal(t){
+  const r = screenCv.getBoundingClientRect();
+  return { x:(t.clientX-r.left)/r.width*IW, y:(t.clientY-r.top)/r.height*IH };
+}
+function onTouchStart(e){
+  touchUI.on = true; audioInit();
+  for(const t of e.changedTouches){
+    const p = toInternal(t);
+    if(inCircle(p, btnDig())){ touchUI.digHeld = t.identifier; touchUI.digPulse = 1; tryDig(); continue; }
+    if(inCircle(p, btnJump())){ touchUI.jump = true; touchUI.jumpPulse = 1; continue; }
+    if(p.x < IW*0.48 && touchUI.stick.id < 0){
+      const h = stickHome();
+      touchUI.stick = { id:t.identifier, ox:h.x, oy:h.y, x:p.x, y:p.y };
+      continue;
+    }
+    if(activeMap && mapsHeld.length>1){
+      const mw = Math.min(MAPW, Math.round(IW*0.34)), mh = Math.round(mw*MAPH/MAPW);
+      if(p.x>4 && p.x<6+mw && p.y>5 && p.y<7+mh){
+        activeMap = mapsHeld[(mapsHeld.indexOf(activeMap)+1)%mapsHeld.length];
+        continue;
+      }
+    }
+    if(touchUI.look.id < 0) touchUI.look = { id:t.identifier, x:p.x, y:p.y };
+  }
+  e.preventDefault();
+}
+function onTouchMove(e){
+  for(const t of e.changedTouches){
+    const p = toInternal(t);
+    if(t.identifier === touchUI.stick.id){ touchUI.stick.x=p.x; touchUI.stick.y=p.y; }
+    else if(t.identifier === touchUI.look.id){
+      cam.yaw   += (p.x - touchUI.look.x) * 0.011;
+      cam.pitch  = clamp(cam.pitch - (p.y - touchUI.look.y) * 0.009, -0.85, 0.35);
+      touchUI.look.x = p.x; touchUI.look.y = p.y;
     }
   }
+  e.preventDefault();
+}
+function onTouchEnd(e){
+  for(const t of e.changedTouches){
+    if(t.identifier === touchUI.stick.id) touchUI.stick.id = -1;
+    if(t.identifier === touchUI.look.id)  touchUI.look.id  = -1;
+    if(t.identifier === touchUI.digHeld)  touchUI.digHeld  = 0;
+  }
+  e.preventDefault();
+}
+screenCv.addEventListener('touchstart', onTouchStart, {passive:false});
+screenCv.addEventListener('touchmove',  onTouchMove,  {passive:false});
+screenCv.addEventListener('touchend',   onTouchEnd,   {passive:false});
+screenCv.addEventListener('touchcancel',onTouchEnd,   {passive:false});
+// a stick reading, -1..1 on each axis
+function stickVec(){
+  if(touchUI.stick.id < 0) return null;
+  const h = stickHome();
+  let dx = touchUI.stick.x - h.x, dy = touchUI.stick.y - h.y;
+  const len = Math.hypot(dx,dy);
+  if(len < h.r*0.18) return null;
+  const k = Math.min(1, len/(h.r*0.95)) / len;
+  return { x: dx*k, y: dy*k };
+}
 
-  // miner
-  const mx = g.miner.cc*TILE + TILE/2;
-  const my = HUD + g.miner.rr*TILE - camY + TILE;
-  drawMiner(Math.round(mx), Math.round(my), landSquash);
-  // lamp glow
-  const gr = ctx.createRadialGradient(mx, my-8, 4, mx, my-8, 74);
-  gr.addColorStop(0,'rgba(255,240,180,.16)'); gr.addColorStop(1,'rgba(255,240,180,0)');
-  ctx.fillStyle=gr; ctx.fillRect(0,HUD,W,H-HUD);
+const keys={};
+addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='Space') e.preventDefault();
+  if(e.code==='KeyE') tryDig();
+  if(e.code==='Tab'){ e.preventDefault();
+    if(mapsHeld.length){ const i=mapsHeld.indexOf(activeMap); activeMap = mapsHeld[(i+1)%mapsHeld.length]; } }
+});
+addEventListener('keyup',e=>keys[e.code]=false);
+const overlay=document.getElementById('click');
+function startPlay(){
+  audioInit();
+  if(A && A.state==='suspended') A.resume();
+  if(!COARSE){ try{ screenCv.requestPointerLock(); }catch(e){} }
+  overlay.style.display='none';
+  fit();
+}
+overlay.addEventListener('click', startPlay);
+overlay.addEventListener('touchend', e=>{ e.preventDefault(); startPlay(); }, {passive:false});
+screenCv.addEventListener('click',()=>{
+  if(!COARSE && document.pointerLockElement!==screenCv) screenCv.requestPointerLock();
+});
+if(COARSE) document.getElementById('hint').style.display='none';
+if(COARSE) document.getElementById('clickhint').textContent =
+  'tap to play · left thumb walks · right thumb looks · buttons dig and jump';
+addEventListener('mousemove',e=>{
+  if(document.pointerLockElement!==screenCv) return;
+  cam.yaw += e.movementX*0.0032;
+  cam.pitch = clamp(cam.pitch - e.movementY*0.0026, -0.85, 0.35);
+});
 
-  // particles
-  for (const p of parts){ if(p.life>0) px(p.x, p.y, p.s, p.s, p.c); }
-  for (const f of floats){
-    const a = f.life>.35?1:f.life/.35;
-    if (a>.5) textSh(f.t, f.x - textW(f.t,1)/2, f.y, f.c, 1);
+//////////////////////////////////////////////////////////////////////////////
+// update
+//////////////////////////////////////////////////////////////////////////////
+let T=0, last=performance.now();
+let signalStage=0, lastChirp=0, chirpGap=1.6;
+let huntCam=0, camIntro=0;
+
+function nearestBuried(){
+  let best=1e9, bx=0, bz=0;
+  if(hunt) for(const b of hunt.buried){
+    const d=Math.hypot(b.x-P.x, b.z-P.z);
+    if(d<best){ best=d; bx=b.x; bz=b.z; }
+  }
+  if(!hunt) for(const m of mapsHeld){
+    const d=Math.hypot(m.x-P.x, m.z-P.z);
+    if(d<best*1.0 && d<14){ best=d; bx=m.x; bz=m.z; }  // it knows when you're standing in the picture
+  }
+  return {d:best, x:bx, z:bz};
+}
+
+function update(dt){
+  T+=dt;
+
+  // ---- movement: momentum, skid, lean -------------------------------------
+  let ix=0, iz=0;
+  if(keys.KeyW) iz+=1; if(keys.KeyS) iz-=1;
+  if(keys.KeyA) ix-=1; if(keys.KeyD) ix+=1;
+  const sv = stickVec();
+  if(sv){ ix = sv.x; iz = -sv.y; }
+  const digging = P.digT>0;
+  if(digging){ ix=0; iz=0; }
+  const l=Math.hypot(ix,iz); if(l>0){ ix/=l; iz/=l; }
+  // camera-relative
+  const fx= Math.sin(cam.yaw), fz=Math.cos(cam.yaw);
+  const rx= Math.cos(cam.yaw), rz=-Math.sin(cam.yaw);
+  const wx = fx*iz + rx*ix, wz = fz*iz + rz*ix;
+
+  const MAXSP=11.5, ACC=52, FRIC=8.2;
+  if(l>0){
+    P.vx += wx*ACC*dt; P.vz += wz*ACC*dt;
+    const sp=Math.hypot(P.vx,P.vz);
+    if(sp>MAXSP){ P.vx=P.vx/sp*MAXSP; P.vz=P.vz/sp*MAXSP; }
+  } else {
+    const f=Math.exp(-FRIC*dt); P.vx*=f; P.vz*=f;
+  }
+  P.speed = Math.hypot(P.vx,P.vz);
+
+  // skid dust when turning hard at speed
+  if(P.speed>5 && l>0){
+    const dot = (P.vx*wx+P.vz*wz)/P.speed;
+    if(dot<0.55 && Math.random()<0.5) spawnDirt(P.x,P.y+0.05,P.z,1,[186,196,170]);
   }
 
-  // darkness beyond the lamp
-  const vg = ctx.createRadialGradient(mx, my-8, 26, mx, my-8, 132);
-  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(4,2,8,.82)');
-  ctx.fillStyle=vg; ctx.fillRect(0,HUD,W,H-HUD);
+  P.x += P.vx*dt; P.z += P.vz*dt;
+  const R=88;
+  const rr=Math.hypot(P.x,P.z);
+  if(rr>R){ P.x=P.x/rr*R; P.z=P.z/rr*R; P.vx*=0.4; P.vz*=0.4; }
 
-  ctx.restore();
+  // facing follows velocity, with lean into the turn
+  if(P.speed>0.4){
+    const want=Math.atan2(P.vz,P.vx);
+    let d=want-P.yaw; while(d>Math.PI)d-=Math.PI*2; while(d<-Math.PI)d+=Math.PI*2;
+    P.yaw += d*Math.min(1, dt*13);
+    P.lean = lerp(P.lean, clamp(d*2.2,-0.5,0.5), dt*8);
+  } else P.lean = lerp(P.lean,0,dt*6);
+  P.bob += P.speed*dt*2.6;
 
-  drawHUD();
+  // jump / gravity / landing
+  const gh = groundH(P.x,P.z);
+  if(touchUI.digHeld && !digging && P.onGround) tryDig();
+  if((keys.Space || touchUI.jump) && P.onGround && !digging){
+    touchUI.jump = false;
+    P.vy = 9.4; P.onGround=false; P.squash=0.82;
+    tone(420,0.10,'square',0.10,0,700);
+  }
+  P.vy -= 26*dt; P.y += P.vy*dt;
+  if(P.y<=gh){
+    if(!P.onGround){
+      const impact = Math.min(1, -P.vy/16);
+      P.squash = 1 - impact*0.42; P.land=impact;
+      cam.shake = Math.max(cam.shake, impact*3.2);
+      spawnDirt(P.x, gh, P.z, Math.round(3+impact*10), [188,198,168]);
+      noise(0.09, 0.10+impact*0.12);
+      if(impact>0.75){ P.tumble=0.5; tone(200,0.14,'triangle',0.14,0,120); }
+    }
+    P.y=gh; P.vy=0; P.onGround=true;
+  }
+  P.squash = lerp(P.squash, P.onGround? 1 : 1.10, dt*11);
+  P.tumble = Math.max(0, P.tumble-dt);
 
-  if (banner && now<bannerT){
-    const a=(bannerT-now)/2000;
-    const bw = textW(banner,2)+12;
-    const bx = (W-bw)/2, by = HUD + 46;
-    px(bx-2,by-4,bw+4,17,'#0a0710'); px(bx,by-2,bw,13,'#e8b830');
-    text(banner, bx+6, by+2, '#0a0710', 2);
+  // ---- digging: peck, peck, peck, then it tells you --------------------------
+  P.peckA = Math.max(0, P.peckA - dt*11);
+  P.spin  = Math.max(0, P.spin  - dt*3.2);
+  if(digging){
+    P.digT -= dt;
+    const n = peckCount();
+    const prog = 1 - P.digT/P.digTotal;
+    const due = Math.min(n, Math.floor(prog*n*1.18));
+    while(P.pecks < due){ peck(P.pecks); P.pecks++; }
+    if(P.digT<=0){ P.digT=0; finishDig(); }
   }
-  if (now<toastT){
-    const tw=textW(toastMsg,1)+8;
-    px((W-tw)/2-1, H-16, tw+2, 11, '#0a0710');
-    px((W-tw)/2, H-15, tw, 9, '#5ed986');
-    text(toastMsg, (W-tw)/2+4, H-13, '#0a0710', 1);
+  // floating kwehs
+  for(let i=cries.length-1;i>=0;i--){
+    const c=cries[i]; c.life-=dt; c.y += c.vy*dt; c.vy *= Math.pow(0.15,dt);
+    if(c.life<=0) cries.splice(i,1);
   }
-  if (flash>.01){ ctx.fillStyle='rgba(255,255,255,'+(flash*.6).toFixed(3)+')'; ctx.fillRect(0,0,W,H); }
-  if (mode==='boot'){
-    ctx.fillStyle='rgba(10,7,16,.88)'; ctx.fillRect(0,0,W,H);
-    textSh('DOWNSHAFT', (W-textW('DOWNSHAFT',2))/2, H/2-16, '#e8b830', 2);
-    text('TAP TO START', (W-textW('TAP TO START',1))/2, H/2+6, '#a094b8', 1);
+
+  // ---- the treasure sense (animation + sound only) ------------------------
+  const nb = nearestBuried();
+  let stage = -1;
+  if(nb.d<1e8){
+    stage = nb.d>19 ? 0 : nb.d>10 ? 1 : nb.d>4 ? 2 : 3;
   }
+  signalStage = stage;
+  const want = stage<0?0 : [0.12,0.45,0.78,1.0][stage];
+  P.excite = lerp(P.excite, want, dt*1.6);
+  P.earL = lerp(P.earL, want + (stage>=2? Math.sin(T*9)*0.10:0), dt*7);
+  P.earR = lerp(P.earR, want + (stage>=2? Math.sin(T*9+1.1)*0.10:0), dt*7);
+  // head turns toward it when close; never an arrow, just a look
+  let ht=0;
+  if(stage>=1){
+    const want2 = Math.atan2(nb.z-P.z, nb.x-P.x);
+    let d2 = want2-P.yaw; while(d2>Math.PI)d2-=Math.PI*2; while(d2<-Math.PI)d2+=Math.PI*2;
+    ht = clamp(d2, -0.9, 0.9) * (stage===1?0.30: stage===2?0.62:0.85);
+  }
+  if(stage===3) ht += Math.sin(T*17)*0.25;
+  P.headTurn = lerp(P.headTurn, ht, dt*6);
+  // idle wiggle when right on top of it
+  if(stage===3 && P.speed<0.5 && P.onGround && !digging){
+    P.x += Math.cos(T*7)*dt*0.5; P.z += Math.sin(T*7)*dt*0.5;
+  }
+  // an occasional idle noise. it is NOT the hot-and-cold signal — digging is.
+  if(stage>=0 && P.digT<=0){
+    chirpGap = stage>=3? 2.2 : 5.5;
+    if(T-lastChirp > chirpGap){ lastChirp=T; chirp(Math.min(1,stage)); }
+  }
+
+  // ---- hunt state ---------------------------------------------------------
+  if(hunt){
+    hunt.t -= dt;
+    musicIntensity = Math.max(musicIntensity*Math.pow(0.5,dt*0.7), hunt.t<25?0.55:0);
+    const out = Math.hypot(P.x-hunt.x, P.z-hunt.z) > hunt.r+8;
+    if(hunt.t<=0 || out) endHunt();
+  } else {
+    huntCooldown -= dt;
+    if(huntCooldown<=0 && Math.hypot(P.x-site.x,P.z-site.z) < site.r*0.7) startHunt();
+  }
+
+  // ---- camera -------------------------------------------------------------
+  // out in the world: over the shoulder. in a hunt: lifted up, looking down,
+  // the way the chocobo game frames the dig.
+  huntCam = lerp(huntCam, hunt?1:0, dt*(hunt?2.6:3.2));
+  camIntro = Math.max(0, camIntro - dt*1.25);
+  const swoop = camIntro*camIntro;
+  const back = lerp(8.2, 9.0, huntCam) + swoop*7;
+  const up   = lerp(3.6, 11.6, huntCam) + swoop*9;
+  cam.pitch  = clamp(cam.pitch, -0.85, 0.35);
+  const pitchFloor = lerp(-0.85, -0.62, huntCam);
+  const pitchCeil  = lerp( 0.35, -0.42, huntCam);
+  cam.pitch = clamp(cam.pitch, pitchFloor, pitchCeil);
+  const tx = P.x - Math.sin(cam.yaw)*back;
+  const tz = P.z - Math.cos(cam.yaw)*back;
+  const ty = P.y + up;
+  const k = 1-Math.exp(-dt*(hunt?7:9));
+  cam.x = lerp(cam.x, tx, k); cam.z = lerp(cam.z, tz, k); cam.y = lerp(cam.y, ty, k);
+  const camFloor = groundH(cam.x,cam.z)+1.4;
+  if(cam.y<camFloor) cam.y=camFloor;
+  cam.shake = Math.max(0, cam.shake - dt*7);
+
+  touchUI.jump = false;
+  updateParts(dt);
+  for(let i=toast.length-1;i>=0;i--){ toast[i].t-=dt; if(toast[i].t<=0) toast.splice(i,1); }
+  flash = Math.max(0, flash-dt*2.2);
+  celebrate = Math.max(0, celebrate-dt);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// hud
+//////////////////////////////////////////////////////////////////////////////
+function text(s,x,y,col,align){
+  g.font='8px ui-monospace, monospace';
+  g.textAlign=align||'left';
+  g.fillStyle='rgba(0,0,0,0.55)'; g.fillText(s,x+1,y+1);
+  g.fillStyle=col||'#fff'; g.fillText(s,x,y);
+}
+// the kwehs, drawn in the world above the creature
+const CRY_COL = ['#b9c4d6','#dfe6f0','#ffe9a8','#ffc65e','#ff8a3d'];
+function drawCries(){
+  for(const c of cries){
+    const p = toCam(c.x, c.y, c.z);
+    if(p[2] < 0.5) continue;
+    const s = F/p[2];
+    const sx = CX + p[0]*s, sy = CY - p[1]*s;
+    const pop = clamp((1 - (c.life/ (c.grade>=3?1.9:1.15)))*6, 0, 1);   // snap in
+    const fade = clamp(c.life*2.2, 0, 1);
+    const size = Math.round((7 + c.grade*3.5) * (0.6+0.4*pop) * clamp(s/9,0.55,1.7));
+    g.save();
+    g.globalAlpha = fade;
+    g.font = 'bold '+size+'px ui-monospace, monospace';
+    g.textAlign = 'center';
+    const wob = c.grade>=3 ? Math.sin(T*30)*c.grade*0.6 : 0;
+    g.fillStyle = 'rgba(0,0,0,0.7)';
+    g.fillText(c.txt, sx+1+wob, sy+1);
+    g.fillStyle = CRY_COL[c.grade];
+    g.fillText(c.txt, sx+wob, sy);
+    g.restore();
+  }
+}
+function ring(c, fill, stroke, lw){
+  g.beginPath(); g.arc(c.x, c.y, c.r, 0, Math.PI*2);
+  if(fill){ g.fillStyle=fill; g.fill(); }
+  if(stroke){ g.strokeStyle=stroke; g.lineWidth=lw||2; g.stroke(); }
+}
+function drawTouchUI(){
+  if(!touchUI.on) return;
+  const h = stickHome(), sv = stickVec();
+  g.globalAlpha = touchUI.stick.id>=0 ? 0.85 : 0.4;
+  ring(h, 'rgba(12,16,26,0.35)', 'rgba(255,255,255,0.55)', 2);
+  const kx = h.x + (sv? sv.x*h.r*0.62 : 0), ky = h.y + (sv? sv.y*h.r*0.62 : 0);
+  ring({x:kx,y:ky,r:h.r*0.40}, 'rgba(255,246,214,0.85)', 'rgba(40,34,28,0.7)', 2);
+  const d = btnDig(), j = btnJump();
+  g.globalAlpha = 0.85;
+  ring(d, touchUI.digHeld? 'rgba(255,214,110,0.92)' : 'rgba(214,150,74,0.62)', 'rgba(255,255,255,0.75)', 2);
+  ring(j, touchUI.jump? 'rgba(180,230,255,0.9)' : 'rgba(96,150,190,0.55)', 'rgba(255,255,255,0.65)', 2);
+  g.globalAlpha = 1;
+  g.textAlign='center'; g.fillStyle='#2a2018';
+  g.font='bold '+Math.round(d.r*0.62)+'px ui-monospace, monospace';
+  g.fillText('DIG', d.x, d.y + d.r*0.22);
+  g.fillStyle='#eaf6ff';
+  g.font='bold '+Math.round(j.r*0.72)+'px ui-monospace, monospace';
+  g.fillText('^', j.x, j.y + j.r*0.30);
 }
 function drawHUD(){
-  px(0,0,W,HUD,'#150e1c'); px(0,HUD-1,W,1,'#0a0710');
-  // depth
-  text('DEPTH', 3, 2, '#6d6188', 1);
-  const ds = String(g.depth);
-  textSh(ds, 3, 9, '#e8b830', 2);
-  text('M', 3+textW(ds,2)+3, 14, '#a094b8', 1);
-  // lamp bar
-  const bx=62, bw=54;
-  text('LAMP', bx, 2, '#6d6188', 1);
-  px(bx-1, 8, bw+2, 8, '#0a0710'); px(bx, 9, bw, 6, '#2a1f14');
-  const fr = Math.max(0, Math.min(1, g.air/MAXAIR()));
-  const col = fr>.5?'#ffe066': fr>.22?'#f09a52':'#e05c5c';
-  px(bx, 9, Math.round(bw*fr), 6, col); px(bx, 9, Math.round(bw*fr), 2, '#fff3b0');
-  text(String(g.air), bx+bw+3, 10, col, 1);
-  // cash
-  text('$'+g.cash, 62, 18, '#5ed986', 1);
-  // tools
-  if (DRILLS()>0){
-    const x=W-40, on1 = g.armed==='drill';
-    px(x,13,17,11, on1?'#e8b830':'#2a2038');
-    text('DR'+g.drills, x+2, 16, on1?'#0a0710':(g.drills?'#e8b830':'#5a4a6a'), 1);
+  drawCries();
+  // clock: a bar that empties. no words.
+  if(hunt){
+    const w=120, x=(IW-w)/2, y=10;
+    const f=clamp(hunt.t/HUNT_TIME,0,1);
+    g.fillStyle='rgba(0,0,0,0.4)'; g.fillRect(x-2,y-2,w+4,8);
+    const urgent = hunt.t<20 && Math.sin(T*12)>0;
+    g.fillStyle = urgent? '#ff8a5c' : '#ffe27a';
+    g.fillRect(x,y,Math.round(w*f),4);
+    // things still down there, as dots
+    for(let i=0;i<hunt.buried.length;i++){
+      g.fillStyle='rgba(255,255,255,0.30)'; g.fillRect(x+i*6, y+7, 4,2);
+    }
+    for(let i=0;i<hunt.found.length;i++){
+      g.fillStyle='#ffe27a'; g.fillRect(x+ (hunt.buried.length+i)*6, y+7, 4,2);
+    }
+  } else if(huntCooldown<=0){
+    // the drifting insects over the next site, drawn as a soft screen hint when far
+    const d=Math.hypot(P.x-site.x,P.z-site.z);
+    if(d>site.r) text('·', IW/2, 20, '#fff', 'center');
   }
-  if (DYNS()>0){
-    const x=W-20, on1 = g.armed==='dyn';
-    px(x,13,18,11, on1?'#f09a52':'#2a2038');
-    text('DY'+g.dyns, x+2, 16, on1?'#0a0710':(g.dyns?'#f09a52':'#5a4a6a'), 1);
-  }
-  // hover readout: the single most important number in the game
-  if (hoverCluster && mode==='run'){
-    const t = hoverKind==='ore' ? (hoverDrop>0 ? 'DROP '+hoverDrop+'M  $'+hoverVal : 'NO DROP  $'+hoverVal)
-            : hoverKind==='air' ? 'AIR POCKET  +7'
-            : hoverKind==='find'? 'CHIP IT FREE'
-            : 'SOLID ROCK';
-    const tw=textW(t,1);
-    px(W-tw-6, 2, tw+4, 9, '#0a0710');
-    text(t, W-tw-4, 4, hoverDrop>=4?'#5ed986':'#c4b8dc', 1);
-  }
-}
 
-/* ---------------- update ---------------- */
-function update(dt){
-  // miner render position eases toward its true row: this is the fall
-  const m=g.miner;
-  m.rr += (m.r - m.rr) * Math.min(1, dt/1000*9);
-  m.cc += (m.c - m.cc) * Math.min(1, dt/1000*16);
-  if (Math.abs(m.r-m.rr)<.02) m.rr=m.r;
-  if (Math.abs(m.c-m.cc)<.02) m.cc=m.c;
-
-  // land detection
-  if (fallSpeed>0 && Math.abs(m.r-m.rr)<.25){
-    landSquash = Math.min(1, .3+fallSpeed*.08);
-    shake = Math.max(shake, Math.min(9, 1+fallSpeed*1.1));
-    const [lx,ly]=scr(m.c,m.r);
-    dust(lx+8, ly+TILE, 4+Math.min(10,fallSpeed*2));
-    noise(.16,.12+Math.min(.12,fallSpeed*.02), 700);
-    tone(110,.14,'square',.11,70);
-    fallSpeed=0;
+  // held picture
+  if(activeMap){
+    const mw = Math.min(MAPW, Math.round(IW*0.34)), mh = Math.round(mw*MAPH/MAPW);
+    const x=5, y=6;
+    g.save();
+    g.shadowColor='rgba(0,0,0,0.6)'; g.shadowBlur=6;
+    g.drawImage(activeMap.canvas, x, y, mw, mh);
+    g.restore();
+    if(mapsHeld.length>1){
+      const lbl = mapsHeld.indexOf(activeMap)+1+'/'+mapsHeld.length + (touchUI.on? ' tap' : ' [tab]');
+      text(lbl, x+2, y+mh+9, '#e8d9b0');
+    }
+    const d=Math.hypot(P.x-activeMap.x, P.z-activeMap.z);
+    if(d<7) text('dig here', x+mw/2, y+mh+ (mapsHeld.length>1?19:9), '#ffe27a','center');
   }
-  landSquash *= Math.pow(.86, dt/16);
-  digSwing *= Math.pow(.85, dt/16);
 
-  // camera
-  camTarget = m.rr*TILE - (VIS*TILE)*0.40;
-  camY += (camTarget - camY) * Math.min(1, dt/1000*11);
+  // finds so far, quiet, bottom right
+  if(banked.finds||banked.maps||hunt) {
+    text('★'+ (banked.notable + (hunt?hunt.notable:0)) + '   ▣'+ (banked.maps + (hunt?hunt.maps:0)),
+      IW-6, IH-8, '#e8e2cf', 'right');
+  }
 
-  for (let i=parts.length-1;i>=0;i--){
-    const p=parts[i]; p.vy+=.22; p.x+=p.vx*dt/16; p.y+=p.vy*dt/16; p.life-=dt*.0022;
-    if (p.life<=0) parts.splice(i,1);
+  // toasts
+  let ty=IH-30;
+  for(let i=toast.length-1;i>=0;i--){
+    const t=toast[i];
+    const a=clamp(t.t/0.6,0,1);
+    g.globalAlpha=a;
+    text(t.txt, IW/2, ty, '#fff8e0','center');
+    g.globalAlpha=1;
+    ty-=11;
   }
-  for (let i=floats.length-1;i>=0;i--){
-    const f=floats[i]; f.y+=f.vy; f.vy*=.95; f.life-=dt*.0016;
-    if (f.life<=0) floats.splice(i,1);
+
+  if(huntCam>0.02){
+    const vg = g.createRadialGradient(IW/2,IH/2,IH*0.34, IW/2,IH/2,IH*0.95);
+    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(20,14,30,'+(0.55*huntCam)+')');
+    g.fillStyle=vg; g.fillRect(0,0,IW,IH);
   }
-  // tile drop animation
-  const topRow=Math.floor(camY/TILE)-1;
-  for (let r=Math.max(0,topRow); r<topRow+VIS+3; r++){
-    const row=rows.get(r); if(!row) continue;
-    for (const t of row){ if(!t||!t.drop) continue;
-      t.dropA = (t.dropA===undefined?1:t.dropA);
-      t.dropA -= dt*.006;
-      if (t.dropA<=0){ t.drop=0; t.dropA=undefined; }
+  if(touchUI.on && IH > IW*1.25)
+    text('turn your phone sideways', IW/2, 22, 'rgba(255,255,255,0.8)', 'center');
+  drawTouchUI();
+  if(flash>0){ g.fillStyle='rgba(255,246,214,'+(flash*0.5)+')'; g.fillRect(0,0,IW,IH); }
+  if(celebrate>0){
+    for(let i=0;i<40;i++){
+      const a=hash2(i,celebrate|0)*Math.PI*2 + T*2;
+      const r=(1-celebrate/3.2)*160 + hash2(i,3)*40;
+      g.fillStyle = ['#ffd75e','#ff8fb1','#8fe0ff','#b4ff8f'][i%4];
+      g.fillRect(IW/2+Math.cos(a)*r, IH/2+Math.sin(a)*r*0.6 - (1-celebrate)*30, 3,3);
     }
   }
-  shake *= Math.pow(.85, dt/16);
-  flash *= Math.pow(.80, dt/16);
-}
-function loop(ts){
-  requestAnimationFrame(loop);
-  if(!last) last=ts;
-  let dt=Math.min(50, ts-last); last=ts;
-  if (hitstop>0){ hitstop-=dt; dt=0; }
-  now=ts;
-  if (dt>0) update(dt);
-  render();
 }
 
-/* ---------------- boot ---------------- */
-(async function(){
-  const s = await load();
-  if (s) SV = Object.assign(NEW(), s);
-  g.miner.r=0; g.miner.rr=0;
-  for(let r=0;r<3;r++) getRow(r);
-  mode='boot';
-  requestAnimationFrame(loop);
-})();
+//////////////////////////////////////////////////////////////////////////////
+// frame
+//////////////////////////////////////////////////////////////////////////////
+function frame(now){
+  const dt = Math.min(0.05, (now-last)/1000); last=now;
+  { const vp = viewport(); if(vp.w!==lastW || vp.h!==lastH) fit(); }
+  // keep the frame rate, not the draw distance
+  emaDt = lerp(emaDt, dt, 0.06);
+  if(emaDt > 1/26 && quality > 0.55) quality -= 0.012;
+  else if(emaDt < 1/52 && quality < 1) quality += 0.006;
+  VIEW = Math.round(lerp(15, 26, quality));
+  update(dt);
+  if(A) musicTick(A.currentTime);
+
+  const sc = { x:cam.x, y:cam.y + (Math.random()-0.5)*cam.shake*0.05,
+               z:cam.z, yaw:cam.yaw + (Math.random()-0.5)*cam.shake*0.004,
+               pitch:cam.pitch, fov:cam.fov };
+  beginView(g, IW, IH, sc);
+  drawSky(IW,IH);
+  drawGround();
+  for(const l of landmarks) l.build();
+  drawScenery();
+  drawHoles();
+
+  // hunt site marker: glowing insects, never a UI ring
+  const s = hunt? hunt : (huntCooldown<=0? site : null);
+  if(s){
+    const N = hunt? 44 : 26;
+    for(let i=0;i<N;i++){
+      const a=i/N*Math.PI*2 + T*0.25 + Math.sin(T*0.9+i)*0.3;
+      const rr= hunt? s.r*(0.94+0.06*Math.sin(T*1.6+i*1.7))
+                    : s.r*(0.55+0.45*Math.sin(T*0.6+i*1.7));
+      const bx=s.x+Math.cos(a)*rr, bz=s.z+Math.sin(a)*rr;
+      const by=groundH(bx,bz)+1.0+Math.sin(T*2.2+i)*0.5;
+      box(bx,by,bz,0.17,0.17,0.17,[255,236,140],0);
+    }
+  }
+  drawParts();
+  creatureDraw();
+  flush();
+  drawHUD();
+
+  sctx.drawImage(cv,0,0);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+document.getElementById('hint').textContent =
+  'wasd move · mouse look · space jump · e dig · tab flip pictures';
 </script>
 </body>
 </html>

@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>DOWNSHAFT</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#0a0710;
+    font-family:ui-monospace,Menlo,Consolas,monospace;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  #stage{position:relative}
+  canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+  #ui{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+  .panel{pointer-events:auto;width:100%;height:100%;background:rgba(10,7,16,.9);
+    display:flex;align-items:center;justify-content:center;padding:4%}
+  .card{width:100%;max-width:460px;max-height:100%;overflow:auto;background:#241a2e;
+    border:4px solid #0a0710;box-shadow:6px 6px 0 #0a0710;padding:14px}
+  .card::-webkit-scrollbar{width:8px}.card::-webkit-scrollbar-thumb{background:#5a4470}
+  h1{margin:0 0 4px;font-size:26px;letter-spacing:5px;color:#e8b830;text-shadow:3px 3px 0 #0a0710}
+  h2{margin:0 0 10px;font-size:15px;letter-spacing:3px;color:#5ed986}
+  p.s{margin:0 0 12px;font-size:11px;line-height:1.6;color:#a094b8;letter-spacing:.5px}
+  .st{font-size:11px;color:#c4b8dc;margin:3px 0;letter-spacing:1px}
+  .st b{color:#e8b830}
+  .row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}
+  button.b{pointer-events:auto;cursor:pointer;font-family:inherit;font-weight:bold;font-size:11px;
+    letter-spacing:2px;padding:11px 10px;background:#5ed986;color:#0d2b18;border:3px solid #0a0710;
+    box-shadow:4px 4px 0 #0a0710;flex:1;min-width:104px;text-transform:uppercase;transition:transform .05s,box-shadow .05s}
+  button.b:active{transform:translate(4px,4px);box-shadow:0 0 0 #0a0710}
+  button.b.a{background:#f09a52;color:#3a1c08}
+  button.b.g{background:#3d3050;color:#c4b8dc}
+  button.b:disabled{background:#332a44;color:#6d6188;cursor:default}
+  .it{display:flex;gap:9px;align-items:center;padding:8px;margin-bottom:6px;background:#1b1424;border:3px solid #0a0710}
+  .it .t{flex:1}
+  .it .n{font-size:11px;letter-spacing:1px;color:#e8b830;margin-bottom:3px}
+  .it .d{font-size:10px;line-height:1.5;color:#a094b8}
+  .it button.b{flex:0 0 auto;min-width:72px;padding:9px 6px}
+  .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+  .fc{background:#1b1424;border:3px solid #0a0710;padding:6px;text-align:center}
+  .fc .q{font-size:22px;color:#3d3050}
+  .fc .l{font-size:8px;letter-spacing:.5px;color:#6d6188;margin-top:3px}
+  .fc.got .l{color:#e8b830}
+  canvas.icon{width:48px;height:48px;image-rendering:pixelated;margin:0 auto;display:block}
+</style>
+</head>
+<body>
+<div id="wrap"><div id="stage"><canvas id="cv"></canvas><div id="ui"></div></div></div>
+<script>
+"use strict";
+/* ============================================================
+   DOWNSHAFT
+   You are a miner on a rope. You break a vein of ore and the
+   rubble above it drops into the hole. You drop with it.
+   That is the whole game: pick the vein that drops you furthest.
+   ============================================================ */
+
+const TILE = 16, COLS = 10, VIS = 13, HUD = 26;
+const W = COLS*TILE, H = HUD + VIS*TILE;   // 160 x 234
+
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d',{alpha:false});
+const uiEl = document.getElementById('ui'), stage = document.getElementById('stage');
+let SCALE = 3;
+function fit(){
+  SCALE = Math.max(2, Math.floor(Math.min(window.innerWidth/W, window.innerHeight/H)));
+  cv.width = W; cv.height = H;
+  cv.style.width = (W*SCALE)+'px'; cv.style.height = (H*SCALE)+'px';
+  stage.style.width = (W*SCALE)+'px'; stage.style.height = (H*SCALE)+'px';
+  ctx.imageSmoothingEnabled = false;
+}
+window.addEventListener('resize', fit); fit();
+
+/* ---------------- pixel font: 3x5 ---------------- */
+const FONT = {
+ A:'25755',B:'65656',C:'34443',D:'65556',E:'74647',F:'74644',G:'34553',H:'55755',I:'72227',
+ J:'11152',K:'55655',L:'44447',M:'57755',N:'65555',O:'25552',P:'65644',Q:'25563',R:'65655',
+ S:'34216',T:'72222',U:'55553',V:'55552',W:'55775',X:'55255',Y:'55222',Z:'71247',
+ '0':'75557','1':'26227','2':'61247','3':'71317','4':'55711','5':'74717','6':'74757',
+ '7':'71222','8':'75757','9':'75717',' ':'00000','.':'00002','-':'00700',':':'02020',
+ '!':'22202','/':'11244','+':'02720','%':'51245','?':'61202',',':'00024','$':'27671',
+ '(':'12221',')':'42224','x':'00520',"'":'22000','#':'57575'
+};
+function textW(s,sc){ return s.length*4*sc - sc; }
+function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x|0,y|0,w|0,h|0); }
+function text(s,x,y,c,sc){
+  sc = sc||1; s = String(s).toUpperCase();
+  let cx = x|0;
+  for (const ch of s){
+    const g = FONT[ch] || FONT['?'];
+    for (let r=0;r<5;r++){
+      const bits = +g[r];
+      for (let b=0;b<3;b++) if (bits & (4>>b)) px(cx+b*sc, y+r*sc, sc, sc, c);
+    }
+    cx += 4*sc;
+  }
+}
+function textSh(s,x,y,c,sc){ text(s,x+sc,y+sc,'#0a0710',sc); text(s,x,y,c,sc); }
+
+/* ---------------- audio ---------------- */
+let AC=null, MG=null, MUTED=false, nbuf=null;
+function ac(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)();
+  MG=AC.createGain(); MG.gain.value=.45; MG.connect(AC.destination);}catch(e){AC=null;} } return AC; }
+function tone(f,d,ty,v,f2){ if(MUTED||!ac())return; const t=AC.currentTime;
+  const o=AC.createOscillator(),g=AC.createGain(); o.type=ty||'square';
+  o.frequency.setValueAtTime(f,t); if(f2)o.frequency.exponentialRampToValueAtTime(Math.max(20,f2),t+d);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v||.14,t+.005);
+  g.gain.exponentialRampToValueAtTime(.0008,t+d); o.connect(g); g.connect(MG); o.start(t); o.stop(t+d+.02); }
+function noise(d,v,lp){ if(MUTED||!ac())return; const t=AC.currentTime;
+  if(!nbuf){ nbuf=AC.createBuffer(1,AC.sampleRate*.5,AC.sampleRate); const a=nbuf.getChannelData(0);
+    for(let i=0;i<a.length;i++)a[i]=Math.random()*2-1; }
+  const s=AC.createBufferSource(); s.buffer=nbuf;
+  const f=AC.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(lp||1000,t);
+  const g=AC.createGain(); g.gain.setValueAtTime(v||.14,t); g.gain.exponentialRampToValueAtTime(.0008,t+d);
+  s.connect(f); f.connect(g); g.connect(MG); s.start(t); s.stop(t+d); }
+const SCALE_N=[0,3,5,7,10,12,15,17,19,22,24,27,29,31,34,36];
+function note(i,v){ tone(147*Math.pow(2,SCALE_N[Math.min(i,SCALE_N.length-1)]/12),.11,'square',v||.13); }
+
+/* ---------------- ore + layers ---------------- */
+// Each ore is a real thing with its own look, not just a hue.
+const ORE = [
+  {id:0, n:'COAL',     hi:'#5a5a72', mid:'#3a3a4c', lo:'#1e1e2a', spot:'#14141c', val:1},
+  {id:1, n:'COPPER',   hi:'#f0a05c', mid:'#c9702f', lo:'#7d3f14', spot:'#5ed986', val:2},
+  {id:2, n:'IRON',     hi:'#c98c72', mid:'#96604a', lo:'#5a3325', spot:'#e0b9a4', val:2},
+  {id:3, n:'GOLD',     hi:'#ffe066', mid:'#e0ac26', lo:'#96700e', spot:'#fff3b0', val:5},
+  {id:4, n:'EMERALD',  hi:'#6ee89a', mid:'#2fa85a', lo:'#166134', spot:'#c4ffd9', val:7},
+  {id:5, n:'AMETHYST', hi:'#c090f0', mid:'#8b4fc4', lo:'#512a7d', spot:'#e8d0ff', val:9},
+];
+const LAYERS = [
+  {n:'TOPSOIL',   from:0,    ores:[0,1,2],     wall:'#4a3524', bg:'#231810', dark:'#171009', air:.030, rock:.010},
+  {n:'CLAY',      from:100,  ores:[0,1,2,3],   wall:'#8a4a35', bg:'#3d1f16', dark:'#26120c', air:.026, rock:.028},
+  {n:'LIMESTONE', from:250,  ores:[0,2,3,4],   wall:'#75757f', bg:'#2f2f3a', dark:'#1d1d26', air:.022, rock:.048},
+  {n:'ICE',       from:450,  ores:[0,3,4,5],   wall:'#4a7a94', bg:'#1c3341', dark:'#101f2a', air:.019, rock:.068},
+  {n:'BASALT',    from:700,  ores:[0,3,4,5],   wall:'#463046', bg:'#1e131e', dark:'#130b13', air:.016, rock:.090},
+  {n:'THE CORE',  from:1000, ores:[3,4,5],     wall:'#7a2a18', bg:'#2e0d08', dark:'#1c0704', air:.014, rock:.110},
+];
+function layerIdx(d){ let i=0; for(let k=0;k<LAYERS.length;k++) if(d>=LAYERS[k].from) i=k; return i; }
+function layerAt(d){ return LAYERS[layerIdx(d)]; }
+
+/* ---------------- buried finds (16x16 sprites) ---------------- */
+const FP = ['#0a0710','#e8dcc0','#b09878','#5ed986','#e8b830','#c9502f','#8bc4f0','#8b4fc4'];
+const FINDS = [
+ {n:'SKULL', from:0, s:[
+ '................','.....111111.....','...1122221111...','..112222211111..',
+ '..122022201111..','..122022201111..','..1220222011111.','..12222220011111',
+ '..1222222001111.','..111222200111..','...1121212111...','....11111111....',
+ '.....1.1.1.1....','................','................','................']},
+ {n:'JAR', from:100, s:[
+ '................','.....555555.....','....55555555....','.....522225.....',
+ '....55522555....','...5522222255...','..552222222255..','..522244422255..',
+ '..522244422255..','..552222222255..','...5522222255...','....55555555....',
+ '.....555555.....','................','................','................']},
+ {n:'AMMONITE', from:250, s:[
+ '................','.....111111.....','...1122222211...','..112211112211..',
+ '.11221122112211.','.12211221122111.','.12212211221121.','.12212211221121.',
+ '.12211221122121.','.11221122112211.','..112211112211..','...1122222211...',
+ '.....111111.....','................','................','................']},
+ {n:'LANTERN', from:450, s:[
+ '................','......1111......','.....100001.....','......1001......',
+ '....11111111....','...1044444401...','...1044444401...','...1044444401...',
+ '...1044444401...','...1044444401...','....11111111....','.....100001.....',
+ '......1111......','................','................','................']},
+ {n:'IDOL', from:700, s:[
+ '................','....11111111....','...1222222221...','..122222222221..',
+ '..122077022221..','..122077022221..','..122222222221..','..122200222221..',
+ '..122022202221..','..122200022221..','...1222222221...','....11111111....',
+ '.....1.11.1.....','................','................','................']},
+ {n:'METEORITE', from:1000, s:[
+ '................','......1111......','....11555511....','...1155555511...',
+ '..115544445511..','..15544444455 1.','.1554444444551..','.1544444444451..',
+ '.1554444444551..','..15544444551...','..115544445511..','...1155555511...',
+ '....11111111....','................','................','................']},
+];
+
+/* ---------------- save ---------------- */
+const KEY='downshaft:v1';
+const NEW = () => ({cash:0, best:0, runs:0, depot:0, finds:[], lamp:0, drill:0, dyn:0, boots:0, cart:0});
+let SV = NEW(), mem = null;
+async function load(){ try{ const r=await window.storage.get(KEY); if(r&&r.value) return JSON.parse(r.value);}catch(e){} return mem; }
+async function save(){ mem=JSON.parse(JSON.stringify(SV)); try{ await window.storage.set(KEY, JSON.stringify(SV)); }catch(e){} }
+
+const MAXAIR = () => 30 + SV.lamp*12;
+const DRILLS = () => SV.drill;
+const DYNS   = () => SV.dyn;
+
+/* ---------------- world ---------------- */
+const rows = new Map();
+let findSeeds = new Map();     // row -> {c, r, fi}
+function hash(a,b,s){ let h=(a*374761393 + b*668265263 + (s||0)*2246822519) >>> 0;
+  h=(h^(h>>13))>>>0; h=(h*1274126177)>>>0; return (h^(h>>16))>>>0; }
+let SEED = 1;
+
+function planFinds(r){
+  // one buried thing roughly every 55 rows, anchored to a 2x2 space
+  const band = Math.floor(r/55);
+  if (findSeeds.has(band)) return findSeeds.get(band);
+  const h = hash(band, 7, SEED);
+  const fr = band*55 + 12 + (h % 30);
+  const fc = (h>>8) % (COLS-1);
+  const avail = FINDS.map((f,i)=>i).filter(i=>fr>=FINDS[i].from);
+  const fi = avail.length ? avail[(h>>16)%avail.length] : 0;
+  const o = {r:fr, c:fc, fi};
+  findSeeds.set(band, o); return o;
+}
+function genRow(r){
+  const L = layerAt(r), arr = new Array(COLS);
+  for (let c=0;c<COLS;c++){
+    const h1 = hash(c,r,SEED), h2 = hash(c,r,SEED+991);
+    const q = (h1 % 1000)/1000;
+    if (r > 3 && q < L.rock){ arr[c] = {k:'rock', s:h2}; continue; }
+    if (r > 3 && q < L.rock + L.air){ arr[c] = {k:'air', s:h2}; continue; }
+    // ore veins: coarse blobs 2 wide x 3 tall, roughened by per-tile noise
+    const blob = hash(Math.floor(c/2), Math.floor(r/3), SEED+55);
+    let idx = blob % L.ores.length;
+    if ((h2 % 100) < 20) idx = (h2>>7) % L.ores.length;
+    arr[c] = {k:'ore', m:L.ores[idx], s:h2};
+  }
+  // stamp a buried find into the rock
+  for (const band of [Math.floor(r/55)-1, Math.floor(r/55)]){
+    if (band < 0) continue;
+    const f = planFinds(band*55);
+    if (r >= f.r && r < f.r+2){
+      for (let dc=0;dc<2;dc++){
+        const c = f.c+dc;
+        if (c<COLS) arr[c] = {k:'find', fi:f.fi, fr:f.r, fc:f.c, dx:dc, dy:r-f.r, s:1};
+      }
+    }
+  }
+  return arr;
+}
+function getRow(r){ if(r<0) return null; let a=rows.get(r); if(!a){ a=genRow(r); rows.set(r,a);} return a; }
+function T(c,r){ if(c<0||c>=COLS||r<0) return undefined; return getRow(r)[c]; }
+function setT(c,r,v){ getRow(r)[c]=v; }
+
+/* ---------------- run state ---------------- */
+const g = {
+  air:0, cash:0, depth:0, start:0, runFinds:[],
+  drills:0, dyns:0, armed:null,
+  miner:{c:4, r:0, rr:0, cc:4}, busy:false, digs:0,
+  nextDepot:100, lastLayer:-1,
+};
+let mode='boot';
+let parts=[], floats=[], shake=0, flash=0, hitstop=0, banner=null, bannerT=0;
+let camY=0, camTarget=0, fallSpeed=0, sparks=[];
+let hoverCluster=null, hoverDrop=0, hoverVal=0, hoverKind='';
+let now=0, last=0, toastT=0, toastMsg='';
+let digSwing=0, landSquash=0, minerFlash=0;
+
+function toast(m){ toastMsg=m; toastT=now+1400; }
+
+/* ---------------- clusters ---------------- */
+function nb(c,r){ return [[c,r-1],[c,r+1],[c-1,r],[c+1,r]]; }
+function cluster(c,r){
+  const t = T(c,r); if (!t || t.k!=='ore') return [];
+  const seen=new Set(), out=[], stk=[[c,r]];
+  while (stk.length){
+    const [x,y]=stk.pop(); if (x<0||x>=COLS||y<0) continue;
+    const k=x+','+y; if (seen.has(k)) continue;
+    const q=T(x,y); if (!q||q.k!=='ore'||q.m!==t.m) continue;
+    seen.add(k); out.push([x,y]);
+    for (const n of nb(x,y)) stk.push(n);
+  }
+  return out;
+}
+
+/* ---------------- gravity: rubble falls, the miner rides it ---------------- */
+function snap(){
+  const r0 = Math.max(0, g.miner.r-40), r1 = g.miner.r+26;
+  const cols=[];
+  for (let c=0;c<COLS;c++){ const a=[]; for(let r=r0;r<=r1;r++) a.push(T(c,r)); cols.push(a); }
+  return {r0,r1,cols, mc:g.miner.c, mr:g.miner.r-r0};
+}
+function gravity(s){
+  let guard=0, changed=true;
+  while (changed && guard++<300){
+    changed=false;
+    for (let c=0;c<COLS;c++){
+      const col=s.cols[c]; let write=col.length-1;
+      for (let r=col.length-1;r>=0;r--){
+        if (c===s.mc && r===s.mr){ write=Math.min(write,r-1); continue; }
+        const t=col[r];
+        if (t){ if (write!==r){ col[write]=t; col[r]=null; t.drop=(t.drop||0)+(write-r); changed=true; } write--; }
+      }
+    }
+    const col=s.cols[s.mc];
+    if (s.mr+1 < col.length && !col[s.mr+1]){ s.mr++; changed=true; }
+    else {
+      for (const d of [-1,1,1,-1]){
+        const nc=s.mc+d; if (nc<0||nc>=COLS) continue;
+        const oc=s.cols[nc];
+        if (!oc[s.mr] && s.mr+1<oc.length && !oc[s.mr+1]){ s.mc=nc; s.mr++; changed=true; break; }
+      }
+    }
+  }
+  return s;
+}
+function commit(s){
+  for (let c=0;c<COLS;c++) for (let i=0;i<s.cols[c].length;i++) setT(c, s.r0+i, s.cols[c][i]);
+  const fell = (s.r0+s.mr) - g.miner.r;
+  g.miner.c = s.mc; g.miner.r = s.r0+s.mr;
+  return fell;
+}
+function previewDrop(cells){
+  const s = snap();
+  const rm = new Set(cells.map(([c,r])=>c+','+r));
+  for (let c=0;c<COLS;c++) for (let i=0;i<s.cols[c].length;i++)
+    if (rm.has(c+','+(s.r0+i))) s.cols[c][i]=null;
+  gravity(s);
+  return (s.r0+s.mr) - g.miner.r;
+}
+
+/* ---------------- juice ---------------- */
+function debris(x,y,pal,n,pow){
+  for (let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, sp=(.4+Math.random()*1.5)*(pow||1);
+    parts.push({x:x+Math.random()*TILE-TILE/2, y:y+Math.random()*TILE-TILE/2,
+      vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-.9, s:1+((Math.random()*2)|0), life:1,
+      c:[pal.hi,pal.mid,pal.lo][(Math.random()*3)|0]});
+  }
+  if (parts.length>420) parts.splice(0,parts.length-420);
+}
+function dust(x,y,n){ for(let i=0;i<(n||5);i++)
+  parts.push({x:x+(Math.random()-.5)*TILE*2, y:y, vx:(Math.random()-.5)*1.3, vy:-Math.random()*.7,
+    s:1, life:.7, c:'#6d6188'}); }
+function fl(x,y,t,c){ floats.push({x,y,t,c,life:1,vy:-.5}); }
+
+/* ---------------- dig ---------------- */
+function dig(c,r){
+  const t = T(c,r); if (!t) return;
+  if (g.armed==='drill'){
+    if (g.drills<=0) return;
+    g.drills--; g.armed=null;
+    breakTiles([[c,r]], true);
+    noise(.2,.24,2600); tone(200,.14,'sawtooth',.14,90);
+    shake=Math.max(shake,4); return;
+  }
+  if (g.armed==='dyn'){
+    if (g.dyns<=0) return;
+    g.dyns--; g.armed=null;
+    const list=[];
+    for(let dc=-1;dc<=1;dc++) for(let dr=-1;dr<=1;dr++){
+      const nc=c+dc, nr=r+dr; if(nc>=0&&nc<COLS&&nr>=0&&T(nc,nr)) list.push([nc,nr]);
+    }
+    breakTiles(list, true);
+    noise(.5,.32,900); tone(70,.45,'sawtooth',.2,32);
+    shake=12; flash=.55; hitstop=110; return;
+  }
+  if (t.k==='rock'){ toast('SOLID ROCK'); tone(90,.09,'square',.09); shake=Math.max(shake,2); return; }
+  if (t.k==='air'){
+    if (g.air>=MAXAIR()){ toast('LAMP IS FULL'); return; }
+    g.air = Math.min(MAXAIR(), g.air+7);
+    setT(c,r,null);
+    const [sx,sy]=scr(c,r);
+    debris(sx+8,sy+8,{hi:'#d8fff0',mid:'#7fe8d0',lo:'#3fa898'},10,1.4);
+    fl(sx+8,sy,'+7 AIR','#7fe8d0'); flash=Math.max(flash,.2);
+    tone(660,.14,'triangle',.15,1180); tone(990,.16,'sine',.08);
+    settle(); return;
+  }
+  if (t.k==='find'){
+    setT(c,r,null); g.air--; g.digs++;
+    const [sx,sy]=scr(c,r);
+    debris(sx+8,sy+8,{hi:'#e8dcc0',mid:'#b09878',lo:'#6a5a44'},9,1.2);
+    noise(.12,.16,1800); tone(420,.1,'square',.12);
+    shake=Math.max(shake,3);
+    // whole thing free?
+    let done=true;
+    for(let dc=0;dc<2;dc++) for(let dr=0;dr<2;dr++){
+      const q=T(t.fc+dc, t.fr+dr);
+      if (q && q.k==='find' && q.fi===t.fi) done=false;
+    }
+    if (done){
+      const F=FINDS[t.fi];
+      if (!g.runFinds.includes(t.fi)) g.runFinds.push(t.fi);
+      flash=.7; shake=10; hitstop=140;
+      fl(sx+8, sy-6, F.n, '#e8b830');
+      toast('DUG OUT: '+F.n);
+      [0,90,180,300].forEach((d,i)=>setTimeout(()=>tone(392*Math.pow(2,i/5),.28,'triangle',.13),d));
+    }
+    settle(); return;
+  }
+  // ore
+  const cl = cluster(c,r);
+  if (cl.length<2){ toast('NEED A VEIN OF 2 OR MORE'); tone(120,.07,'sine',.08); return; }
+  g.air--; g.digs++;
+  breakTiles(cl, false);
+}
+function breakTiles(list, free){
+  let v=0, n=0;
+  list.forEach(([c,r],i)=>{
+    const t=T(c,r); if(!t) return;
+    const [sx,sy]=scr(c,r);
+    if (t.k==='ore'){
+      const o=ORE[t.m]; v += o.val; n++;
+      debris(sx+8,sy+8,o,5,1);
+      note(i, .12);
+    } else if (t.k==='rock'){
+      debris(sx+8,sy+8,{hi:'#7a7a88',mid:'#4a4a56',lo:'#26262e'},6,1.2);
+    } else if (t.k==='air'){
+      g.air=Math.min(MAXAIR(), g.air+7); debris(sx+8,sy+8,{hi:'#d8fff0',mid:'#7fe8d0',lo:'#3fa898'},8,1.3);
+    } else if (t.k==='find'){
+      debris(sx+8,sy+8,{hi:'#e8dcc0',mid:'#b09878',lo:'#6a5a44'},6,1);
+    }
+    setT(c,r,null);
+  });
+  if (v>0){
+    const gain = Math.round(v*(1+SV.cart*0.25)*(1+g.depth/260));
+    g.cash += gain;
+    const [sx,sy]=scr(list[0][0], list[0][1]);
+    fl(sx+8, sy, '+'+gain, n>=6?'#ffe066':'#e8dcc0');
+  }
+  digSwing = 1;
+  shake = Math.max(shake, 1.5+Math.min(6, list.length*.5));
+  noise(.1,.13,1600);
+  settle();
+}
+function settle(){
+  const s = snap();
+  gravity(s);
+  const fell = commit(s);
+  if (fell>0){
+    fallSpeed = Math.max(fallSpeed, fell);
+    g.depth = g.miner.r;
+    if (g.depth>SV.best){ SV.best=g.depth; }
+    tone(300,.12+Math.min(.5,fell*.05),'sine',.1, 120);
+    if (fell>=4) noise(.25,.12,600);
+  }
+  g.busy = true;
+  setTimeout(()=>{ g.busy=false; }, 60);
+  checkEvents(fell);
+}
+function checkEvents(fell){
+  const li = layerIdx(g.depth);
+  if (li !== g.lastLayer){
+    g.lastLayer = li;
+    banner = LAYERS[li].n; bannerT = now+2000;
+    flash=Math.max(flash,.3); shake=Math.max(shake,5);
+    tone(196,.5,'triangle',.12); tone(294,.5,'triangle',.09);
+  }
+  if (g.air<=0){ g.air=0; return endRun(false); }
+  if (g.depth >= g.nextDepot){
+    g.nextDepot = Math.floor(g.depth/100)*100 + 100;
+    openDepot();
+  }
+}
+
+/* ---------------- run flow ---------------- */
+function startRun(from){
+  rows.clear(); findSeeds.clear();
+  SEED = 1 + ((Math.random()*1e6)|0);
+  g.air = MAXAIR(); g.cash=0; g.start=from; g.depth=from; g.digs=0;
+  g.runFinds=[]; g.drills=DRILLS(); g.dyns=DYNS(); g.armed=null;
+  g.miner.c=4; g.miner.r=from; g.miner.rr=from; g.miner.cc=4;
+  g.nextDepot = Math.floor(from/100)*100+100;
+  g.lastLayer = -1;
+  // carve a small pocket so the miner starts standing in open air
+  for (let r=Math.max(0,from-2); r<=from; r++)
+    for (let c=0;c<COLS;c++) setT(c,r,null);
+  parts=[]; floats=[]; sparks=[]; fallSpeed=0;
+  camY = from*TILE - (VIS*TILE)*0.42;
+  const s0 = gravity(snap()); commit(s0);
+  g.depth = g.miner.r; g.miner.rr = g.miner.r;
+  SV.runs++; save();
+  mode='run'; clearUI();
+  checkEvents(0);
+}
+function openDepot(){
+  mode='depot';
+  flash=.4; shake=6;
+  tone(392,.4,'triangle',.12); tone(523,.45,'triangle',.1);
+  const d=g.depth;
+  ui(`<div class="panel"><div class="card">
+    <h2>DEPOT ${Math.floor(d/100)*100} M</h2>
+    <p class="s">A cage bolted into the shaft wall. From here the winch can take you and your ore back up.</p>
+    <div class="st">ORE IN THE CART <b>$${g.cash}</b></div>
+    <div class="st">LAMP <b>${g.air}</b> of ${MAXAIR()} digs</div>
+    <div class="st">DUG OUT THIS TRIP <b>${g.runFinds.length}</b></div>
+    <div style="height:10px"></div>
+    <div class="row"><button class="b" id="up">RIDE UP — KEEP $${g.cash}, OPEN THIS DEPOT</button></div>
+    <div class="row"><button class="b a" id="on">KEEP DIGGING — LOSE IT ALL IF THE LAMP DIES</button></div>
+  </div></div>`);
+  on('#up', ()=>endRun(true));
+  on('#on', ()=>{ mode='run'; clearUI(); toast('KEEP GOING'); });
+}
+function endRun(cashed){
+  const d = Math.floor(g.depth/100)*100;
+  if (cashed){
+    SV.cash += g.cash;
+    if (d > SV.depot) SV.depot = d;
+  }
+  for (const fi of g.runFinds) if (!SV.finds.includes(fi)) SV.finds.push(fi);
+  save();
+  mode = cashed ? 'up' : 'dark';
+  if (!cashed){ tone(180,.9,'sawtooth',.15,60); noise(.7,.14,380); shake=14; }
+  if (cashed){ ui(`<div class="panel"><div class="card">
+    <h2>BACK UP TOP</h2>
+    <div class="st">DEPTH REACHED <b>${g.depth} M</b></div>
+    <div class="st">ORE SOLD <b>$${g.cash}</b></div>
+    <div class="st">DUG OUT <b>${g.runFinds.length}</b></div>
+    <div style="height:10px"></div>
+    <div class="row"><button class="b" id="k">CARRY ON</button></div>
+  </div></div>`); on('#k', surface); }
+  else { ui(`<div class="panel"><div class="card">
+    <h2 style="color:#f09a52">THE LAMP WENT OUT</h2>
+    <p class="s">You felt your way back up in the dark. The cart did not come with you. Whatever you dug free was already in your pockets.</p>
+    <div class="st">DEPTH REACHED <b>${g.depth} M</b></div>
+    <div class="st">ORE LOST <b>$${g.cash}</b></div>
+    <div style="height:10px"></div>
+    <div class="row"><button class="b" id="a">DOWN AGAIN</button></div>
+    <div class="row"><button class="b g" id="s">TOP</button></div>
+  </div></div>`); on('#a', ()=>startRun(SV.depot)); on('#s', surface); }
+}
+
+/* ---------------- menus ---------------- */
+function clearUI(){ uiEl.innerHTML=''; }
+function ui(h){ clearUI(); const d=document.createElement('div'); d.innerHTML=h.trim(); uiEl.appendChild(d.firstChild); }
+function on(sel,fn){ const n=uiEl.querySelector(sel); if(n) n.onclick=()=>{ ac(); tone(700,.04,'square',.09); fn(); }; }
+
+const SHOP = [
+ {id:'lamp', n:'BIGGER LAMP', d:'12 more digs before the light goes.', c:()=>[120,300,700,1500][SV.lamp]||0, max:()=>SV.lamp>=4, buy:()=>SV.lamp++},
+ {id:'drill',n:'HAND DRILL',  d:'One use per trip. Bores through anything, even solid rock.', c:()=>[260,650,1400][SV.drill]||0, max:()=>SV.drill>=3, buy:()=>SV.drill++},
+ {id:'dyn',  n:'DYNAMITE',    d:'One stick per trip. Blows a three by three hole.', c:()=>[500,1200,2600][SV.dyn]||0, max:()=>SV.dyn>=3, buy:()=>SV.dyn++},
+ {id:'cart', n:'BIGGER CART', d:'Ore sells for a quarter more each level.', c:()=>[400,1000,2200,4600][SV.cart]||0, max:()=>SV.cart>=4, buy:()=>SV.cart++},
+];
+function surface(){
+  mode='surface';
+  const opts=[];
+  for(let d=0; d<=SV.depot; d+=100) opts.push(d);
+  const btns = opts.slice(-4).reverse().map(d=>`<button class="b ${d===SV.depot?'':'g'}" data-d="${d}">${d===0?'THE TOP':d+' M'}</button>`).join('');
+  ui(`<div class="panel"><div class="card">
+    <h1>DOWNSHAFT</h1>
+    <p class="s">Break a vein and the rubble above drops into the hole. You drop with it. Pick the vein that drops you furthest — every dig costs lamp oil, and the lamp is all you have.</p>
+    <div class="st">CASH <b>$${SV.cash}</b> &nbsp; DEEPEST <b>${SV.best} M</b> &nbsp; DUG OUT <b>${SV.finds.length}/6</b></div>
+    <div style="height:10px"></div>
+    <div class="st" style="color:#5ed986">CLIMB DOWN TO</div>
+    <div class="row" id="ds">${btns}</div>
+    <div class="row"><button class="b a" id="sh">TOOL SHED</button><button class="b g" id="fi">FINDS</button></div>
+    <div class="row"><button class="b g" id="mu">${MUTED?'SOUND OFF':'SOUND ON'}</button></div>
+  </div></div>`);
+  uiEl.querySelectorAll('#ds button').forEach(b=>b.onclick=()=>{ ac(); tone(700,.04,'square',.09); startRun(+b.dataset.d); });
+  on('#sh', shop); on('#fi', finds); on('#mu', ()=>{ MUTED=!MUTED; surface(); });
+}
+function shop(){
+  mode='shop';
+  const rowsH = SHOP.map(s=>{
+    const m=s.max(), c=s.c(), can=!m&&SV.cash>=c;
+    return `<div class="it"><div class="t"><div class="n">${s.n}</div><div class="d">${s.d}</div></div>
+      <button class="b ${can?'':'g'}" data-id="${s.id}" ${can?'':'disabled'}>${m?'MAX':'$'+c}</button></div>`;
+  }).join('');
+  ui(`<div class="panel"><div class="card"><h2>TOOL SHED</h2>
+    <div class="st">CASH <b>$${SV.cash}</b></div><div style="height:8px"></div>
+    ${rowsH}<div class="row"><button class="b" id="b">BACK</button></div></div></div>`);
+  uiEl.querySelectorAll('.it button').forEach(b=>{ if(b.disabled) return;
+    b.onclick=()=>{ ac(); const s=SHOP.find(x=>x.id===b.dataset.id); const c=s.c();
+      if(SV.cash<c) return; SV.cash-=c; s.buy(); save();
+      tone(523,.09,'triangle',.14); tone(784,.14,'sine',.1); shop(); }; });
+  on('#b', surface);
+}
+function finds(){
+  mode='finds';
+  const cells = FINDS.map((f,i)=>{
+    const got = SV.finds.includes(i);
+    return `<div class="fc ${got?'got':''}">${got
+      ? `<canvas class="icon" data-fi="${i}" width="16" height="16"></canvas>`
+      : `<div class="q">?</div>`}<div class="l">${got?f.n:f.from+' M+'}</div></div>`;
+  }).join('');
+  ui(`<div class="panel"><div class="card"><h2>FINDS ${SV.finds.length}/6</h2>
+    <p class="s">Things sitting in the rock waiting to be chipped free. Each one costs four digs to get out. You keep them even if the lamp dies.</p>
+    <div class="fg">${cells}</div>
+    <div class="row"><button class="b" id="b">BACK</button></div></div></div>`);
+  uiEl.querySelectorAll('canvas.icon').forEach(cn=>{
+    const c2=cn.getContext('2d'), f=FINDS[+cn.dataset.fi];
+    for(let y=0;y<16;y++) for(let x=0;x<16;x++){
+      const ch=f.s[y][x]; if(ch==='.'||ch===' ') continue;
+      c2.fillStyle=FP[+ch]||FP[1]; c2.fillRect(x,y,1,1);
+    }
+  });
+  on('#b', surface);
+}
+
+/* ---------------- screen coords ---------------- */
+function scr(c,r){ return [c*TILE, HUD + r*TILE - camY]; }
+function tileAt(sx,sy){
+  if (sy<HUD) return null;
+  const c = Math.floor(sx/TILE), r = Math.floor((sy - HUD + camY)/TILE);
+  if (c<0||c>=COLS||r<0) return null;
+  return [c,r];
+}
+
+/* ---------------- input ---------------- */
+function local(e){ const b=cv.getBoundingClientRect();
+  return [(e.clientX-b.left)*(W/b.width), (e.clientY-b.top)*(H/b.height)]; }
+cv.addEventListener('pointermove', e=>{
+  if (e.pointerType==='touch') return;
+  if (mode!=='run'){ hoverCluster=null; return; }
+  const [x,y]=local(e), t=tileAt(x,y);
+  if (!t){ hoverCluster=null; return; }
+  setHover(t[0],t[1]);
+});
+cv.addEventListener('pointerleave', ()=>{ hoverCluster=null; });
+function setHover(c,r){
+  const q=T(c,r);
+  if (!q){ hoverCluster=null; return; }
+  if (q.k==='ore'){
+    const cl=cluster(c,r);
+    if (cl.length<2){ hoverCluster=null; return; }
+    hoverCluster=cl; hoverKind='ore';
+    hoverDrop=previewDrop(cl);
+    let v=0; for(const [a,b] of cl) v+=ORE[T(a,b).m].val;
+    hoverVal=Math.round(v*(1+SV.cart*0.25)*(1+g.depth/260));
+  } else if (q.k==='air'||q.k==='find'||q.k==='rock'){
+    hoverCluster=[[c,r]]; hoverKind=q.k; hoverDrop=previewDrop([[c,r]]); hoverVal=0;
+  } else hoverCluster=null;
+}
+cv.addEventListener('pointerdown', e=>{
+  ac(); if (AC&&AC.state==='suspended') AC.resume();
+  const [x,y]=local(e);
+  if (mode==='boot'){ surface(); return; }
+  if (mode!=='run') return;
+  if (y<HUD){ hudClick(x,y); return; }
+  if (g.busy) return;
+  const t=tileAt(x,y); if(!t) return;
+  dig(t[0],t[1]);
+  hoverCluster=null;
+});
+function hudClick(x,y){
+  // tool buttons live on the right of the HUD
+  if (y>13 && x>W-40 && x<W-21){ if(g.drills>0){ g.armed = g.armed==='drill'?null:'drill'; tone(880,.06,'square',.1);} }
+  else if (y>13 && x>W-20){ if(g.dyns>0){ g.armed = g.armed==='dyn'?null:'dyn'; tone(880,.06,'square',.1);} }
+}
+
+/* ---------------- tile art ---------------- */
+function drawOre(x,y,o,s){
+  px(x,y,TILE,TILE,o.mid);
+  px(x,y,TILE,2,o.hi); px(x,y,2,TILE,o.hi);
+  px(x,y+TILE-2,TILE,2,o.lo); px(x+TILE-2,y,2,TILE,o.lo);
+  px(x+TILE-2,y,2,2,o.mid); px(x,y+TILE-2,2,2,o.mid);
+  const a=s%4, b=(s>>3)%4, c=(s>>6)%3;
+  if (o.id===0){ // coal: rounded lumps
+    px(x+3+a,y+4+b,4,3,o.spot); px(x+8,y+9-c,3,3,o.spot); px(x+4,y+10,2,2,o.spot);
+  } else if (o.id===1){ // copper: diagonal streak + verdigris
+    px(x+3,y+9-a,3,2,o.hi); px(x+6,y+7-a,3,2,o.hi); px(x+9,y+5-a,3,2,o.hi);
+    px(x+10,y+10,2,2,o.spot);
+  } else if (o.id===2){ // iron: heavy speckle
+    px(x+4+a,y+4,2,2,o.spot); px(x+9,y+7+b,2,2,o.spot); px(x+5,y+10,2,2,o.spot); px(x+11,y+3,1,1,o.spot);
+  } else if (o.id===3){ // gold: bright flecks
+    px(x+4+a,y+5,2,2,o.spot); px(x+9,y+8,3,2,o.spot); px(x+6,y+11,2,1,o.spot); px(x+11,y+4,1,2,o.hi);
+  } else { // gems: a cut facet
+    px(x+5,y+4,6,2,o.lo); px(x+4,y+6,8,4,o.hi); px(x+5,y+10,6,2,o.lo);
+    px(x+6,y+7,3,2,o.spot);
+  }
+}
+function drawRock(x,y,s){
+  px(x,y,TILE,TILE,'#3f3f4a'); px(x,y,TILE,2,'#5c5c6c'); px(x,y,2,TILE,'#5c5c6c');
+  px(x,y+TILE-2,TILE,2,'#22222c'); px(x+TILE-2,y,2,TILE,'#22222c');
+  px(x+3,y+3,2,2,'#22222c'); px(x+11,y+3,2,2,'#22222c');
+  px(x+3,y+11,2,2,'#22222c'); px(x+11,y+11,2,2,'#22222c');
+  px(x+6,y+6,4,4,'#4c4c58');
+}
+function drawAir(x,y,s,t){
+  const p = Math.sin(t/220 + s)*1;
+  px(x+3,y+3,10,10,'#2a5a5a');
+  px(x+4,y+4+p,8,8,'#7fe8d0');
+  px(x+5,y+5+p,4,3,'#d8fff0');
+  px(x+9,y+9+p,2,2,'#d8fff0');
+}
+function drawFindTile(x,y,t){
+  const F=FINDS[t.fi];
+  // each tile shows its quarter of the 16x16 sprite, doubled
+  const ox=t.dx*8, oy=t.dy*8;
+  px(x,y,TILE,TILE,'#4a3a2a');
+  for(let sy=0;sy<8;sy++) for(let sx=0;sx<8;sx++){
+    const ch=F.s[oy+sy][ox+sx];
+    if (ch==='.'||ch===' ') continue;
+    px(x+sx*2, y+sy*2, 2, 2, FP[+ch]||FP[1]);
+  }
+  px(x,y,TILE,1,'#6a5a44'); px(x,y,1,TILE,'#6a5a44');
+}
+const MINER_SP = [
+ "....0000....","..00111100..",".0111111110.",".0111111180.",".0000000000.",
+ "..03333330..","..03433430..","..03333330..","..00555500..",".0555555550.",
+ ".0355555530.","..06666660..","..06600660..","..07700770.."];
+const MP = {'0':'#0a0710','1':'#e8b830','2':'#a37a12','3':'#e0a878','4':'#2a1810',
+            '5':'#3a6ec9','6':'#2a4a8c','7':'#7a4a28','8':'#fff3b0'};
+function drawMiner(x,y,sq){
+  const h=MINER_SP.length, w=12;
+  const sy = 1 + sq*0.35, sx = 1 - sq*0.25;
+  for(let r=0;r<h;r++) for(let c=0;c<w;c++){
+    const ch=MINER_SP[r][c]; if(ch==='.') continue;
+    const dx = x + Math.round((c-w/2)*sx), dy = y + Math.round((r-h)*sy) + h;
+    px(dx, dy, Math.max(1,Math.round(sx)), Math.max(1,Math.round(sy)), MP[ch]);
+  }
+}
+
+/* ---------------- render ---------------- */
+function render(){
+  const L = layerAt(g.depth);
+  px(0,0,W,H,L.bg);
+  ctx.save();
+  const sx = shake>.3 ? (Math.random()-.5)*shake : 0;
+  const sy = shake>.3 ? (Math.random()-.5)*shake : 0;
+  ctx.translate(Math.round(sx), Math.round(sy));
+
+  // wall behind the dug shaft, with strata bands so layers read at a glance
+  const topRow = Math.floor(camY/TILE)-1, botRow = topRow + VIS + 2;
+  for (let r=topRow;r<=botRow;r++){
+    if (r<0) continue;
+    const y = HUD + r*TILE - camY;
+    const LL = layerAt(r);
+    px(0, y, W, TILE, LL.dark);
+    // strata streaks
+    const hh = hash(0,r,SEED+3);
+    px((hh%W), y+3, 3+(hh%5), 1, LL.bg);
+    px(((hh>>5)%W), y+10, 2+((hh>>4)%6), 1, LL.bg);
+    if (r % 100 === 0 && r>0){
+      // depot: planks bolted across the shaft
+      px(0,y+TILE-5,W,5,'#7a4a28'); px(0,y+TILE-5,W,1,'#a3703f');
+      for(let i=0;i<W;i+=8) px(i+2,y+TILE-4,1,3,'#4a2a14');
+      px(2,y+TILE-11,4,6,'#e8b830'); px(3,y+TILE-10,2,4,'#fff3b0');
+      textSh(String(r), 10, y+TILE-11, '#e8b830', 1);
+    }
+  }
+
+  // tiles
+  const hov = new Set();
+  if (hoverCluster) for(const [c,r] of hoverCluster) hov.add(c+','+r);
+  for (let r=topRow;r<=botRow;r++){
+    if (r<0) continue;
+    const row = getRow(r), y = HUD + r*TILE - camY;
+    for (let c=0;c<COLS;c++){
+      const t = row[c]; if(!t) continue;
+      const x = c*TILE;
+      const dy = t.drop ? -t.drop*TILE*t.dropA : 0;
+      if (t.k==='ore') drawOre(x, y+dy, ORE[t.m], t.s);
+      else if (t.k==='rock') drawRock(x, y+dy, t.s);
+      else if (t.k==='air') drawAir(x, y+dy, t.s, now);
+      else if (t.k==='find') drawFindTile(x, y+dy, t);
+      if (hov.has(c+','+r)){
+        const f = (Math.sin(now/90)*.5+.5);
+        const col = f>.5 ? '#ffffff' : '#e8b830';
+        px(x,y+dy,TILE,1,col); px(x,y+dy+TILE-1,TILE,1,col);
+        px(x,y+dy,1,TILE,col); px(x+TILE-1,y+dy,1,TILE,col);
+      }
+    }
+  }
+
+  // speed lines while falling
+  const falling = Math.abs(g.miner.r - g.miner.rr) > .35;
+  if (falling){
+    for (let i=0;i<10;i++){
+      const lx = (hash(i, Math.floor(now/40), 5) % W);
+      const ly = (hash(i, Math.floor(now/40), 9) % (H-HUD)) + HUD;
+      px(lx, ly, 1, 5+ (i%4)*3, 'rgba(255,255,255,.20)');
+    }
+  }
+
+  // miner
+  const mx = g.miner.cc*TILE + TILE/2;
+  const my = HUD + g.miner.rr*TILE - camY + TILE;
+  drawMiner(Math.round(mx), Math.round(my), landSquash);
+  // lamp glow
+  const gr = ctx.createRadialGradient(mx, my-8, 4, mx, my-8, 74);
+  gr.addColorStop(0,'rgba(255,240,180,.16)'); gr.addColorStop(1,'rgba(255,240,180,0)');
+  ctx.fillStyle=gr; ctx.fillRect(0,HUD,W,H-HUD);
+
+  // particles
+  for (const p of parts){ if(p.life>0) px(p.x, p.y, p.s, p.s, p.c); }
+  for (const f of floats){
+    const a = f.life>.35?1:f.life/.35;
+    if (a>.5) textSh(f.t, f.x - textW(f.t,1)/2, f.y, f.c, 1);
+  }
+
+  // darkness beyond the lamp
+  const vg = ctx.createRadialGradient(mx, my-8, 26, mx, my-8, 132);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(4,2,8,.82)');
+  ctx.fillStyle=vg; ctx.fillRect(0,HUD,W,H-HUD);
+
+  ctx.restore();
+
+  drawHUD();
+
+  if (banner && now<bannerT){
+    const a=(bannerT-now)/2000;
+    const bw = textW(banner,2)+12;
+    const bx = (W-bw)/2, by = HUD + 46;
+    px(bx-2,by-4,bw+4,17,'#0a0710'); px(bx,by-2,bw,13,'#e8b830');
+    text(banner, bx+6, by+2, '#0a0710', 2);
+  }
+  if (now<toastT){
+    const tw=textW(toastMsg,1)+8;
+    px((W-tw)/2-1, H-16, tw+2, 11, '#0a0710');
+    px((W-tw)/2, H-15, tw, 9, '#5ed986');
+    text(toastMsg, (W-tw)/2+4, H-13, '#0a0710', 1);
+  }
+  if (flash>.01){ ctx.fillStyle='rgba(255,255,255,'+(flash*.6).toFixed(3)+')'; ctx.fillRect(0,0,W,H); }
+  if (mode==='boot'){
+    ctx.fillStyle='rgba(10,7,16,.88)'; ctx.fillRect(0,0,W,H);
+    textSh('DOWNSHAFT', (W-textW('DOWNSHAFT',2))/2, H/2-16, '#e8b830', 2);
+    text('TAP TO START', (W-textW('TAP TO START',1))/2, H/2+6, '#a094b8', 1);
+  }
+}
+function drawHUD(){
+  px(0,0,W,HUD,'#150e1c'); px(0,HUD-1,W,1,'#0a0710');
+  // depth
+  text('DEPTH', 3, 2, '#6d6188', 1);
+  const ds = String(g.depth);
+  textSh(ds, 3, 9, '#e8b830', 2);
+  text('M', 3+textW(ds,2)+3, 14, '#a094b8', 1);
+  // lamp bar
+  const bx=62, bw=54;
+  text('LAMP', bx, 2, '#6d6188', 1);
+  px(bx-1, 8, bw+2, 8, '#0a0710'); px(bx, 9, bw, 6, '#2a1f14');
+  const fr = Math.max(0, Math.min(1, g.air/MAXAIR()));
+  const col = fr>.5?'#ffe066': fr>.22?'#f09a52':'#e05c5c';
+  px(bx, 9, Math.round(bw*fr), 6, col); px(bx, 9, Math.round(bw*fr), 2, '#fff3b0');
+  text(String(g.air), bx+bw+3, 10, col, 1);
+  // cash
+  text('$'+g.cash, 62, 18, '#5ed986', 1);
+  // tools
+  if (DRILLS()>0){
+    const x=W-40, on1 = g.armed==='drill';
+    px(x,13,17,11, on1?'#e8b830':'#2a2038');
+    text('DR'+g.drills, x+2, 16, on1?'#0a0710':(g.drills?'#e8b830':'#5a4a6a'), 1);
+  }
+  if (DYNS()>0){
+    const x=W-20, on1 = g.armed==='dyn';
+    px(x,13,18,11, on1?'#f09a52':'#2a2038');
+    text('DY'+g.dyns, x+2, 16, on1?'#0a0710':(g.dyns?'#f09a52':'#5a4a6a'), 1);
+  }
+  // hover readout: the single most important number in the game
+  if (hoverCluster && mode==='run'){
+    const t = hoverKind==='ore' ? (hoverDrop>0 ? 'DROP '+hoverDrop+'M  $'+hoverVal : 'NO DROP  $'+hoverVal)
+            : hoverKind==='air' ? 'AIR POCKET  +7'
+            : hoverKind==='find'? 'CHIP IT FREE'
+            : 'SOLID ROCK';
+    const tw=textW(t,1);
+    px(W-tw-6, 2, tw+4, 9, '#0a0710');
+    text(t, W-tw-4, 4, hoverDrop>=4?'#5ed986':'#c4b8dc', 1);
+  }
+}
+
+/* ---------------- update ---------------- */
+function update(dt){
+  // miner render position eases toward its true row: this is the fall
+  const m=g.miner;
+  m.rr += (m.r - m.rr) * Math.min(1, dt/1000*9);
+  m.cc += (m.c - m.cc) * Math.min(1, dt/1000*16);
+  if (Math.abs(m.r-m.rr)<.02) m.rr=m.r;
+  if (Math.abs(m.c-m.cc)<.02) m.cc=m.c;
+
+  // land detection
+  if (fallSpeed>0 && Math.abs(m.r-m.rr)<.25){
+    landSquash = Math.min(1, .3+fallSpeed*.08);
+    shake = Math.max(shake, Math.min(9, 1+fallSpeed*1.1));
+    const [lx,ly]=scr(m.c,m.r);
+    dust(lx+8, ly+TILE, 4+Math.min(10,fallSpeed*2));
+    noise(.16,.12+Math.min(.12,fallSpeed*.02), 700);
+    tone(110,.14,'square',.11,70);
+    fallSpeed=0;
+  }
+  landSquash *= Math.pow(.86, dt/16);
+  digSwing *= Math.pow(.85, dt/16);
+
+  // camera
+  camTarget = m.rr*TILE - (VIS*TILE)*0.40;
+  camY += (camTarget - camY) * Math.min(1, dt/1000*11);
+
+  for (let i=parts.length-1;i>=0;i--){
+    const p=parts[i]; p.vy+=.22; p.x+=p.vx*dt/16; p.y+=p.vy*dt/16; p.life-=dt*.0022;
+    if (p.life<=0) parts.splice(i,1);
+  }
+  for (let i=floats.length-1;i>=0;i--){
+    const f=floats[i]; f.y+=f.vy; f.vy*=.95; f.life-=dt*.0016;
+    if (f.life<=0) floats.splice(i,1);
+  }
+  // tile drop animation
+  const topRow=Math.floor(camY/TILE)-1;
+  for (let r=Math.max(0,topRow); r<topRow+VIS+3; r++){
+    const row=rows.get(r); if(!row) continue;
+    for (const t of row){ if(!t||!t.drop) continue;
+      t.dropA = (t.dropA===undefined?1:t.dropA);
+      t.dropA -= dt*.006;
+      if (t.dropA<=0){ t.drop=0; t.dropA=undefined; }
+    }
+  }
+  shake *= Math.pow(.85, dt/16);
+  flash *= Math.pow(.80, dt/16);
+}
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(!last) last=ts;
+  let dt=Math.min(50, ts-last); last=ts;
+  if (hitstop>0){ hitstop-=dt; dt=0; }
+  now=ts;
+  if (dt>0) update(dt);
+  render();
+}
+
+/* ---------------- boot ---------------- */
+(async function(){
+  const s = await load();
+  if (s) SV = Object.assign(NEW(), s);
+  g.miner.r=0; g.miner.rr=0;
+  for(let r=0;r<3;r++) getRow(r);
+  mode='boot';
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
