@@ -21,10 +21,10 @@ And what did not:
 
 - **Steering under the lifted hunt camera is awkward**, especially with a thumb. This was
   true of the original Chocobo game too — it is not a bug we introduced, it is an unsolved
-  problem in the reference. See `plans/hands.md`.
+  problem in the reference. Q-02.
 - **Digging is too thin to carry hundreds of hours.** Right now it is: walk, press, read the
-  call, repeat. There is no craft in it yet. See `plans/dig-depth.md`.
-- The look is placeholder. See `plans/look.md`.
+  call, repeat. There is no craft in it yet. Q-04.
+- The look is placeholder. Q-01.
 
 ---
 
@@ -69,7 +69,7 @@ What makes it look flat is not the geometry. It is:
 So the move toward a voxel or clay look is **not a change of dimension, it is a change of
 fidelity and lighting**, and it is mostly achievable within the same structure — up until
 the point where the painter's algorithm becomes the ceiling. That ceiling is the real
-reason to make an engine decision. See `plans/look.md` and `adr/ADR-006`.
+reason to make an engine decision. Q-01, and DEC-06 (still PROPOSED).
 
 ---
 
@@ -86,7 +86,7 @@ Unchanged from `little-digger-handoff.md`, and now confirmed by play:
 New, learned from the test:
 
 6. **The creature's voice is the interface.** Information reaches the player through what
-   the creature does and says, never through a number. This is now `adr/ADR-003`.
+   the creature does and says, never through a number. This is now DEC-03.
 7. **Every session must bank something permanent.** Three minutes of play cannot end empty,
    because three minutes may be all a player gets that day.
 
@@ -94,20 +94,24 @@ New, learned from the test:
 
 ## 5. THE OPEN QUESTIONS, IN PRIORITY ORDER
 
-| # | Question | Where |
+| # | Question | Issue |
 |---|---|---|
-| 1 | How does the player move under the hunt camera, on a phone? | `plans/hands.md` |
-| 2 | What makes digging deep enough for hundreds of hours? | `plans/dig-depth.md` |
-| 3 | Voxel or clay — and does the current renderer survive it? | `plans/look.md` |
-| 4 | How much of the world is authored and how much is generated? | `plans/world.md` |
-| 5 | What does the player build, keep, and come back to? | `plans/progress.md` |
-| 6 | What does the creature actually sound like, legally ours? | `plans/voice.md` |
+| 1 | What render style do we want — voxel, clay, or lit boxes? | Q-01 (urgent) |
+| 2 | How does the player move and dig on a phone? | Q-02 (urgent) |
+| 3 | What are all the v1 mechanics? | Q-03 |
+| 4 | What makes digging deep without becoming grind? | Q-04 |
+| 5 | What is the progression spine, hour 0 to hour 500? | Q-05 |
+| 6 | How much of the world is authored, how much generated? | Q-06 |
+
+They live in Ishoo, in the plan `core-questions`. Each is deliberately broad — decompose it
+into real issues when we reach it. The creature's own voice (replacing the placeholder) is
+governed by DEC-04 and gets its issues when Q-01 settles what a creature is made of.
 
 ---
 
 ## 6. INDEX
 
-- Decisions: [`adr/`](adr/) — what is locked, and what is only proposed.
-- Plans: [`plans/`](plans/) — named plans, each a list of issues with scope contracts.
+- Decisions: in Ishoo — `ishoo decision list` (DEC-01..06).
+- Open questions: in Ishoo — `ishoo plan show core-questions` (Q-01..06).
 - Original brief: [`../little-digger-handoff.md`](../little-digger-handoff.md)
 - Concept: [`../pivot-concept.md`](../pivot-concept.md)
