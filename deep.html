@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>THE LONG DARK BELOW</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#05040a;overflow:hidden;
+    font-family:ui-monospace,Menlo,Consolas,monospace;color:#c9c0d8;
+    -webkit-user-select:none;user-select:none;cursor:default}
+  canvas#cv{display:block;position:fixed;inset:0;width:100%;height:100%;
+    image-rendering:pixelated;image-rendering:crisp-edges}
+  .ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(5,4,10,.9);z-index:10;padding:18px;text-align:center}
+  .hide{display:none!important}
+  .card{width:100%;max-width:520px;max-height:92vh;overflow:auto;background:#1a1424;
+    border:4px solid #05040a;box-shadow:7px 7px 0 #05040a;padding:16px;text-align:left}
+  .card::-webkit-scrollbar{width:8px}.card::-webkit-scrollbar-thumb{background:#4a3a60}
+  h1{font-size:21px;letter-spacing:5px;color:#e8b830;text-shadow:3px 3px 0 #05040a;margin-bottom:10px}
+  h2{font-size:14px;letter-spacing:3px;color:#5ed986;margin-bottom:10px}
+  h3{font-size:11px;letter-spacing:2px;color:#9a8fb0;margin:14px 0 7px}
+  p.s{font-size:11px;line-height:1.8;color:#9a8fb0;letter-spacing:.6px;margin-bottom:10px}
+  .st{font-size:11px;color:#c4b8dc;margin:3px 0;letter-spacing:1px}
+  .st b{color:#e8b830}
+  .row{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}
+  button.b{cursor:pointer;font-family:inherit;font-weight:bold;font-size:11px;letter-spacing:2px;
+    padding:11px 10px;background:#5ed986;color:#08301a;border:3px solid #05040a;
+    box-shadow:4px 4px 0 #05040a;flex:1;min-width:110px;text-transform:uppercase;
+    transition:transform .05s,box-shadow .05s}
+  button.b:active{transform:translate(4px,4px);box-shadow:0 0 0 #05040a}
+  button.b.a{background:#f09a52;color:#3a1c08}
+  button.b.g{background:#39304c;color:#c4b8dc}
+  button.b:disabled{background:#2c2440;color:#63587e;cursor:default;box-shadow:4px 4px 0 #05040a}
+  .it{display:flex;gap:9px;align-items:center;padding:9px;margin-bottom:6px;background:#120d1a;border:3px solid #05040a}
+  .it .t{flex:1}
+  .it .n{font-size:11px;letter-spacing:1px;color:#e8b830;margin-bottom:3px}
+  .it .d{font-size:10px;line-height:1.55;color:#9a8fb0}
+  .it button.b{flex:0 0 auto;min-width:84px;padding:9px 6px}
+  .rg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .rc{background:#120d1a;border:3px solid #05040a;padding:8px;text-align:center}
+  .rc .n{font-size:9px;letter-spacing:.5px;color:#63587e;margin-top:5px;line-height:1.4}
+  .rc.got .n{color:#e8b830}
+  .rc .d{font-size:8px;color:#7e719c;margin-top:4px;line-height:1.45}
+  .rc .q{font-size:20px;color:#39304c}
+  #boot .card{text-align:center}
+  #fade{position:fixed;inset:0;background:#000;z-index:20;pointer-events:none;opacity:0;transition:opacity .3s}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="fade"></div>
+<div id="ui" class="ov hide"></div>
+<div id="boot" class="ov"><div class="card">
+  <h1>THE LONG DARK BELOW</h1>
+  <p class="s" style="color:#c4b8dc">
+    One cave. It remembers everything you do to it.<br>
+    Dig down — then get back up, because nothing you find counts until you carry it out.
+  </p>
+  <p class="s">
+    <b style="color:#5ed986">WASD</b> walk &nbsp; <b style="color:#5ed986">MOUSE</b> look &nbsp;
+    <b style="color:#5ed986">SHIFT</b> creep &nbsp; <b style="color:#5ed986">SPACE</b> hop<br>
+    <b style="color:#5ed986">HOLD LMB</b> dig &nbsp; <b style="color:#5ed986">RMB</b> throw a lightstone<br>
+    <b style="color:#5ed986">Q</b> drop a ladder &nbsp; <b style="color:#5ed986">E</b> use the hoist &nbsp;
+    <b style="color:#5ed986">TAB</b> survey map
+  </p>
+  <p class="s" style="color:#63587e">
+    Your lamp is a round-trip budget, not a health bar. When it dies, so do you —
+    and your pack stays exactly where you fell.
+  </p>
+  <div class="row"><button class="b" id="bstart">CLICK TO DESCEND</button></div>
+  <div class="row"><button class="b g" id="bwipe">WIPE THE MINE</button></div>
+</div></div>
+<script>
+"use strict";
+/* =====================================================================
+   THE LONG DARK BELOW  —  playable proof of concept
+
+   Design contract, in one line: the cave is persistent, the trip is a
+   round trip, and every metre of access you build stays built.
+
+   Everything else hangs off that. The lamp bounds the trip. The pack
+   only counts when you carry it home. Ladders are the real progression
+   because they are the only thing that shortens tomorrow's descent.
+   ===================================================================== */
+
+/* ================= materials ================= */
+const AIR=0, SOIL=1, STONE=2, SCHIST=3, DEEP=4, BASALT=5, OBSID=6,
+      COAL=7, COPPER=8, IRON=9, GOLD=10, EMERALD=11, AMETHYST=12,
+      GLOW=13, ROSEQ=14, AMBER=15, LADDER=16, PLANK=17, LANTERN=18,
+      BEDROCK=19, RELIC=20, BEAM=21;
+const NMAT=22, LV=6;
+
+const MATBASE=[
+ [0,0,0],
+ [126, 86, 52],   // soil
+ [122,116,134],   // stone
+ [104,110,128],   // schist   (bluish, plated)
+ [ 84, 74,100],   // deepstone
+ [ 62, 56, 74],   // basalt
+ [ 44, 34, 52],   // obsidian
+ [ 58, 54, 70],   // coal
+ [196,112, 54],   // copper
+ [176,132,116],   // iron
+ [232,176, 46],   // gold
+ [ 74,214,124],   // emerald
+ [176,116,232],   // amethyst
+ [ 96,240,224],   // glowcrystal  (emissive)
+ [244,116,188],   // rosequartz   (emissive)
+ [244,168, 66],   // amber        (emissive, lamp oil)
+ [150,104, 56],   // ladder
+ [136, 96, 54],   // plank
+ [255,226,150],   // lantern      (emissive)
+ [ 40, 34, 48],   // bedrock
+ [232,214,168],   // relic        (emissive)
+ [104, 74, 42],   // support beam
+];
+//             air s  st sc dp ba ob co cu ir au em am gl rq amb lad pl lan bed rel beam
+const TIER  =[  0, 1, 1, 2, 3, 4, 5, 1, 1, 2, 2, 3, 4, 3, 4, 1, 1, 1, 1, 99, 1, 1];
+const HARD  =[  0,.55,.95,1.7,2.3,3.1,4.1,.8,1.1,1.5,1.9,2.4,2.9,2.2,2.6,.7,.35,.5,.5,99,1.6,.6];
+const VALUE =[  0, 0, 0, 0, 0, 0, 0, 3, 7,14,34,70,130,55,110, 0, 0, 0, 0, 0, 0, 0];
+const EMIT  =[  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0];
+const SOLID =[  0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1];
+const NAME  =['','SOIL','STONE','SCHIST','DEEPSTONE','BASALT','OBSIDIAN','COAL','COPPER',
+              'IRON','GOLD','EMERALD','AMETHYST','GLOWCRYSTAL','ROSE QUARTZ','AMBER',
+              'LADDER','PLANK','LANTERN','BEDROCK','SOMETHING BURIED','SUPPORT BEAM'];
+const ISORE =[  0,0,0,0,0,0,0, 1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0];
+
+const RAMP = new Uint8Array(NMAT*LV*3);
+for(let m=0;m<NMAT;m++){
+  const [r,g,b]=MATBASE[m];
+  for(let i=0;i<LV;i++){
+    const t=i/(LV-1), k=Math.pow(t,1.42), s=1-k, o=(m*LV+i)*3;
+    RAMP[o  ]=Math.min(255, r*k+10*s);
+    RAMP[o+1]=Math.min(255, g*k+ 7*s);
+    RAMP[o+2]=Math.min(255, b*k+26*s);
+  }
+}
+const BAYER=new Float32Array([0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5].map(v=>(v+0.5)/16));
+
+/* ================= world ================= */
+const WX=128, WY=288, WZ=128;
+const CS=8,  CX=WX/CS|0,  CY=WY/CS|0,  CZ=WZ/CS|0;
+const CS2=16, C2X=WX/CS2|0, C2Y=WY/CS2|0, C2Z=WZ/CS2|0;
+const vox     = new Uint8Array(WX*WY*WZ);
+const coarse  = new Uint8Array(CX*CY*CZ);
+const coarse2 = new Uint8Array(C2X*C2Y*C2Z);
+const VI=(x,y,z)=>(y*WZ+z)*WX+x;
+const SURFACE_Y = 272;                      // the mine head floor
+const depthOf = y => Math.max(0, Math.round(SURFACE_Y - y));
+
+function getV(x,y,z){
+  if(x<0||y<0||z<0||x>=WX||y>=WY||z>=WZ) return BEDROCK;
+  return vox[(y*WZ+z)*WX+x];
+}
+function rawSet(x,y,z,m){
+  if(x<0||y<0||z<0||x>=WX||y>=WY||z>=WZ) return;
+  vox[(y*WZ+z)*WX+x]=m;
+  if(m){
+    coarse [(((y/CS )|0)*CZ +((z/CS )|0))*CX +((x/CS )|0)]=1;
+    coarse2[(((y/CS2)|0)*C2Z+((z/CS2)|0))*C2X+((x/CS2)|0)]=1;
+  }
+}
+function rebuildCoarse(){
+  coarse.fill(0); coarse2.fill(0);
+  for(let y=0;y<WY;y++) for(let z=0;z<WZ;z++){
+    const row=(y*WZ+z)*WX;
+    for(let x=0;x<WX;x++) if(vox[row+x]){
+      coarse [(((y/CS )|0)*CZ +((z/CS )|0))*CX +((x/CS )|0)]=1;
+      coarse2[(((y/CS2)|0)*C2Z+((z/CS2)|0))*C2X+((x/CS2)|0)]=1;
+    }
+  }
+}
+// every change the player makes is recorded as a diff against the generator,
+// so a 4.7M-voxel world saves in a few kilobytes.
+let edits = new Map();
+function editSet(x,y,z,m){
+  if(x<0||y<0||z<0||x>=WX||y>=WY||z>=WZ) return;
+  rawSet(x,y,z,m);
+  edits.set(VI(x,y,z), m);
+  dirtyLights = true;
+}
+
+/* ================= noise ================= */
+let SEED=20260728;
+// NOTE: the obvious version of this ends with `n ^ (n>>16)` using a signed
+// shift, which XORs bit 31 with itself and guarantees a result below 0.5.
+// Every shift here must be unsigned or half the world never gets generated.
+function h3(x,y,z){
+  let n = Math.imul(x,374761393) ^ Math.imul(y,668265263) ^
+          Math.imul(z,2246822519) ^ Math.imul(SEED,906133);
+  n = Math.imul(n ^ (n>>>15), 2246822519);
+  n = Math.imul(n ^ (n>>>13), 3266489917);
+  n ^= n>>>16;
+  return (n>>>0)/4294967296;
+}
+function vn(x,y,z){
+  const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z);
+  const xf=x-xi,yf=y-yi,zf=z-zi;
+  const u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf),w=zf*zf*(3-2*zf);
+  const c=(a,b,d)=>h3(xi+a,yi+b,zi+d);
+  const a0=c(0,0,0),a1=c(1,0,0),b0=c(0,1,0),b1=c(1,1,0);
+  const c0=c(0,0,1),c1=c(1,0,1),d0=c(0,1,1),d1=c(1,1,1);
+  const p=(a0+(a1-a0)*u)+((b0+(b1-b0)*u)-(a0+(a1-a0)*u))*v;
+  const q=(c0+(c1-c0)*u)+((d0+(d1-d0)*u)-(c0+(c1-c0)*u))*v;
+  return p+(q-p)*w;
+}
+function fbm(x,y,z,oct){
+  let a=0,amp=1,f=1,n=0;
+  for(let i=0;i<oct;i++){ a+=vn(x*f,y*f,z*f)*amp; n+=amp; amp*=0.5; f*=2.03; }
+  return a/n;
+}
+
+/* ================= bands ================= */
+// each band is a different ruleset, not a different palette. the slab at the
+// top of each one is the gate: break it with a good enough pick, or find the
+// hole somebody else already fell through.
+const BANDS=[
+  {n:'THE TOPSOIL',  d:0,   rock:STONE,  slab:null,   ores:[COAL,COPPER],                 dens:.055, air:.055},
+  {n:'THE SCHIST',   d:38,  rock:STONE,  slab:SCHIST, ores:[COAL,COPPER,IRON],            dens:.060, air:.048},
+  {n:'THE DEEPS',    d:88,  rock:DEEP,   slab:DEEP,   ores:[IRON,GOLD,GLOW],              dens:.062, air:.040},
+  {n:'THE BASALT',   d:148, rock:BASALT, slab:BASALT, ores:[GOLD,EMERALD,GLOW,ROSEQ],     dens:.058, air:.034},
+  {n:'THE GLASS',    d:208, rock:OBSID,  slab:OBSID,  ores:[EMERALD,AMETHYST,ROSEQ],      dens:.055, air:.030},
+];
+function bandOfDepth(d){ let i=0; for(let k=0;k<BANDS.length;k++) if(d>=BANDS[k].d) i=k; return i; }
+const GALLERY_STEP = 34;
+const GALLERIES=[];   // {d, x, y, z}
+const RELICS=[
+ {n:'LAMPWRIGHT COIL', d:22,  e:'Your lamp burns a fifth slower.'},
+ {n:'SURVEYOR EYE',    d:58,  e:'Ore glows faintly through the dark. You will see veins you would have walked past.'},
+ {n:'DEADMAN BOOTS',   d:100, e:'Falls hurt half as much.'},
+ {n:'KNOTTED CORD',    d:138, e:'Two more ladders on every trip.'},
+ {n:'PACKMULE STRAP',  d:178, e:'Carry twenty more.'},
+ {n:'EMBERHEART',      d:225, e:'You glow. The dark can no longer finish you.'},
+];
+
+/* ================= save ================= */
+const SKEY='longdark:v1';
+const NEWSAVE=()=>({seed:20260728, cash:0, pick:1, lamp:0, pack:0, rope:0,
+  relics:[], secured:[0], piles:[], edits:[], best:0, trips:0, banked:0});
+let SV=NEWSAVE();
+function saveGame(){
+  SV.edits=[]; edits.forEach((m,i)=>{ SV.edits.push(i,m); });
+  try{ localStorage.setItem(SKEY, JSON.stringify(SV)); }catch(e){}
+}
+function loadGame(){
+  try{ const s=localStorage.getItem(SKEY); if(s) return Object.assign(NEWSAVE(), JSON.parse(s)); }catch(e){}
+  return null;
+}
+
+/* ================= derived stats ================= */
+const LAMP_MAX  = ()=> (260 + SV.lamp*80) * (SV.relics.includes(0)?1.20:1);
+const PACK_MAX  = ()=> 34 + SV.pack*22 + (SV.relics.includes(4)?20:0);
+const ROPE_MAX  = ()=> 4 + SV.rope*2 + (SV.relics.includes(3)?2:0);
+const FALL_MULT = ()=> SV.relics.includes(2)?0.5:1;
+const HAS_EYE   = ()=> SV.relics.includes(1);
+const HAS_EMBER = ()=> SV.relics.includes(5);
+
+/* ================= lights ================= */
+let lights=[], dirtyLights=true, lightLX=-999, lightLY=-999, lightLZ=-999;
+function rebuildLights(){
+  // static lights come from emissive voxels near the player; rebuilt lazily,
+  // and again whenever you have walked far enough for the set to be wrong
+  lights.length=0;
+  const px=P.x|0, py=P.y|0, pz=P.z|0, R=28;
+  lightLX=px; lightLY=py; lightLZ=pz;
+  for(let y=Math.max(0,py-R); y<Math.min(WY,py+R); y+=1)
+  for(let z=Math.max(0,pz-R); z<Math.min(WZ,pz+R); z+=1){
+    const row=(y*WZ+z)*WX;
+    for(let x=Math.max(0,px-R); x<Math.min(WX,px+R); x++){
+      const m=vox[row+x];
+      if(!m||!EMIT[m]) continue;
+      let col, rad, pow;
+      if(m===GLOW){ col=[0.34,0.98,0.90]; rad=11; pow=1.0; }
+      else if(m===ROSEQ){ col=[1.0,0.42,0.74]; rad=11; pow=1.0; }
+      else if(m===AMBER){ col=[1.0,0.68,0.26]; rad=9;  pow=0.8; }
+      else if(m===LANTERN){ col=[1.0,0.88,0.55]; rad=17; pow=1.9; }
+      else { col=[1.0,0.94,0.72]; rad=13; pow=1.3; }   // relic
+      lights.push({x:x+0.5,y:y+0.5,z:z+0.5,c:col,rad,pow});
+      if(lights.length>190) { dirtyLights=false; return; }
+    }
+  }
+  dirtyLights=false;
+}
+
+/* ================= worldgen ================= */
+function carveSphere(cx,cy,cz,r,jag){
+  const r2=r*r;
+  for(let y=Math.max(1,(cy-r)|0); y<Math.min(WY,cy+r+1); y++)
+  for(let z=Math.max(0,(cz-r)|0); z<Math.min(WZ,cz+r+1); z++)
+  for(let x=Math.max(0,(cx-r)|0); x<Math.min(WX,cx+r+1); x++){
+    const dx=x-cx,dy=y-cy,dz=z-cz;
+    let d=dx*dx+dy*dy+dz*dz;
+    if(jag) d*=(0.78+fbm(x*0.09,y*0.09,z*0.09,2)*0.5);
+    if(d<r2) vox[VI(x,y,z)]=AIR;
+  }
+}
+function carveBox(x0,y0,z0,x1,y1,z1,m){
+  m=m===undefined?AIR:m;
+  for(let y=Math.max(0,y0);y<=Math.min(WY-1,y1);y++)
+  for(let z=Math.max(0,z0);z<=Math.min(WZ-1,z1);z++)
+  for(let x=Math.max(0,x0);x<=Math.min(WX-1,x1);x++) vox[VI(x,y,z)]=m;
+}
+function blob(cx,cy,cz,r,m){
+  const r2=r*r;
+  for(let y=(cy-r)|0;y<=cy+r;y++) for(let z=(cz-r)|0;z<=cz+r;z++) for(let x=(cx-r)|0;x<=cx+r;x++){
+    if(x<0||y<1||z<0||x>=WX||y>=WY||z>=WZ) continue;
+    const dx=x-cx,dy=y-cy,dz=z-cz;
+    if(dx*dx+dy*dy+dz*dz < r2*(0.6+h3(x,y,z)*0.7)){
+      const cur=vox[VI(x,y,z)];
+      if(cur!==AIR && cur!==BEDROCK) vox[VI(x,y,z)]=m;
+    }
+  }
+}
+
+function generate(){
+  GALLERIES.length=0;
+  vox.fill(0);
+
+  /* --- 1. solid ground, banded by depth --- */
+  for(let y=0;y<WY;y++){
+    const d=depthOf(y);
+    let m = BANDS[bandOfDepth(d)].rock;
+    if(d<8) m=SOIL;
+    if(y<4) m=BEDROCK;
+    if(y>SURFACE_Y+8) m=BEDROCK;                 // sealed roof over the mine head
+    const off=(y*WZ)*WX, n=WZ*WX;
+    for(let i=0;i<n;i++) vox[off+i]=m;
+  }
+
+  /* --- 2. the gates. a slab of the harder rock across the whole world at
+         each band boundary, with a handful of natural throats through it. --- */
+  for(let b=1;b<BANDS.length;b++){
+    const B=BANDS[b], y0=SURFACE_Y-B.d-3, y1=SURFACE_Y-B.d+1;
+    carveBox(0,y0,0, WX-1,y1,WZ-1, B.slab);
+    const holes = 3 + ((h3(b,77,3)*3)|0);
+    for(let k=0;k<holes;k++){
+      const hx=8+h3(b,k,11)*(WX-16), hz=8+h3(b,k,12)*(WZ-16);
+      const hr=2.1+h3(b,k,13)*1.9;
+      for(let y=y0-3;y<=y1+3;y++)
+        for(let z=(hz-hr)|0;z<=hz+hr;z++) for(let x=(hx-hr)|0;x<=hx+hr;x++){
+          const dx=x-hx-Math.sin(y*0.5)*1.2, dz=z-hz+Math.cos(y*0.4)*1.2;
+          if(dx*dx+dz*dz<hr*hr && x>=0&&z>=0&&x<WX&&z<WZ) vox[VI(x,y,z)]=AIR;
+        }
+    }
+  }
+
+  /* --- 3. cave worms. these are the routes an attentive player finds. --- */
+  for(let i=0;i<120;i++){
+    let x=8+h3(i,1,0)*(WX-16), y=12+h3(i,2,0)*(SURFACE_Y-24), z=8+h3(i,3,0)*(WZ-16);
+    let a=h3(i,4,0)*6.28, b=(h3(i,5,0)-0.5)*1.5;
+    const len=40+((h3(i,6,0)*70)|0);
+    for(let s=0;s<len;s++){
+      carveSphere(x,y,z, 1.9+h3(i,s,6)*2.3, true);
+      a+=(h3(i,s,7)-0.5)*0.55; b+=(h3(i,s,8)-0.5)*0.34; b=Math.max(-1,Math.min(1,b));
+      x+=Math.cos(a)*1.7; y+=b*1.5; z+=Math.sin(a)*1.7;
+      if(x<6||z<6||x>WX-6||z>WZ-6||y<8||y>SURFACE_Y-6) break;
+    }
+  }
+
+  /* --- 4. the two voids. both are sized to sit BETWEEN gate slabs so they
+         never quietly open a route past a pick you have not bought yet. --- */
+  function voidBlob(cx,cy,cz,rx,ry,rz,fill){
+    for(let y=Math.max(5,cy-ry);y<Math.min(WY,cy+ry);y++)
+    for(let z=Math.max(0,cz-rz);z<Math.min(WZ,cz+rz);z++)
+    for(let x=Math.max(0,cx-rx);x<Math.min(WX,cx+rx);x++){
+      const dx=(x-cx)/rx, dy=(y-cy)/ry, dz=(z-cz)/rz;
+      let d=dx*dx+dy*dy+dz*dz;
+      d*=(0.70+fbm(x*0.045,y*0.035,z*0.045,3)*0.62);
+      if(d<1) vox[VI(x,y,z)]=fill===undefined?AIR:fill;
+    }
+  }
+  // THE CHASM — narrow and tall, in the schist. the first time the floor
+  // gives out under you, this is what you fall down.
+  voidBlob(40, SURFACE_Y-63, 44, 13, 21, 13);
+  // THE GREAT CAVERN — the landmark. you cannot see its floor.
+  const CVX=64, CVZ=64, CVY=SURFACE_Y-178, RX=31, RY=25, RZ=28;
+  voidBlob(CVX,CVY,CVZ,RX,RY,RZ);
+  // a spire out of the dark, so the void has a measuring stick
+  for(let y=CVY-RY+4;y<CVY+12;y++){
+    const t=(y-(CVY-RY+4))/(RY+8), rr=8*(1-t*0.72)+fbm(0,y*0.2,0,2)*2.4;
+    for(let z=(CVZ-rr)|0;z<=CVZ+rr;z++) for(let x=(CVX-rr)|0;x<=CVX+rr;x++){
+      const dx=x-CVX-Math.sin(y*0.08)*4, dz=z-CVZ+Math.cos(y*0.07)*3;
+      if(dx*dx+dz*dz<rr*rr && x>=0&&z>=0&&x<WX&&z<WZ) vox[VI(x,y,z)]=BASALT;
+    }
+  }
+
+  /* --- 5. ore --- */
+  for(let i=0;i<2600;i++){
+    const x=(6+h3(i,11,0)*(WX-12))|0, y=(6+h3(i,12,0)*(SURFACE_Y-10))|0, z=(6+h3(i,13,0)*(WZ-12))|0;
+    const B=BANDS[bandOfDepth(depthOf(y))];
+    const q=h3(i,14,0);
+    const m=B.ores[(q*B.ores.length)|0];
+    blob(x,y,z, 1.5+h3(i,15,0)*2.3, m);
+  }
+  // amber: lamp oil. rare, lumpy, always worth the detour.
+  for(let i=0;i<300;i++){
+    const x=(6+h3(i,31,0)*(WX-12))|0, y=(6+h3(i,32,0)*(SURFACE_Y-10))|0, z=(6+h3(i,33,0)*(WZ-12))|0;
+    blob(x,y,z, 1.1+h3(i,34,0)*1.0, AMBER);
+  }
+  // crystals cling to cavern walls; the deep ones burn brightest
+  let placed=0;
+  for(let i=0;i<26000 && placed<420;i++){
+    const x=(4+h3(i,21,0)*(WX-8))|0, y=(6+h3(i,22,0)*(SURFACE_Y-14))|0, z=(4+h3(i,23,0)*(WZ-8))|0;
+    if(vox[VI(x,y,z)]!==AIR) continue;
+    if(!(getV(x,y-1,z)>AIR||getV(x,y+1,z)>AIR||getV(x-1,y,z)>AIR||
+         getV(x+1,y,z)>AIR||getV(x,y,z-1)>AIR||getV(x,y,z+1)>AIR)) continue;
+    const m = h3(i,24,0)>0.66 ? ROSEQ : GLOW;
+    if(depthOf(y) < 70 && h3(i,29,0) > 0.25) continue;   // keep them rare up top
+    const n=1+((h3(i,25,0)*3)|0);
+    for(let k=0;k<n;k++){
+      const ox=(h3(i,k,31)*3-1)|0, oy=(h3(i,k,32)*3-1)|0, oz=(h3(i,k,33)*3-1)|0;
+      if(getV(x+ox,y+oy,z+oz)===AIR) vox[VI(x+ox,y+oy,z+oz)]=m;
+    }
+    placed++;
+  }
+
+  /* --- 6. galleries. authored places inside procedural rock. --- */
+  for(let d=GALLERY_STEP; d<=250; d+=GALLERY_STEP){
+    const gx=(20+h3(d,41,0)*(WX-40))|0, gz=(20+h3(d,42,0)*(WZ-40))|0, gy=SURFACE_Y-d;
+    carveBox(gx-5,gy,gz-5, gx+5,gy+5,gz+5, AIR);
+    carveBox(gx-5,gy-1,gz-5, gx+5,gy-1,gz+5, PLANK);
+    // roof beams + corner posts, so it reads as built rather than found
+    for(let x=gx-5;x<=gx+5;x+=2){ vox[VI(x,gy+5,gz-5)]=BEAM; vox[VI(x,gy+5,gz+5)]=BEAM; }
+    for(const [cx2,cz2] of [[gx-5,gz-5],[gx+5,gz-5],[gx-5,gz+5],[gx+5,gz+5]])
+      for(let y=gy;y<=gy+5;y++) vox[VI(cx2,y,cz2)]=BEAM;
+    vox[VI(gx,gy+4,gz)]=LANTERN;
+    GALLERIES.push({d, x:gx+0.5, y:gy, z:gz+0.5});
+  }
+
+  /* --- 7. relics, buried in solid rock at fixed depths --- */
+  RELICS.forEach((R,i)=>{
+    const isBuried=(x,y,z)=>{
+      if(getV(x,y,z)===AIR||getV(x,y,z)===BEDROCK) return false;
+      for(let ox=-1;ox<=1;ox++) for(let oy=-1;oy<=1;oy++) for(let oz=-1;oz<=1;oz++)
+        if(getV(x+ox,y+oy,z+oz)===AIR) return false;
+      return true;
+    };
+    let rx=(10+h3(i,51,0)*(WX-20))|0, rz=(10+h3(i,52,0)*(WZ-20))|0, ry=SURFACE_Y-R.d;
+    let found=false;
+    // spiral outward until it sits in genuinely solid rock — you must never
+    // be able to simply walk up to one
+    for(let s=0;s<600 && !found;s++){
+      const tx=rx+((h3(i,s,61)*30)|0)-15, tz=rz+((h3(i,s,62)*30)|0)-15,
+            ty=ry+((h3(i,s,63)*14)|0)-7;
+      if(tx<3||tz<3||ty<6||tx>=WX-3||tz>=WZ-3||ty>=WY-3) continue;
+      if(isBuried(tx,ty,tz)){ rx=tx; ry=ty; rz=tz; found=true; }
+    }
+    vox[VI(rx,ry,rz)]=RELIC;
+    R.x=rx; R.y=ry; R.z=rz; R.found=found;
+  });
+
+  /* --- 8. the mine head --- */
+  carveBox(58,SURFACE_Y,58, 70,SURFACE_Y+6,70, AIR);
+  carveBox(58,SURFACE_Y-1,58, 70,SURFACE_Y-1,70, PLANK);
+  for(const [cx2,cz2] of [[58,58],[70,58],[58,70],[70,70]])
+    for(let y=SURFACE_Y;y<=SURFACE_Y+6;y++) vox[VI(cx2,y,cz2)]=BEAM;
+  for(let x=58;x<=70;x+=2){ vox[VI(x,SURFACE_Y+6,58)]=BEAM; vox[VI(x,SURFACE_Y+6,70)]=BEAM; }
+  vox[VI(64,SURFACE_Y+5,64)]=LANTERN;
+  vox[VI(60,SURFACE_Y+4,60)]=LANTERN;
+  vox[VI(68,SURFACE_Y+4,68)]=LANTERN;
+  // the hoist: a lit post you stand at
+  vox[VI(64,SURFACE_Y,60)]=BEAM; vox[VI(64,SURFACE_Y+1,60)]=BEAM;
+  vox[VI(64,SURFACE_Y+2,60)]=LANTERN;
+  // the shaft everything starts from
+  carveBox(63,SURFACE_Y-14,66, 65,SURFACE_Y-1,68, AIR);
+  for(let y=SURFACE_Y-14;y<SURFACE_Y;y++) vox[VI(64,y,67)]=LADDER;
+
+  rebuildCoarse();
+}
+const HOIST={x:64.5,y:SURFACE_Y,z:60.5};
+
+function applyEdits(){
+  edits.forEach((m,i)=>{ vox[i]=m; });
+  rebuildCoarse();
+}
+
+/* ================= player ================= */
+const P={x:64.5,y:SURFACE_Y,z:64.5,vx:0,vy:0,vz:0,yaw:Math.PI,pitch:0,
+         onGround:false,fallFrom:null,stun:0,hp:100,climbing:false};
+const EYE=1.58, RAD=0.31, HGT=1.75;
+let bob=0,bobPhase=0,lampSwayX=0,lampSwayY=0,lampVX=0,lampVY=0,stepCool=0;
+let shake=0,flashR=0,flashW=0,fovBoost=0;
+let lampFuel=0, darkTimer=0;
+let packCount=0, packValue=0, ropesLeft=0;
+let tripDeepest=0, runActive=false;
+
+function solidAt(x,y,z){ return SOLID[getV(Math.floor(x),Math.floor(y),Math.floor(z))]===1; }
+function ladderAt(x,y,z){ return getV(Math.floor(x),Math.floor(y),Math.floor(z))===LADDER; }
+function hits(px,py,pz){
+  for(let i=0;i<4;i++){
+    const dx=(i&1)?RAD:-RAD, dz=(i&2)?RAD:-RAD;
+    if(solidAt(px+dx,py+0.12,pz+dz)) return true;
+    if(solidAt(px+dx,py+0.9 ,pz+dz)) return true;
+    if(solidAt(px+dx,py+HGT-0.05,pz+dz)) return true;
+  }
+  return false;
+}
+function onLadder(){
+  for(let i=0;i<4;i++){
+    const dx=(i&1)?RAD:-RAD, dz=(i&2)?RAD:-RAD;
+    if(ladderAt(P.x+dx,P.y+0.4,P.z+dz)||ladderAt(P.x+dx,P.y+1.3,P.z+dz)) return true;
+  }
+  return ladderAt(P.x,P.y+0.4,P.z)||ladderAt(P.x,P.y+1.3,P.z);
+}
+
+/* ================= trips ================= */
+function beginTrip(atDepth){
+  const g = GALLERIES.find(g=>g.d===atDepth);
+  if(atDepth===0 || !g){ P.x=HOIST.x; P.y=SURFACE_Y; P.z=64.5; }
+  else { P.x=g.x; P.y=g.y; P.z=g.z; }
+  P.vx=P.vy=P.vz=0; P.stun=0; P.hp=100; P.fallFrom=null;
+  lampFuel=LAMP_MAX(); darkTimer=0;
+  ropesLeft=ROPE_MAX();
+  packCount=0; packValue=0;
+  tripDeepest=depthOf(P.y);
+  runActive=true; dirtyLights=true;
+  let guard=0; while(hits(P.x,P.y,P.z)&&guard++<40) P.y+=0.5;
+  SV.trips++; saveGame();
+  band(atDepth===0?'THE MINE HEAD':BANDS[bandOfDepth(atDepth)].n, 2200);
+}
+function bankPack(){
+  if(packCount===0) return 0;
+  const v=packValue;
+  SV.cash+=v; SV.banked+=v;
+  packCount=0; packValue=0;
+  saveGame();
+  return v;
+}
+// You black out. Everything in your pack stays exactly where you were standing.
+function blackout(reason){
+  if(!runActive) return;
+  runActive=false;
+  if(packCount>0){
+    SV.piles.push({x:+P.x.toFixed(2), y:+P.y.toFixed(2), z:+P.z.toFixed(2),
+                   n:packCount, v:packValue, d:depthOf(P.y)});
+    packCount=0; packValue=0;
+  }
+  saveGame();
+  fade(true);
+  setTimeout(()=>{
+    beginTrip(0);
+    fade(false);
+    openHoist(reason);
+  }, 420);
+  tone(150,1.1,'sawtooth',0.16,52); nz(0.9,0.14,300);
+  shake=18; flashR=0.9;
+}
+
+/* ================= input ================= */
+const keys={};
+const cv=document.getElementById('cv'), bootEl=document.getElementById('boot'), uiEl=document.getElementById('ui');
+let locked=false, mapOpen=false, uiOpen=false;
+addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='Tab'){ e.preventDefault(); mapOpen=!mapOpen; }
+  if(e.code==='KeyQ') dropLadder();
+  if(e.code==='KeyE') tryUse();
+  if(e.code==='KeyF') showStats=!showStats;
+  if(e.code==='Escape' && uiOpen) closeUI();
+  if(e.code==='Space') e.preventDefault();
+});
+addEventListener('keyup',e=>{ keys[e.code]=false; });
+addEventListener('mousemove',e=>{
+  if(!locked) return;
+  P.yaw+=e.movementX*0.0024;
+  P.pitch=Math.max(-1.52,Math.min(1.52,P.pitch-e.movementY*0.0024));
+});
+let digging=false;
+// flip this if the buttons ever come through the other way round
+const SWAP_MOUSE=false;
+const DIG_BTN=SWAP_MOUSE?2:0, THROW_BTN=SWAP_MOUSE?0:2;
+addEventListener('mousedown',e=>{
+  if(!locked) return;
+  if(e.button===DIG_BTN) digging=true;
+  if(e.button===THROW_BTN) throwStone();
+});
+addEventListener('mouseup',e=>{ if(e.button===DIG_BTN){ digging=false; digProg=0; } });
+addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('pointerlockchange',()=>{ locked=(document.pointerLockElement===cv); });
+function grab(){ cv.requestPointerLock(); }
+
+/* ================= audio ================= */
+let AC=null,MG=null,voices=0,windG=null,droneG=null,heartT=0;
+function startAudio(){
+  if(AC){ if(AC.state==='suspended') AC.resume(); return; }
+  try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+  MG=AC.createGain(); MG.gain.value=0.5; MG.connect(AC.destination);
+  const o1=AC.createOscillator(),o2=AC.createOscillator(),g=AC.createGain(),f=AC.createBiquadFilter();
+  o1.type='sine'; o1.frequency.value=41; o2.type='sine'; o2.frequency.value=61.5;
+  f.type='lowpass'; f.frequency.value=180; g.gain.value=0.15;
+  o1.connect(f); o2.connect(f); f.connect(g); g.connect(MG); o1.start(); o2.start(); droneG=g;
+  const nb=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate), a=nb.getChannelData(0);
+  for(let i=0;i<a.length;i++) a[i]=Math.random()*2-1;
+  const src=AC.createBufferSource(); src.buffer=nb; src.loop=true;
+  const wf=AC.createBiquadFilter(); wf.type='bandpass'; wf.frequency.value=420; wf.Q.value=0.7;
+  windG=AC.createGain(); windG.gain.value=0;
+  src.connect(wf); wf.connect(windG); windG.connect(MG); src.start();
+}
+function tone(f,d,ty,v,f2,delay){
+  if(!AC||voices>8) return; voices++;
+  const t=AC.currentTime+(delay||0);
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.type=ty||'square'; o.frequency.setValueAtTime(f,t);
+  if(f2) o.frequency.exponentialRampToValueAtTime(Math.max(20,f2),t+d);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v||0.12,t+0.006);
+  g.gain.exponentialRampToValueAtTime(0.0008,t+d);
+  o.connect(g); g.connect(MG); o.start(t); o.stop(t+d+0.02);
+  setTimeout(()=>voices--,(d+(delay||0))*1000+40);
+}
+let noiseBuf=null;
+function nz(d,v,lp,delay){
+  if(!AC||voices>8) return; voices++;
+  const t=AC.currentTime+(delay||0);
+  if(!noiseBuf){ noiseBuf=AC.createBuffer(1,AC.sampleRate*0.6,AC.sampleRate);
+    const a=noiseBuf.getChannelData(0); for(let i=0;i<a.length;i++) a[i]=Math.random()*2-1; }
+  const s=AC.createBufferSource(); s.buffer=noiseBuf;
+  const f=AC.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(lp||900,t);
+  const g=AC.createGain(); g.gain.setValueAtTime(v||0.12,t);
+  g.gain.exponentialRampToValueAtTime(0.0006,t+d);
+  s.connect(f); f.connect(g); g.connect(MG); s.start(t); s.stop(t+d);
+  setTimeout(()=>voices--,(d+(delay||0))*1000+40);
+}
+const PENT=[0,3,5,7,10,12,15,17,19,22,24];
+function chime(i,v,dly){ tone(196*Math.pow(2,PENT[Math.min(i,PENT.length-1)]/12),0.34,'triangle',v||0.1,null,dly); }
+
+/* ================= raycast ================= */
+let rM=0,rT=0,rSide=0,rX=0,rY=0,rZ=0,rSX=0,rSY=0,rSZ=0;
+function cast(ox,oy,oz,dx,dy,dz,maxT,passLadder){
+  let ix=Math.floor(ox),iy=Math.floor(oy),iz=Math.floor(oz);
+  const sx=dx>0?1:-1, sy=dy>0?1:-1, sz=dz>0?1:-1;
+  const tdx=dx!==0?Math.abs(1/dx):Infinity;
+  const tdy=dy!==0?Math.abs(1/dy):Infinity;
+  const tdz=dz!==0?Math.abs(1/dz):Infinity;
+  let tmx=dx!==0?((dx>0?ix+1-ox:ox-ix)*tdx):Infinity;
+  let tmy=dy!==0?((dy>0?iy+1-oy:oy-iy)*tdy):Infinity;
+  let tmz=dz!==0?((dz>0?iz+1-oz:oz-iz)*tdz):Infinity;
+  let t=0,side=0;
+  for(let s=0;s<300;s++){
+    if(ix<0||iy<0||iz<0||ix>=WX||iy>=WY||iz>=WZ){ rM=0; return false; }
+    const m=vox[(iy*WZ+iz)*WX+ix];
+    if(m && !(passLadder&&m===LADDER)){ rM=m; rT=t; rSide=side; rX=ix; rY=iy; rZ=iz; rSX=sx; rSY=sy; rSZ=sz; return true; }
+    let bs=0;
+    if(coarse2[(((iy/CS2)|0)*C2Z+((iz/CS2)|0))*C2X+((ix/CS2)|0)]===0) bs=CS2;
+    else if(coarse[(((iy/CS)|0)*CZ+((iz/CS)|0))*CX+((ix/CS)|0)]===0) bs=CS;
+    if(bs){
+      const msk=~(bs-1), bx=ix&msk, by=iy&msk, bz=iz&msk;
+      let te=Infinity;
+      if(dx>0) te=Math.min(te,(bx+bs-ox)/dx); else if(dx<0) te=Math.min(te,(bx-ox)/dx);
+      if(dy>0) te=Math.min(te,(by+bs-oy)/dy); else if(dy<0) te=Math.min(te,(by-oy)/dy);
+      if(dz>0) te=Math.min(te,(bz+bs-oz)/dz); else if(dz<0) te=Math.min(te,(bz-oz)/dz);
+      t=te+1e-4;
+      if(t>maxT){ rM=0; return false; }
+      const px=ox+dx*t,py=oy+dy*t,pz=oz+dz*t;
+      ix=Math.floor(px); iy=Math.floor(py); iz=Math.floor(pz);
+      tmx=dx!==0?t+((dx>0?ix+1-px:px-ix)*tdx):Infinity;
+      tmy=dy!==0?t+((dy>0?iy+1-py:py-iy)*tdy):Infinity;
+      tmz=dz!==0?t+((dz>0?iz+1-pz:pz-iz)*tdz):Infinity;
+      continue;
+    }
+    if(tmx<tmy&&tmx<tmz){ ix+=sx; t=tmx; tmx+=tdx; side=0; }
+    else if(tmy<tmz)    { iy+=sy; t=tmy; tmy+=tdy; side=1; }
+    else                { iz+=sz; t=tmz; tmz+=tdz; side=2; }
+    if(t>maxT){ rM=0; return false; }
+  }
+  rM=0; return false;
+}
+
+/* ================= render target ================= */
+const ctx=cv.getContext('2d',{alpha:false});
+const low=document.createElement('canvas'), lowCtx=low.getContext('2d',{alpha:false});
+let RW=1,RH=1,img=null,buf32=null,depthBuf=null,targetPx=30000,DW=1,DH=1;
+function sizeBuffers(){
+  DW=Math.max(320,innerWidth); DH=Math.max(240,innerHeight);
+  cv.width=DW; cv.height=DH;
+  const aspect=DW/DH;
+  RW=Math.max(96,Math.round(Math.sqrt(targetPx*aspect)));
+  RH=Math.max(72,Math.round(RW/aspect));
+  low.width=RW; low.height=RH;
+  img=lowCtx.createImageData(RW,RH);
+  buf32=new Uint32Array(img.data.buffer);
+  depthBuf=new Float32Array(RW*RH);
+  ctx.imageSmoothingEnabled=false; lowCtx.imageSmoothingEnabled=false;
+}
+addEventListener('resize',sizeBuffers);
+
+/* ================= particles, stones, piles ================= */
+const parts=[], stones=[];
+function spark(x,y,z,m,n,pow){
+  const b=MATBASE[m]||[200,200,200];
+  for(let i=0;i<n;i++)
+    parts.push({x,y,z,vx:(Math.random()-0.5)*pow,vy:Math.random()*pow*0.8,vz:(Math.random()-0.5)*pow,
+      life:0.5+Math.random()*0.7, r:b[0]/255,g:b[1]/255,b:b[2]/255});
+  if(parts.length>700) parts.splice(0,parts.length-700);
+}
+function throwStone(){
+  if(stones.length>=10) stones.shift();
+  const f=fwdVec();
+  stones.push({x:P.x+f.x*0.6,y:P.y+EYE-0.15+f.y*0.6,z:P.z+f.z*0.6,
+    vx:f.x*17,vy:f.y*17+2.2,vz:f.z*17,rest:0,age:0});
+  tone(880,0.09,'triangle',0.1,1320); nz(0.06,0.05,2400);
+}
+function updateStones(dt){
+  for(let i=stones.length-1;i>=0;i--){
+    const s=stones[i]; s.age+=dt;
+    if(s.age>90){ stones.splice(i,1); continue; }
+    if(s.rest) continue;
+    s.vy-=23*dt;
+    for(let k=0;k<3;k++){
+      const h=dt/3;
+      const nx=s.x+s.vx*h, ny=s.y+s.vy*h, nz3=s.z+s.vz*h;
+      if(solidAt(nx,s.y,s.z)) s.vx*=-0.34; else s.x=nx;
+      if(solidAt(s.x,s.y,nz3)) s.vz*=-0.34; else s.z=nz3;
+      if(solidAt(s.x,ny,s.z)){
+        // the delay before this sound arrives is the only depth gauge you have
+        if(s.vy<-3){ nz(0.1,Math.min(0.14,0.02+Math.abs(s.vy)*0.004),900);
+                     tone(300,0.07,'square',0.04,180); spark(s.x,s.y,s.z,GOLD,4,1.5); }
+        s.vy*=-0.3; s.vx*=0.6; s.vz*=0.6;
+        if(Math.abs(s.vy)<1.4){ s.vy=0; s.rest=1; }
+      } else s.y=ny;
+    }
+    if(s.y<1) stones.splice(i,1);
+  }
+}
+function updateParts(dt){
+  for(let i=parts.length-1;i>=0;i--){
+    const p=parts[i]; p.vy-=20*dt;
+    const nx=p.x+p.vx*dt, ny=p.y+p.vy*dt, nz3=p.z+p.vz*dt;
+    if(solidAt(nx,p.y,p.z)) p.vx*=-0.3; else p.x=nx;
+    if(solidAt(p.x,p.y,nz3)) p.vz*=-0.3; else p.z=nz3;
+    if(solidAt(p.x,ny,p.z)){ p.vy*=-0.28; p.vx*=0.7; p.vz*=0.7; } else p.y=ny;
+    p.life-=dt; if(p.life<=0) parts.splice(i,1);
+  }
+}
+let pileHumT=0;
+function updatePiles(dt){
+  // walk into a spilled pack to take it back
+  for(let i=SV.piles.length-1;i>=0;i--){
+    const q=SV.piles[i];
+    const dx=q.x-P.x, dy=q.y-(P.y+0.8), dz=q.z-P.z;
+    const d2=dx*dx+dy*dy+dz*dz;
+    if(d2<2.4*2.4 && runActive){
+      if(packCount+q.n>PACK_MAX()){ toast('YOUR PACK IS TOO FULL FOR ALL OF IT'); continue; }
+      packCount+=q.n; packValue+=q.v;
+      SV.piles.splice(i,1); saveGame();
+      toast('RECOVERED '+q.n+' — WORTH $'+q.v);
+      flashW=0.4; shake=4;
+      [0,1,2,4].forEach((n,k)=>chime(n,0.13,k*0.07));
+      spark(q.x,q.y+0.4,q.z,GOLD,26,4);
+    } else if(d2<26*26 && pileHumT<=0){
+      pileHumT=1.6; tone(120,0.5,'sine',0.045/(1+d2*0.004));
+    }
+  }
+  pileHumT-=dt;
+}
+
+/* ================= digging + building ================= */
+let digProg=0,digTX=-1,digTY=-1,digTZ=-1,swing=0,swingT=0;
+function fwdVec(){ const cp=Math.cos(P.pitch); return {x:Math.sin(P.yaw)*cp,y:Math.sin(P.pitch),z:Math.cos(P.yaw)*cp}; }
+
+function updateDig(dt){
+  const f=fwdVec();
+  const hit=cast(P.x,P.y+EYE,P.z,f.x,f.y,f.z,4.6);
+  if(!hit){ digProg=0; digTX=-1; return; }
+  if(rX!==digTX||rY!==digTY||rZ!==digTZ){ digProg=0; digTX=rX; digTY=rY; digTZ=rZ; }
+  if(!digging){ digProg=Math.max(0,digProg-dt*1.6); return; }
+  if(TIER[rM]>SV.pick){ digProg=0; if(swingT<=0){ swingT=0.45; nz(0.06,0.06,3000); tone(1200,0.05,'square',0.05,900);
+      toast('YOUR PICK IS TOO SOFT FOR '+NAME[rM]); shake=Math.max(shake,1.2);} swingT-=dt; return; }
+  digProg += dt / HARD[rM] * (0.75 + SV.pick*0.25);
+  swingT+=dt;
+  if(swingT>0.28){
+    swingT=0; swing=1; shake=Math.max(shake,0.9);
+    nz(0.05,0.055,2600); tone(140+rM*22,0.05,'square',0.05,90);
+    spark(rX+0.5,rY+0.5,rZ+0.5,rM,3,2.0);
+  }
+  if(digProg>=1){ breakBlock(rX,rY,rZ); digProg=0; }
+}
+function breakBlock(x,y,z){
+  const m=getV(x,y,z);
+  editSet(x,y,z,AIR);
+  spark(x+0.5,y+0.5,z+0.5,m,16,4.5);
+  shake=Math.max(shake,2.6);
+  nz(0.16,0.13,1200); tone(190,0.1,'square',0.08,80);
+
+  if(m===AMBER){
+    lampFuel=Math.min(LAMP_MAX(), lampFuel+50);
+    toast('+50s LAMP OIL'); flashW=Math.max(flashW,0.25);
+    tone(660,0.2,'triangle',0.12,990); chime(4,0.1,0.08);
+  } else if(m===RELIC){
+    const ri=RELICS.findIndex(R=>R.x===x&&R.y===y&&R.z===z);
+    if(ri>=0 && !SV.relics.includes(ri)){
+      SV.relics.push(ri); saveGame();
+      flashW=0.85; shake=12;
+      band(RELICS[ri].n, 3400); toast(RELICS[ri].e);
+      [0,2,4,6,8].forEach((n,k)=>chime(n,0.14,k*0.11));
+    }
+  } else if(ISORE[m]){
+    if(packCount>=PACK_MAX()){ toast('PACK FULL — YOU LEAVE IT WHERE IT LIES'); tone(110,0.12,'square',0.09); return; }
+    packCount++; packValue+=VALUE[m];
+    const k=Math.min(9,(VALUE[m]/16)|0);
+    chime(k,0.11);
+    if(VALUE[m]>=55){ flashW=Math.max(flashW,0.22); chime(k+2,0.09,0.09); pipCheer=1.2; }
+  }
+  // did that open something long underneath?
+  let open=0; for(let k2=1;k2<24;k2++){ if(getV(x,y-k2,z)!==AIR) break; open++; }
+  if(open>=9) pipAlarm=1.5;
+}
+function dropLadder(){
+  if(!runActive||!locked) return;
+  if(ropesLeft<=0){ toast('NO LADDER LEFT'); tone(110,0.1,'square',0.08); return; }
+  const bx=Math.floor(P.x), bz=Math.floor(P.z);
+  let by=Math.floor(P.y);
+  if(getV(bx,by,bz)!==AIR && getV(bx,by,bz)!==LADDER){ toast('NO ROOM TO HANG IT'); tone(110,0.1,'square',0.08); return; }
+  let n=0;
+  for(let k=0;k<22;k++){
+    const y=by-k;
+    if(y<1) break;
+    const m=getV(bx,y,bz);
+    if(m===LADDER) { n++; continue; }
+    if(m!==AIR) break;
+    editSet(bx,y,bz,LADDER); n++;
+  }
+  if(n===0){ toast('NO ROOM TO HANG IT'); return; }
+  ropesLeft--;
+  saveGame();
+  toast('LADDER SET — '+n+'M, AND IT STAYS');
+  shake=2; nz(0.22,0.09,1400);
+  for(let k=0;k<5;k++) tone(300-k*22,0.09,'square',0.07,null,k*0.055);
+  spark(bx+0.5,by-n*0.5,bz+0.5,LADDER,10,2);
+}
+
+/* ================= interaction ================= */
+function tryUse(){
+  if(!locked||uiOpen) return;
+  const dx=P.x-HOIST.x, dy=P.y-HOIST.y, dz=P.z-HOIST.z;
+  if(dx*dx+dy*dy+dz*dz < 4.2*4.2){ openHoist(); return; }
+  const g=GALLERIES.find(g=>{
+    const a=P.x-g.x, b=P.y-g.y, c=P.z-g.z;
+    return a*a+b*b+c*c < 6*6;
+  });
+  if(g){
+    if(!SV.secured.includes(g.d)){ secure(g); }
+    else toast('GALLERY '+g.d+'M — ALREADY YOURS. THE HOIST CAN REACH IT.');
+    return;
+  }
+  toast('NOTHING HERE TO USE');
+}
+function secure(g){
+  SV.secured.push(g.d); SV.secured.sort((a,b)=>a-b); saveGame();
+  band('GALLERY '+g.d+'M SECURED', 2600);
+  toast('THE HOIST CAN DROP YOU HERE NOW');
+  flashW=0.6; shake=7;
+  [0,2,4,7].forEach((n,k)=>chime(n,0.13,k*0.1));
+}
+function checkAutoSecure(){
+  for(const g of GALLERIES){
+    if(SV.secured.includes(g.d)) continue;
+    const a=P.x-g.x,b=P.y-g.y,c=P.z-g.z;
+    if(a*a+b*b+c*c<5*5) secure(g);
+  }
+}
+
+/* ================= UI panels ================= */
+const fadeEl=document.getElementById('fade');
+function fade(on){ fadeEl.style.opacity=on?'1':'0'; }
+function closeUI(){ uiOpen=false; uiEl.classList.add('hide'); uiEl.innerHTML=''; grab(); }
+function panel(html){
+  uiOpen=true; mapOpen=false;
+  document.exitPointerLock();
+  uiEl.classList.remove('hide');
+  uiEl.innerHTML='<div class="card">'+html+'</div>';
+}
+function bind(sel,fn){ const n=uiEl.querySelector(sel); if(n) n.onclick=()=>{ startAudio(); tone(700,0.04,'square',0.09); fn(); }; }
+
+const SHOP=[
+ {id:'pick', n:'PICK', d:()=>'Tier '+SV.pick+' → '+(SV.pick+1)+'. Lets you break rock that currently refuses you.',
+  c:()=>[0,150,440,1150,2900][SV.pick]||0, max:()=>SV.pick>=5, buy:()=>SV.pick++},
+ {id:'rope', n:'LADDER COIL', d:()=>'Carry '+ROPE_MAX()+' → '+(ROPE_MAX()+2)+' ladders per trip. Every one you set stays set.',
+  c:()=>[95,250,620,1400][SV.rope]||0, max:()=>SV.rope>=4, buy:()=>SV.rope++},
+ {id:'lamp', n:'LAMP', d:()=>'Burn time '+Math.round(LAMP_MAX())+'s → '+Math.round(LAMP_MAX()+70)+'s. This is how far down you can afford to go.',
+  c:()=>[130,340,820,1900][SV.lamp]||0, max:()=>SV.lamp>=4, buy:()=>SV.lamp++},
+ {id:'pack', n:'PACK', d:()=>'Hold '+PACK_MAX()+' → '+(PACK_MAX()+22)+'. Fuller pack, worse trip to lose.',
+  c:()=>[110,300,750,1700][SV.pack]||0, max:()=>SV.pack>=4, buy:()=>SV.pack++},
+];
+function openHoist(note){
+  // you are home. the lamp gets filled and the coil gets rewound — the whole
+  // point of the trip was getting back to this spot.
+  lampFuel=LAMP_MAX(); darkTimer=0; ropesLeft=ROPE_MAX(); P.hp=100;
+  const dests = SV.secured.slice().sort((a,b)=>b-a);
+  const btns = dests.map(d=>`<button class="b ${d===dests[0]?'':'g'}" data-d="${d}">${d===0?'MINE HEAD':d+' M'}</button>`).join('');
+  const piles = SV.piles.length
+    ? SV.piles.slice().sort((a,b)=>a.d-b.d).map(q=>`<div class="st">· A DROPPED PACK AT <b>${q.d}M</b> — ${q.n} PIECES, <b>$${q.v}</b></div>`).join('')
+    : '<div class="st" style="color:#63587e">· nothing of yours is lying down there</div>';
+  panel(`
+    <h1>THE HOIST</h1>
+    ${note?`<p class="s" style="color:#f09a52">${note}</p>`:''}
+    <div class="st">CASH <b>$${SV.cash}</b> &nbsp; IN YOUR PACK <b>${packCount}</b> WORTH <b>$${packValue}</b></div>
+    <div class="st">DEEPEST EVER <b>${SV.best}M</b> &nbsp; TRIPS <b>${SV.trips}</b> &nbsp; RELICS <b>${SV.relics.length}/6</b></div>
+    <h3>LEFT BELOW</h3>${piles}
+    <div class="row">
+      <button class="b a" id="bank" ${packCount?'':'disabled'}>SELL PACK — $${packValue}</button>
+    </div>
+    <h3>LOWER ME TO</h3>
+    <div class="row" id="dests">${btns}</div>
+    <div class="row">
+      <button class="b g" id="shop">SUPPLY SHED</button>
+      <button class="b g" id="rel">RELICS</button>
+      <button class="b g" id="close">BACK TO THE SHAFT</button>
+    </div>`);
+  bind('#bank',()=>{ const v=bankPack(); toast('SOLD — $'+v);
+    [0,2,4,6].forEach((n,k)=>chime(n,0.13,k*0.06)); openHoist(); });
+  bind('#shop',openShop); bind('#rel',openRelics); bind('#close',closeUI);
+  uiEl.querySelectorAll('#dests button').forEach(b=>b.onclick=()=>{
+    startAudio();
+    const d=+b.dataset.d;
+    closeUI(); fade(true);
+    nz(1.0,0.10,300); tone(80,1.2,'sawtooth',0.09,44);
+    setTimeout(()=>{ beginTrip(d); fade(false); },440);
+  });
+}
+function openShop(){
+  const rows=SHOP.map(s=>{
+    const m=s.max(), c=s.c(), can=!m&&SV.cash>=c;
+    return `<div class="it"><div class="t"><div class="n">${s.n}</div><div class="d">${s.d()}</div></div>
+      <button class="b ${can?'':'g'}" data-id="${s.id}" ${can?'':'disabled'}>${m?'MAX':'$'+c}</button></div>`;
+  }).join('');
+  panel(`<h2>SUPPLY SHED</h2><div class="st">CASH <b>$${SV.cash}</b></div>
+    <p class="s">Nothing here raises a number for its own sake. Each one changes where you are allowed to go.</p>
+    ${rows}<div class="row"><button class="b" id="back">BACK</button></div>`);
+  uiEl.querySelectorAll('.it button').forEach(b=>{
+    if(b.disabled) return;
+    b.onclick=()=>{ startAudio(); const s=SHOP.find(x=>x.id===b.dataset.id), c=s.c();
+      if(SV.cash<c) return; SV.cash-=c; s.buy(); saveGame();
+      tone(523,0.09,'triangle',0.14); tone(784,0.16,'sine',0.1,null,0.05); openShop(); };
+  });
+  bind('#back',openHoist);
+}
+function openRelics(){
+  const cells=RELICS.map((R,i)=>{
+    const got=SV.relics.includes(i);
+    return `<div class="rc ${got?'got':''}">${got?'<div class="q" style="color:#e8b830">◆</div>':'<div class="q">?</div>'}
+      <div class="n">${got?R.n:R.d+'M'}</div><div class="d">${got?R.e:'buried somewhere in solid rock'}</div></div>`;
+  }).join('');
+  panel(`<h2>RELICS ${SV.relics.length}/6</h2>
+    <p class="s">Sealed in the rock with no cavity around them, so you will never fall over one — you only find them by digging where you had a reason to dig. Each one changes what you are capable of, permanently.</p>
+    <div class="rg">${cells}</div>
+    <div class="row"><button class="b" id="back">BACK</button></div>`);
+  bind('#back',openHoist);
+}
+
+/* ================= physics ================= */
+function updatePlayer(dt){
+  const f=fwdVec();
+  const fl=Math.sqrt(f.x*f.x+f.z*f.z)||1;
+  const fwx=f.x/fl, fwz=f.z/fl, rgx=Math.cos(P.yaw), rgz=-Math.sin(P.yaw);
+  let ix=0,iz=0;
+  const canMove = P.stun<=0 && locked && !uiOpen;
+  if(canMove){
+    if(keys.KeyW) iz+=1; if(keys.KeyS) iz-=1;
+    if(keys.KeyD) ix+=1; if(keys.KeyA) ix-=1;
+  }
+  const len=Math.sqrt(ix*ix+iz*iz);
+  const creep=keys.ShiftLeft||keys.ShiftRight;
+  const spd=creep?1.5:3.7;
+
+  const lad=onLadder();
+  P.climbing = lad && canMove;
+
+  let wx=0,wz=0, gripSpd=spd;
+  if(P.climbing){
+    // GRIP. forward/back drive the climb, not the feet — otherwise holding W
+    // to go up walks you straight off the rungs into the hole.
+    // strafing is the deliberate way to let go.
+    wx = rgx*ix; wz = rgz*ix; gripSpd = 1.7;
+  } else if(len>0){
+    wx = fwx*(iz/len) + rgx*(ix/len);
+    wz = fwz*(iz/len) + rgz*(ix/len);
+  }
+  const accel=(P.onGround||P.climbing)?14:3.5;
+  P.vx+=(wx*gripSpd-P.vx)*Math.min(1,accel*dt);
+  P.vz+=(wz*gripSpd-P.vz)*Math.min(1,accel*dt);
+
+  if(P.climbing){
+    // weightless, and slower than falling. climbing out is the tax you pay
+    // for every metre you took on the way down.
+    let cv2=0;
+    if(keys.KeyW||keys.Space) cv2=3.2;
+    if(keys.KeyS) cv2=-4.2;
+    P.vy=cv2;
+    P.fallFrom=null; P.onGround=false;
+    if(Math.abs(cv2)>0.1 && stepCool<=0){ stepCool=0.24; nz(0.05,0.03,700); tone(210+Math.random()*30,0.04,'square',0.03); }
+  } else {
+    if(keys.Space && P.onGround && P.stun<=0 && !uiOpen){ P.vy=6.4; P.onGround=false; nz(0.05,0.04,900); }
+    P.vy-=23*dt;
+    if(P.vy<-46) P.vy=-46;
+    if(!P.onGround){ if(P.fallFrom===null) P.fallFrom=P.y; else P.fallFrom=Math.max(P.fallFrom,P.y); }
+  }
+
+  const nx=P.x+P.vx*dt;
+  if(!hits(nx,P.y,P.z)) P.x=nx;
+  else if(P.onGround&&!hits(nx,P.y+1.05,P.z)){ P.x=nx; P.y+=1.05; } else P.vx=0;
+  const nz2=P.z+P.vz*dt;
+  if(!hits(P.x,P.y,nz2)) P.z=nz2;
+  else if(P.onGround&&!hits(P.x,P.y+1.05,nz2)){ P.z=nz2; P.y+=1.05; } else P.vz=0;
+
+  const ny=P.y+P.vy*dt;
+  if(!hits(P.x,ny,P.z)){ P.y=ny; if(!P.climbing) P.onGround=false; }
+  else {
+    if(P.vy<0){
+      const drop=P.fallFrom!==null?(P.fallFrom-P.y):0;
+      P.onGround=true;
+      if(drop>2.5){
+        const k=Math.min(1,drop/26);
+        shake=Math.max(shake,1.5+k*16);
+        nz(0.28,0.10+k*0.18,300+k*400);
+        tone(90-k*30,0.22,'square',0.10+k*0.08,45);
+        spark(P.x,P.y+0.1,P.z,STONE,10+k*20,3);
+        if(drop>5){
+          P.stun=0.18+k*0.7;
+          P.hp-=Math.round((drop-5)*3.4*FALL_MULT());
+          flashR=Math.min(1,0.25+k*0.9);
+          pipAlarm=1.2;
+          toast('HARD LANDING — '+Math.round(drop)+'M');
+        }
+      }
+      P.fallFrom=null; P.vy=0;
+    } else P.vy=0;
+    let guard=0; while(hits(P.x,P.y,P.z)&&guard++<40) P.y+=0.06;
+  }
+  if(P.stun>0) P.stun-=dt;
+  if(P.y<2){ P.y=2; P.vy=0; }
+
+  const d=depthOf(P.y);
+  if(d>tripDeepest) tripDeepest=d;
+  if(d>SV.best){ SV.best=d; }
+  checkAutoSecure();
+
+  // the light set is gathered around wherever we last stood; walking away
+  // from it silently drops crystals out of the world
+  if(Math.abs(P.x-lightLX)+Math.abs(P.y-lightLY)+Math.abs(P.z-lightLZ) > 9) dirtyLights=true;
+
+  /* --- relic hunting is hot-and-cold. you sweep, and it answers. --- */
+  relicPing-=dt;
+  if(runActive && relicPing<=0){
+    let best=1e9, bx=0,by=0,bz=0;
+    RELICS.forEach((R,i)=>{
+      if(SV.relics.includes(i)) return;
+      const a=R.x+0.5-P.x, b2=R.y+0.5-P.y, c=R.z+0.5-P.z;
+      const dd=Math.sqrt(a*a+b2*b2+c*c);
+      if(dd<best){ best=dd; bx=R.x; by=R.y; bz=R.z; }
+    });
+    if(best<19){
+      const t=1-best/19;                       // 0 far .. 1 on top of it
+      relicPing=1.5-t*1.25;
+      tone(520+t*620, 0.09, 'sine', 0.05+t*0.08);
+      if(t>0.62) tone(780+t*700, 0.07, 'sine', 0.04+t*0.05, null, 0.09);
+      if(t>0.80) pipCheer=0.5;
+    } else relicPing=0.9;
+  }
+
+  /* --- the lamp: a round-trip budget --- */
+  if(runActive){
+    const burn = 1 * (SV.relics.includes(0)?0.82:1);
+    lampFuel-=dt*burn;
+    if(lampFuel<=0){
+      lampFuel=0;
+      if(HAS_EMBER()){ darkTimer=0; }
+      else {
+        darkTimer+=dt;
+        if(heartT<=0){ heartT=Math.max(0.34,1.0-darkTimer*0.02); tone(58,0.16,'sine',0.16); tone(46,0.2,'sine',0.12,null,0.14); }
+        if(darkTimer>34) blackout('THE DARK FINISHED YOUR LAMP, AND THEN IT FINISHED YOU. YOUR PACK IS STILL DOWN THERE.');
+      }
+    }
+    if(P.hp<=0) blackout('YOU WOKE UP AT THE HEAD OF THE SHAFT WITH EMPTY HANDS.');
+  }
+  heartT-=dt;
+
+  /* --- body feel --- */
+  const hspd=Math.sqrt(P.vx*P.vx+P.vz*P.vz);
+  if(P.onGround) bobPhase+=dt*hspd*2.4;
+  const tb=P.onGround?Math.sin(bobPhase)*Math.min(0.085,hspd*0.024):0;
+  bob+=(tb-bob)*Math.min(1,dt*16);
+  if(P.onGround&&hspd>0.7&&!P.climbing){
+    const s=Math.sin(bobPhase);
+    if(s>0.985&&stepCool<=0){ stepCool=0.18; nz(0.06,0.035+hspd*0.008,620); }
+  }
+  stepCool-=dt;
+  lampVX+=(-P.vx*0.05-lampSwayX)*dt*22-lampSwayX*dt*3;
+  lampVY+=(-P.vy*0.012-lampSwayY)*dt*22-lampSwayY*dt*3;
+  lampVX*=Math.pow(0.02,dt); lampVY*=Math.pow(0.02,dt);
+  lampSwayX=Math.max(-0.4,Math.min(0.4,lampSwayX+lampVX*dt*9));
+  lampSwayY=Math.max(-0.4,Math.min(0.4,lampSwayY+lampVY*dt*9));
+  if(windG) windG.gain.value+=((Math.max(0,(-P.vy-6)/34))*0.5-windG.gain.value)*Math.min(1,dt*4);
+  fovBoost+=(Math.max(0,(-P.vy-8)/38)*0.28-fovBoost)*Math.min(1,dt*5);
+
+  // band announcements
+  const bi=bandOfDepth(d);
+  if(bi!==lastBand && runActive){
+    if(lastBand>=0){ band(BANDS[bi].n, 2400); flashW=Math.max(flashW,0.25); tone(196,0.5,'triangle',0.11); tone(294,0.5,'triangle',0.08); }
+    lastBand=bi;
+  }
+}
+let lastBand=-1, relicPing=0;
+
+/* ================= world render ================= */
+const activeLights=[];
+function gatherLights(ex,ey,ez){
+  activeLights.length=0;
+  for(let i=0;i<lights.length;i++){
+    const L=lights[i], dx=L.x-ex, dy=L.y-ey, dz=L.z-ez;
+    const d2=dx*dx+dy*dy+dz*dz, reach=L.rad*2.6;
+    if(d2<reach*reach) activeLights.push(L);
+    if(activeLights.length>=13) break;
+  }
+  for(const s of stones){
+    if(activeLights.length>=17) break;
+    activeLights.push({x:s.x,y:s.y,z:s.z,c:[1,0.86,0.42],rad:18,
+      pow:2.3*(0.85+Math.sin(s.age*5)*0.15)});
+  }
+  for(const q of SV.piles){
+    const dx=q.x-ex,dy=q.y-ey,dz=q.z-ez;
+    if(dx*dx+dy*dy+dz*dz<44*44 && activeLights.length<19)
+      activeLights.push({x:q.x,y:q.y+0.4,z:q.z,c:[1,0.8,0.35],rad:12,pow:1.5});
+  }
+}
+function renderWorld(nowT){
+  const ex=P.x, ey=P.y+EYE+bob, ez=P.z;
+  const cp=Math.cos(P.pitch), sp=Math.sin(P.pitch);
+  const fx=Math.sin(P.yaw)*cp, fy=sp, fz=Math.cos(P.yaw)*cp;
+  const rx=Math.cos(P.yaw), ry=0, rz=-Math.sin(P.yaw);
+  const ux=fy*rz-fz*ry, uy=fz*rx-fx*rz, uz=fx*ry-fy*rx;
+  const tanH=Math.tan((1.02+fovBoost)*0.5), aspect=RW/RH;
+
+  if(dirtyLights) rebuildLights();
+  gatherLights(ex,ey,ez);
+  const nL=activeLights.length;
+
+  // lamp strength IS the fuel gauge. you feel it going before you read it.
+  const lampT=Math.min(1,lampFuel/40);
+  let lampPow = 1.55*(0.22+0.78*lampT);
+  if(lampFuel<=0) lampPow = HAS_EMBER()?0.40:0.045;
+  const flick = lampFuel>0&&lampFuel<45 ? (0.55+Math.random()*0.45) : 1;
+  lampPow*=flick;
+  const lx=ex+rx*lampSwayX*0.5, ly=ey+lampSwayY*0.35-0.1, lz=ez+rz*lampSwayX*0.5;
+  const pulse=0.94+Math.sin(nowT*0.004)*0.035+Math.sin(nowT*0.017)*0.025;
+  const eye=HAS_EYE();
+
+  const d32=buf32, dep=depthBuf;
+  for(let py=0;py<RH;py++){
+    const ndcY=1-2*(py+0.5)/RH;
+    const bx=fx+ux*ndcY*tanH, by=fy+uy*ndcY*tanH, bz=fz+uz*ndcY*tanH;
+    const rowOff=py*RW, bay=(py&3)*4;
+    for(let px=0;px<RW;px++){
+      const k=(2*(px+0.5)/RW-1)*tanH*aspect;
+      let dx=bx+rx*k, dy=by+ry*k, dz=bz+rz*k;
+      const inv=1/Math.sqrt(dx*dx+dy*dy+dz*dz); dx*=inv; dy*=inv; dz*=inv;
+      const si=rowOff+px;
+      if(!cast(ex,ey,ez,dx,dy,dz,125)){ d32[si]=0xff000000; dep[si]=1e9; continue; }
+      const m=rM, t=rT;
+      dep[si]=t;
+      const hx=ex+dx*t, hy=ey+dy*t, hz=ez+dz*t;
+      let nx=0,ny=0,nz3=0,u,v,fshade;
+      if(rSide===0){ nx=-rSX; u=hz-rZ; v=hy-rY; fshade=0.76; }
+      else if(rSide===1){ ny=-rSY; u=hx-rX; v=hz-rZ; fshade=rSY>0?0.44:1.0; }
+      else { nz3=-rSZ; u=hx-rX; v=hy-rY; fshade=0.63; }
+
+      let b;
+      if(EMIT[m]) b=1.06*pulse;
+      else {
+        const ldx=hx-lx,ldy=hy-ly,ldz=hz-lz, ld2=ldx*ldx+ldy*ldy+ldz*ldz;
+        const ldi=1/Math.sqrt(ld2+1e-6);
+        let ndl=-(nx*ldx+ny*ldy+nz3*ldz)*ldi; if(ndl<0) ndl=0;
+        b=0.016+(lampPow/(1+ld2*0.0165))*(0.30+0.70*ndl)*pulse;
+        for(let i=0;i<nL;i++){
+          const L=activeLights[i];
+          const ax=L.x-hx, ay=L.y-hy, az=L.z-hz, a2=ax*ax+ay*ay+az*az;
+          if(a2>L.rad*L.rad*6.5) continue;
+          const ai=1/Math.sqrt(a2+1e-6);
+          let nd=(nx*ax+ny*ay+nz3*az)*ai; if(nd<0) nd=0;
+          b+=L.pow*(0.22+0.78*nd)/(1+a2/(L.rad*L.rad*0.30));
+        }
+        // SURVEYOR EYE: ore answers your lamp from further off than rock does
+        if(eye&&ISORE[m]) b+=0.30;
+        b*=fshade;
+      }
+      const g1=h3(rX,rY,rZ); b*=0.86+g1*0.28;
+      const tu=(u*8)|0, tv=(v*8)|0;
+      const g2=h3(rX*7+tu,rY*13+tv,rZ*5+((rSide+1)*97));
+      b*=0.90+g2*0.20;
+      if(ISORE[m]&&g2>0.86) b*=1.7;
+      if(m===LADDER){ const rung=((v*8)|0)%3===0; b*= rung?1.35:0.62; }
+      if(m===PLANK||m===BEAM){ b*= (((u+v)*4|0)%2)?1.10:0.86; }
+      const eu=u<0.13?u/0.13:(u>0.87?(1-u)/0.13:1);
+      const ev=v<0.13?v/0.13:(v>0.87?(1-v)/0.13:1);
+      b*=0.80+0.20*Math.min(eu,ev);
+      if(digProg>0&&rX===digTX&&rY===digTY&&rZ===digTZ){
+        if(h3(rX*3+tu,rY*3+tv,rZ*3)<digProg*0.75) b*=0.30;
+      }
+      b*= EMIT[m]?Math.exp(-t*0.0125):Math.exp(-t*0.011);
+      if(b<0) b=0;
+      let fpos=b*(LV-1); if(fpos>LV-1) fpos=LV-1;
+      let li=fpos|0;
+      if(fpos-li>BAYER[bay+(px&3)]) li++;
+      if(li>LV-1) li=LV-1;
+      const o=(m*LV+li)*3;
+      d32[si]=0xff000000|(RAMP[o+2]<<16)|(RAMP[o+1]<<8)|RAMP[o];
+    }
+  }
+
+  /* --- billboards --- */
+  const drawPt=(wx,wy,wz,r,g,bl,sz)=>{
+    const ax=wx-ex, ay=wy-ey, az=wz-ez;
+    const cz=ax*fx+ay*fy+az*fz; if(cz<0.12) return;
+    const cxp=ax*rx+ay*ry+az*rz, cyp=ax*ux+ay*uy+az*uz;
+    const sxp=((cxp/(cz*tanH*aspect))*0.5+0.5)*RW;
+    const syp=(0.5-(cyp/(cz*tanH))*0.5)*RH;
+    const dist=Math.sqrt(ax*ax+ay*ay+az*az);
+    const s=Math.max(1,Math.round(sz*RW/(cz*44)));
+    const x0=Math.round(sxp-s/2), y0=Math.round(syp-s/2);
+    const col=0xff000000|(Math.min(255,bl*255)<<16)|(Math.min(255,g*255)<<8)|Math.min(255,r*255);
+    for(let yy=y0;yy<y0+s;yy++){ if(yy<0||yy>=RH) continue;
+      for(let xx=x0;xx<x0+s;xx++){ if(xx<0||xx>=RW) continue;
+        const si2=yy*RW+xx; if(dist<dep[si2]){ d32[si2]=col; dep[si2]=dist; } } }
+  };
+  for(const p of parts){ const a=Math.min(1,p.life/0.5); drawPt(p.x,p.y,p.z,p.r*a*1.3,p.g*a*1.3,p.b*a*1.3,0.16); }
+  for(const s of stones){ drawPt(s.x,s.y,s.z,1,0.92,0.55,0.42); drawPt(s.x,s.y,s.z,1,1,0.9,0.20); }
+  const bobp=Math.sin(nowT*0.003)*0.12;
+  for(const q of SV.piles){
+    drawPt(q.x,q.y+0.5+bobp,q.z,1,0.82,0.34,0.85);
+    drawPt(q.x,q.y+0.5+bobp,q.z,1,1,0.85,0.42);
+  }
+}
+
+/* ================= overlays ================= */
+const PICK=[
+ '.........WWW....','........WWiiW...','.......WiiiiiW..','......Wiihhii.W.',
+ '.....Wiihhhii...','....W.iihhii....','.......Wiiii....','........hh......',
+ '.......hHh......','......hHh.......','.....hHh........','....hHh.........',
+ '...hHh..........','..hHh...........','..hh............','.h..............'];
+const PICKPAL={W:[236,240,255],i:[168,176,198],h:[126,84,46],H:[86,54,28]};
+function drawPick(){
+  const s=Math.max(2,Math.round(RW/62)), sw=16*s, sh=16*s, kick=swing;
+  const ang=-0.35+kick*1.15, ca=Math.cos(ang), sa=Math.sin(ang);
+  const ox=RW-sw*0.62+kick*sw*0.20;
+  const oy=RH-sh*0.60+Math.sin(bobPhase)*3*s*0.25-kick*sh*0.30+lampSwayY*22;
+  const cx0=8*s, cy0=14*s;
+  // the head takes the tint of your pick tier, so upgrades are visible in hand
+  const tint=[[1,1,1],[1,1,1],[0.86,0.94,1.0],[1.0,0.92,0.72],[0.78,1.0,0.86],[0.92,0.80,1.0]][SV.pick]||[1,1,1];
+  for(let y=0;y<sh;y++) for(let x=0;x<sw;x++){
+    const lx0=x-cx0, ly0=y-cy0;
+    const sxr=(lx0*ca-ly0*sa)/s+8, syr=(lx0*sa+ly0*ca)/s+14;
+    if(sxr<0||syr<0||sxr>=16||syr>=16) continue;
+    const ch=PICK[syr|0][sxr|0];
+    const c=PICKPAL[ch]; if(!c) continue;
+    const px=(ox+x)|0, py=(oy+y)|0;
+    if(px<0||py<0||px>=RW||py>=RH) continue;
+    const k=0.72+swing*0.25;
+    const tn=(ch==='W'||ch==='i')?tint:[1,1,1];
+    buf32[py*RW+px]=0xff000000|((Math.min(255,c[2]*k*tn[2]))<<16)|((Math.min(255,c[1]*k*tn[1]))<<8)|(Math.min(255,c[0]*k*tn[0]));
+  }
+}
+const PIP=[
+ '...bbbb...','..bBBBBb..','.bBBBBBBb.','bBBWBBWBBb','bBBWBBWBBb',
+ 'bBBBBBBBBb','.bBBmmBBb.','..bBBBBb..','...bbbb...','..b.b.b...'];
+const PIP_BLINK=[
+ '...bbbb...','..bBBBBb..','.bBBBBBBb.','bBBBBBBBBb','bBBwwBwwBb',
+ 'bBBBBBBBBb','.bBBmmBBb.','..bBBBBb..','...bbbb...','..b.b.b...'];
+const PIP_HAPPY=[
+ '...bbbb...','..bBBBBb..','.bBBBBBBb.','bBBBBBBBBb','bBwBwBwBwb',
+ 'bBBBBBBBBb','.bBmmmmBb.','..bBBBBb..','...bbbb...','..b.b.b...'];
+const PIPPAL={b:[24,52,44],B:[92,217,134],W:[16,22,20],w:[16,22,20],m:[232,184,48]};
+let pipBlink=0,pipAlarm=0,pipCheer=0,pipPhase=0;
+function drawPip(dt){
+  pipPhase+=dt*2.2;
+  pipBlink-=dt; if(pipBlink<-2.6) pipBlink=0.12+Math.random()*0.1;
+  if(pipAlarm>0) pipAlarm-=dt;
+  if(pipCheer>0) pipCheer-=dt;
+  const art = pipCheer>0?PIP_HAPPY : (pipBlink>0?PIP_BLINK:PIP);
+  const s=Math.max(2,Math.round(RW/78));
+  const jit=pipAlarm>0?(Math.random()-0.5)*3*s:0;
+  const hop=pipCheer>0?Math.abs(Math.sin(pipPhase*4))*3*s:0;
+  const ox=(5*s+jit)|0, oy=(RH-12*s+Math.sin(pipPhase)*1.6*s+jit-hop)|0;
+  // pip dims with your lamp too — he is not a UI element, he is down here with you
+  const dim = lampFuel>0?1:(HAS_EMBER()?0.7:0.3);
+  for(let y=0;y<10;y++) for(let x=0;x<10;x++){
+    const ch=art[y][x];
+    const c=PIPPAL[ch]; if(!c) continue;
+    const kk=(pipAlarm>0?1.15:0.95)*dim;
+    for(let sy=0;sy<s;sy++) for(let sx=0;sx<s;sx++){
+      const px=ox+x*s+sx, py=oy+y*s+sy;
+      if(px<0||py<0||px>=RW||py>=RH) continue;
+      buf32[py*RW+px]=0xff000000|(Math.min(255,c[2]*kk)<<16)|(Math.min(255,c[1]*kk)<<8)|Math.min(255,c[0]*kk);
+    }
+  }
+  if(pipAlarm>0){
+    const bx=ox+11*s, by=oy-2*s;
+    for(let y=0;y<7;y++){ if(y===5) continue;
+      for(let x=0;x<2;x++) for(let sy=0;sy<s;sy++) for(let sx=0;sx<s;sx++){
+        const px=bx+x*s+sx, py=by+y*s+sy;
+        if(px<0||py<0||px>=RW||py>=RH) continue;
+        buf32[py*RW+px]=0xff30e8ff;
+      } }
+  }
+}
+
+/* ================= HUD ================= */
+const FONT={
+ A:'25755',B:'65656',C:'34443',D:'65556',E:'74647',F:'74644',G:'34553',H:'55755',I:'72227',
+ J:'11152',K:'55655',L:'44447',M:'57755',N:'65555',O:'25552',P:'65644',Q:'25563',R:'65655',
+ S:'34216',T:'72222',U:'55553',V:'55552',W:'55775',X:'55255',Y:'55222',Z:'71247',
+ '0':'75557','1':'26227','2':'61247','3':'71317','4':'55711','5':'74717','6':'74757',
+ '7':'71222','8':'75757','9':'75717',' ':'00000','.':'00002','-':'00700',':':'02020',
+ '!':'22202','/':'11244','+':'02720','%':'51245','?':'61202',',':'00024','$':'27671',
+ '(':'12221',')':'42224',"'":'22000','#':'57575','◆':'02520'};
+function txt(s,x,y,col,sc){
+  sc=sc||1; s=String(s).toUpperCase();
+  const c32=0xff000000|(col[2]<<16)|(col[1]<<8)|col[0];
+  let cx0=x|0;
+  for(const ch of s){
+    const gl=FONT[ch]||FONT['?'];
+    for(let r=0;r<5;r++){ const bits=+gl[r];
+      for(let bI=0;bI<3;bI++) if(bits&(4>>bI))
+        for(let sy=0;sy<sc;sy++) for(let sx=0;sx<sc;sx++){
+          const px=cx0+bI*sc+sx, py=y+r*sc+sy;
+          if(px<0||py<0||px>=RW||py>=RH) continue;
+          buf32[py*RW+px]=c32;
+        } }
+    cx0+=4*sc;
+  }
+}
+function txtSh(s,x,y,col,sc){ txt(s,x+sc,y+sc,[4,3,8],sc); txt(s,x,y,col,sc); }
+function tw(s,sc){ return String(s).length*4*sc-sc; }
+function bar(x,y,w,h,frac,on,off){
+  for(let yy=0;yy<h;yy++) for(let xx=0;xx<w;xx++){
+    const px=x+xx, py=y+yy;
+    if(px<0||py<0||px>=RW||py>=RH) continue;
+    buf32[py*RW+px]= xx<w*frac?on:off;
+  }
+}
+let toastMsg='',toastT=0,bandMsg='',bandT=0,showStats=false,fpsEMA=60;
+function toast(m){ toastMsg=m; toastT=performance.now()+2100; }
+function band(m,ms){ bandMsg=m; bandT=performance.now()+(ms||2200); }
+
+function drawHUD(dt){
+  const sc=Math.max(1,Math.round(RW/190));
+  const cxm=RW>>1, cym=RH>>1;
+  const cc=0xffb8a8d0;
+  for(let i=-3;i<=3;i++){ if(Math.abs(i)<1) continue;
+    if(cxm+i>=0&&cxm+i<RW) buf32[cym*RW+cxm+i]=cc;
+    if(cym+i>=0&&cym+i<RH) buf32[(cym+i)*RW+cxm]=cc; }
+
+  // depth
+  const d=depthOf(P.y);
+  txtSh('DEPTH',3*sc,3*sc,[109,97,136],sc);
+  txtSh(d+'M',3*sc,10*sc,[232,184,48],sc*2);
+
+  // lamp — the most important number on screen
+  const lampFrac=Math.max(0,Math.min(1,lampFuel/LAMP_MAX()));
+  const lampCol= lampFuel<=0?0xff4040e0 : lampFrac>0.5?0xff66e0ff : lampFrac>0.2?0xff52a0f0:0xff5c5ce0;
+  txtSh('LAMP',3*sc,24*sc,[109,97,136],sc);
+  bar(3*sc,31*sc,50*sc,5*sc,lampFrac,lampCol,0xff201828);
+  txtSh(Math.ceil(lampFuel)+'S',56*sc,31*sc,lampFrac>0.2?[154,143,176]:[240,120,90],sc);
+
+  // pack
+  txtSh('PACK '+packCount+'/'+PACK_MAX()+'   $'+packValue,3*sc,40*sc,[94,217,134],sc);
+  txtSh('LADDERS '+ropesLeft,3*sc,47*sc,[196,168,120],sc);
+
+  // health
+  bar(3*sc,RH-8*sc,40*sc,4*sc,Math.max(0,P.hp)/100,0xff5cd8f0,0xff201828);
+
+  // dig / target
+  if(digProg>0){
+    const w=22*sc;
+    bar(cxm-(w>>1),cym+7*sc,w,2*sc,digProg,0xff30e8ff,0xff2a2038);
+  }
+  const f=fwdVec();
+  if(cast(P.x,P.y+EYE,P.z,f.x,f.y,f.z,4.6)){
+    const soft=TIER[rM]>SV.pick;
+    const n=NAME[rM]+(VALUE[rM]?'  $'+VALUE[rM]:'')+(soft?'  (TOO HARD)':'');
+    txtSh(n,cxm-tw(n,sc)/2,cym+12*sc, soft?[240,120,90]:(VALUE[rM]?[232,184,48]:[154,143,176]),sc);
+  }
+
+  // near the hoist / a gallery: prompt
+  const hd=(P.x-HOIST.x)**2+(P.y-HOIST.y)**2+(P.z-HOIST.z)**2;
+  if(hd<4.2*4.2){ const s2='[E]  THE HOIST'; txtSh(s2,cxm-tw(s2,sc)/2,RH-26*sc,[94,217,134],sc); }
+
+  // dark warning
+  if(lampFuel<=0&&!HAS_EMBER()){
+    const left=Math.max(0,34-darkTimer);
+    const s2='THE DARK — '+left.toFixed(0);
+    txtSh(s2,cxm-tw(s2,sc*2)/2,RH*0.34|0,[240,90,90],sc*2);
+  } else if(lampFuel<40&&lampFuel>0){
+    const s2='LAMP FAILING';
+    if(Math.floor(performance.now()/380)%2===0)
+      txtSh(s2,cxm-tw(s2,sc)/2,RH*0.36|0,[240,150,90],sc);
+  }
+
+  const nowp=performance.now();
+  if(nowp<bandT){ const w2=tw(bandMsg,sc*2);
+    txtSh(bandMsg,(RW-w2)>>1,RH*0.24|0,[232,184,48],sc*2); }
+  if(nowp<toastT){ const w2=tw(toastMsg,sc);
+    txtSh(toastMsg,(RW-w2)>>1,RH-17*sc,[196,184,220],sc); }
+  if(showStats){
+    txt('FPS '+Math.round(fpsEMA)+'  '+RW+'X'+RH+'  L'+activeLights.length+'  E'+edits.size,3*sc,RH-15*sc,[109,97,136],sc);
+  }
+}
+
+/* ================= survey map ================= */
+// a top-down slice of your own workings. it only shows what you have opened
+// up, because it is a record of your labour, not a satellite photo.
+function drawMap(){
+  const S=Math.max(1,Math.round(RW/150));
+  const R=44, w=R*2*S, h=R*2*S;
+  const ox=((RW-w)>>1), oy=((RH-h)>>1);
+  for(let yy=-2;yy<h+2;yy++) for(let xx=-2;xx<w+2;xx++){
+    const px=ox+xx, py=oy+yy;
+    if(px<0||py<0||px>=RW||py>=RH) continue;
+    buf32[py*RW+px]=0xf00a0710;
+  }
+  const py0=Math.floor(P.y);
+  for(let j=0;j<R*2;j++) for(let i=0;i<R*2;i++){
+    const wx=Math.floor(P.x)-R+i, wz=Math.floor(P.z)-R+j;
+    if(wx<0||wz<0||wx>=WX||wz>=WZ) continue;
+    // sample a short vertical window so sloped tunnels still read
+    let open=0, lad=false, plank=false;
+    for(let k=-2;k<=3;k++){
+      const m=getV(wx,py0+k,wz);
+      if(m===AIR) open++;
+      else if(m===LADDER) lad=true;
+      else if(m===PLANK||m===BEAM) plank=true;
+    }
+    let col=0;
+    if(lad) col=0xff58a8f0;
+    else if(plank) col=0xff4a86c8;
+    else if(open>=4) col=0xff4a4460;
+    else if(open>0) col=0xff2e2a3e;
+    if(!col) continue;
+    for(let sy=0;sy<S;sy++) for(let sx=0;sx<S;sx++){
+      const px=ox+i*S+sx, py=oy+j*S+sy;
+      if(px<0||py<0||px>=RW||py>=RH) continue;
+      buf32[py*RW+px]=col;
+    }
+  }
+  const mark=(wx,wz,col,sz)=>{
+    const i=Math.round(wx-(Math.floor(P.x)-R)), j=Math.round(wz-(Math.floor(P.z)-R));
+    if(i<0||j<0||i>=R*2||j>=R*2) return;
+    for(let sy=-sz;sy<=sz;sy++) for(let sx=-sz;sx<=sz;sx++){
+      const px=ox+i*S+sx, py=oy+j*S+sy;
+      if(px<0||py<0||px>=RW||py>=RH) continue;
+      buf32[py*RW+px]=col;
+    }
+  };
+  for(const q of SV.piles) if(Math.abs(q.y-P.y)<26) mark(q.x,q.z,0xff34c8ff,S);
+  for(const g of GALLERIES) if(Math.abs(g.y-P.y)<26) mark(g.x,g.z,0xff86d95e,S);
+  mark(P.x,P.z,0xffffffff,S);
+  // heading tick
+  const f=fwdVec();
+  mark(P.x+f.x*3.5,P.z+f.z*3.5,0xff30e8ff,Math.max(1,S-1));
+  const sc=Math.max(1,Math.round(RW/190));
+  txtSh('SURVEY  '+depthOf(P.y)+'M',ox,oy-8*sc,[232,184,48],sc);
+  txtSh('TAB TO CLOSE',ox,oy+h+3*sc,[109,97,136],sc);
+}
+
+/* ================= loop ================= */
+let last=0,msEMA=10,resCool=1;
+function frame(ts){
+  requestAnimationFrame(frame);
+  if(!last) last=ts;
+  let dt=Math.min(0.05,(ts-last)/1000); last=ts;
+  const t0=performance.now();
+
+  if(locked&&!uiOpen){ updatePlayer(dt); updateDig(dt); }
+  updateStones(dt); updateParts(dt); updatePiles(dt);
+  swing=Math.max(0,swing-dt*5.5);
+  shake*=Math.pow(0.0009,dt);
+  flashR*=Math.pow(0.02,dt);
+  flashW*=Math.pow(0.015,dt);
+
+  const sy0=P.yaw, sp0=P.pitch;
+  if(shake>0.05){ P.yaw+=(Math.random()-0.5)*shake*0.008; P.pitch+=(Math.random()-0.5)*shake*0.008; }
+  renderWorld(ts);
+  P.yaw=sy0; P.pitch=sp0;
+
+  drawPick(); drawPip(dt); drawHUD(dt);
+  if(mapOpen) drawMap();
+
+  if(flashR>0.01||flashW>0.01){
+    const rA=Math.min(1,flashR)*0.65, wA=Math.min(1,flashW)*0.7;
+    for(let i=0;i<buf32.length;i++){
+      const c=buf32[i];
+      let r=c&255,g=(c>>8)&255,b=(c>>16)&255;
+      if(rA>0){ r=r+(210-r)*rA; g*=1-rA*0.75; b*=1-rA*0.6; }
+      if(wA>0){ r=r+(255-r)*wA; g=g+(255-g)*wA; b=b+(255-b)*wA; }
+      buf32[i]=0xff000000|((b|0)<<16)|((g|0)<<8)|(r|0);
+    }
+  }
+  lowCtx.putImageData(img,0,0);
+  ctx.drawImage(low,0,0,RW,RH,0,0,DW,DH);
+
+  const ms=performance.now()-t0;
+  msEMA+=(ms-msEMA)*0.10;
+  fpsEMA+=(1000/Math.max(0.5,dt*1000)-fpsEMA)*0.06;
+  resCool-=dt;
+  if(resCool<=0){
+    if(msEMA>13.5&&targetPx>9000){ targetPx*=0.88; sizeBuffers(); resCool=0.5; }
+    else if(msEMA<6.5&&targetPx<46000){ targetPx*=1.08; sizeBuffers(); resCool=0.9; }
+  }
+  // autosave the shape of the mine now and then
+  autoT-=dt; if(autoT<=0){ autoT=12; if(runActive) saveGame(); }
+}
+let autoT=12;
+
+/* ================= boot ================= */
+function boot(){
+  const s=loadGame();
+  if(s){
+    SV=s; SEED=SV.seed;
+    edits=new Map();
+    for(let i=0;i<SV.edits.length;i+=2) edits.set(SV.edits[i],SV.edits[i+1]);
+  }
+  generate();
+  applyEdits();
+  sizeBuffers();
+  P.x=HOIST.x; P.y=SURFACE_Y; P.z=64.5; P.yaw=Math.PI;
+  let g=0; while(hits(P.x,P.y,P.z)&&g++<40) P.y+=0.5;
+  lampFuel=LAMP_MAX(); ropesLeft=ROPE_MAX();
+  dirtyLights=true;
+  requestAnimationFrame(frame);
+}
+document.getElementById('bstart').onclick=()=>{
+  startAudio(); bootEl.classList.add('hide'); grab();
+  beginTrip(0);
+  toast('WALK TO THE HOIST AND PRESS E');
+};
+document.getElementById('bwipe').onclick=()=>{
+  try{ localStorage.removeItem(SKEY); }catch(e){}
+  location.reload();
+};
+boot();
+</script>
+</body>
+</html>
