@@ -150,36 +150,42 @@ function noise(d,v,lp){ if(MUTED||!ac())return; const t=AC.currentTime;
 // hard = tool level required. loose = falls unless the tile directly below holds it.
 // Everything else is structural: it hangs off the two side walls, so cutting a mass
 // free of BOTH walls is what drops it.
+// Palette rule: bulk rock is cool and low-chroma so it reads as a backdrop, and ORE IS
+// THE ONLY SATURATED THING ON SCREEN. The old set made dirt the loudest colour in the
+// game, which is why every screen came out brown -- the thing you were digging past was
+// shouting louder than the thing you were digging for. Neighbouring bulk materials are
+// also separated by value, not just hue, so the 2x2 block structure stays legible once
+// the lamp falls off toward the corners.
 const MAT = {
-  1:{n:'DIRT',    loose:true,  hard:0, val:0,  pal:['#7d5836','#93683f','#573a22']},
-  2:{n:'STONE',   loose:false, hard:0, val:0,  pal:['#635d6e','#77707f','#4a4456']},
-  3:{n:'COPPER',  loose:false, hard:0, val:5,  pal:['#c07a3c','#dd9550','#8e5626'], ore:1},
-  4:{n:'IRON',    loose:false, hard:0, val:11, pal:['#a3acb9','#c2cbd8','#7b838f'], ore:1},
-  5:{n:'SLATE',   loose:false, hard:1, val:0,  pal:['#414859','#515a6d','#2f3441']},
-  6:{n:'SILVER',  loose:false, hard:1, val:26, pal:['#cfd9e6','#eef4fb','#9ba7b6'], ore:1},
-  7:{n:'BASALT',  loose:false, hard:2, val:0,  pal:['#272332','#332e40','#1a1722']},
-  8:{n:'GOLD',    loose:false, hard:1, val:55, pal:['#dda927','#f5cd56','#ad7f16'], ore:1},
-  9:{n:'CUTLERY', loose:true,  hard:0, val:3,  pal:['#b3bdc9','#d6e1ed','#8d97a3'], ore:1},
- 10:{n:'TILE',    loose:false, hard:0, val:0,  pal:['#c7d2cc','#dfe8e2','#a0aaa4']},
- 11:{n:'PIPE',    loose:false, hard:0, val:2,  pal:['#54724f','#6a8c5f','#3d553b'], ore:1, burst:1},
- 12:{n:'ROOT',    loose:false, hard:0, val:3,  pal:['#7f5e2e','#9a763c','#604723'], ore:1, regrow:1},
- 13:{n:'MEAT',    loose:false, hard:1, val:80, pal:['#8f3d4d','#ad5061','#6d2a38'], ore:1, alive:1},
- 14:{n:'BEAM',    loose:false, hard:9, val:0,  pal:['#8f6e3c','#ad874c','#6d512a'], anchor:1}
+  1:{n:'DIRT',    loose:true,  hard:0, val:0,  pal:['#4e3f39','#5f4d45','#312724']},
+  2:{n:'STONE',   loose:false, hard:0, val:0,  pal:['#666c85','#7e85a1','#464b60']},
+  3:{n:'COPPER',  loose:false, hard:0, val:5,  pal:['#c8622a','#f08b3c','#8a3d13'], ore:1},
+  4:{n:'IRON',    loose:false, hard:0, val:11, pal:['#8fa2bd','#c3d6f0','#5d6c85'], ore:1},
+  5:{n:'SLATE',   loose:false, hard:1, val:0,  pal:['#3a4257','#4a536b','#272d3d']},
+  6:{n:'SILVER',  loose:false, hard:1, val:26, pal:['#d2e2f2','#ffffff','#94a6bb'], ore:1},
+  7:{n:'BASALT',  loose:false, hard:2, val:0,  pal:['#221f2e','#2e2a3d','#141220']},
+  8:{n:'GOLD',    loose:false, hard:1, val:55, pal:['#e8b422','#ffe872','#a3720b'], ore:1},
+  9:{n:'CUTLERY', loose:true,  hard:0, val:3,  pal:['#aebccd','#e2eefb','#7d8a9c'], ore:1},
+ 10:{n:'TILE',    loose:false, hard:0, val:0,  pal:['#a1b2ab','#c3d4cd','#77857f']},
+ 11:{n:'PIPE',    loose:false, hard:0, val:2,  pal:['#3f8f6a','#5cc190','#28603f'], ore:1, burst:1},
+ 12:{n:'ROOT',    loose:false, hard:0, val:3,  pal:['#6f7434','#8a9145','#4a4d21'], ore:1, regrow:1},
+ 13:{n:'MEAT',    loose:false, hard:1, val:80, pal:['#a83550','#d8556f','#75203a'], ore:1, alive:1},
+ 14:{n:'BEAM',    loose:false, hard:9, val:0,  pal:['#8f6e3c','#b8904f','#5e4526'], anchor:1}
 };
 
 /* ---------------- biomes: one new behaviour per layer, deeper is stranger --------- */
 // mix = the bulk rock a block can be made of. ore/oreRate is rolled separately, so
 // how rich a layer is stays a dial rather than a side effect of the block shuffling.
 const BIOMES = [
- {from:1,  name:'THE BACKYARD',       wall:'#2b1e15', ore:3,  oreRate:.13,
+ {from:1,  name:'THE BACKYARD',       wall:'#17111c', ore:3,  oreRate:.13,
   mix:[[1,55],[2,45]],                 note:'DIRT SLIDES. IT WILL NOT HOLD A CEILING.'},
- {from:5,  name:'THE CUTLERY',        wall:'#1a1d27', ore:4,  oreRate:.12,
+ {from:5,  name:'THE CUTLERY',        wall:'#0e1223', ore:4,  oreRate:.12,
   mix:[[2,42],[5,33],[9,25]],          note:'CUTLERY SLIDES LIKE DIRT. SLATE NEEDS AN IRON PICK.'},
- {from:11, name:'SOMEONES FLOOR',     wall:'#132020', ore:6,  oreRate:.10,
+ {from:11, name:'SOMEONES FLOOR',     wall:'#07171a', ore:6,  oreRate:.10,
   mix:[[10,48],[5,34],[11,18]],        note:'BURST A PIPE AND THE WATER DIGS FOR YOU.'},
- {from:18, name:'THE UPSIDE ORCHARD', wall:'#180f1e', ore:8,  oreRate:.09,
+ {from:18, name:'THE UPSIDE ORCHARD', wall:'#150a1e', ore:8,  oreRate:.09,
   mix:[[2,38],[12,36],[5,26]],         note:'ROOTS GROW BACK WHILE YOU WORK.'},
- {from:26, name:'IT BREATHES',        wall:'#100609', ore:13, oreRate:.08,
+ {from:26, name:'IT BREATHES',        wall:'#11040c', ore:13, oreRate:.08,
   mix:[[7,44],[5,34],[2,22]],          note:'IT MOVES WHEN YOU ARE NOT LOOKING.'}
 ];
 function biomeAt(d){ let b=BIOMES[0]; for(const x of BIOMES) if(d>=x.from) b=x; return b; }
@@ -404,6 +410,15 @@ let picks = 0, haul = 0, beamsLeft = 0;
 let pending = null;          // previewed, not yet committed
 let anim = null;
 let parts = [], floats = [], shake = 0, msg = '', msgT = 0, msgAt = 0;
+// Touch response. A finger covers the tile it taps, so the confirmation has to happen
+// OUTSIDE the fingertip -- a ring that expands past the thumb, not a highlight under it.
+let rings = [], flashes = [];
+function ring(c,r,col){ rings.push({x:c*TILE+TILE/2, y:HUD+r*TILE+TILE/2, t:0, c:col||'#fff'}); }
+function flash(cells){ flashes.push({cells:cells, t:0}); }
+// The one channel that still reaches the player through a thumb and a noisy room.
+// Independent of MUTED: muting is for the people around you, and is exactly when you
+// most want the phone to answer in your hand instead.
+function buzz(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
 let now = 0;
 
 /* ---------------- feel ----------------
@@ -508,6 +523,10 @@ function commitBreak(){
   dig.swing = 0;                                  // the arc plays over the break
   pips.push({x:40+(picks%PIPROW)*5, y:4+((picks/PIPROW)|0)*7, life:1});
   ac(); tone(220,.06,'square',.1,90); noise(.13,.2,1400);
+  // The swing lands: the whole cluster goes white for a beat, and the phone kicks harder
+  // the more rock the swing cut loose.
+  flash(p.cells); ring(p.c, p.r, '#fff3c0');
+  buzz(p.sim.frames.length > 2 ? [14,26,40] : 18);
   for(let i=0;i<p.cells.length;i+=2){
     const m = scr.g[idx(p.cells[i],p.cells[i+1])];
     if(!m) continue;
@@ -625,7 +644,7 @@ function enterScreen(d, entryCol){
   // the floor of it.
   dig.x = pc; dig.y = pr; dig.sq = .7; dig.swing = -1; dig.hop = 0;
   slide = 1; popDepth = 1; hudBag = haul;
-  parts.length = 0; floats.length = 0; pips.length = 0;
+  parts.length = 0; floats.length = 0; pips.length = 0; rings.length = 0; flashes.length = 0;
   if(!motes.length) for(let i=0;i<14;i++) motes.push(newMote(true));
   puff(pc*TILE, HUD+pr*TILE, 8);
   shake = Math.max(shake, 2.5);
@@ -677,8 +696,8 @@ function endLeg(reason){
   const amount = haul; haul = 0;
   if(!buried) SV.bank += amount;
   storeScreen(depth, scr); save();
-  if(buried){ noise(.5,.3,300); tone(90,.5,'sawtooth',.13,40); }
-  else { tone(392,.12,'triangle',.11); }
+  if(buried){ noise(.5,.3,300); tone(90,.5,'sawtooth',.13,40); buzz([40,50,40,50,140]); }
+  else { tone(392,.12,'triangle',.11); buzz(20); }
   const title = buried ? 'BURIED' : (reason==='quit' ? 'BACK UP TOP' : 'THAT IS THE SCREEN');
   const why = buried
     ? 'The mass came down on top of you instead of under you.'
@@ -897,19 +916,52 @@ function wipePanel(back){
 }
 
 /* ---------------- tile art ---------------- */
-function drawTile(x,y,m,c,r){
+// Rock is lit by where it has been cut open, not by a per-tile noise field. The old
+// seven-blob speckle was the same visual weight everywhere, so a solid mass and a freshly
+// exposed face looked identical and the whole board mushed together. Now the facets are
+// coarse and grid-aligned (they read as rock at 16px instead of TV static) and the light
+// lives entirely on exposed faces, which makes the dug silhouette the thing you see.
+// This carries no information the player did not already have: an exposed face is exposed
+// whether or not it catches light (DEC-03).
+function drawTile(G,x,y,m,c,r){
   const M = MAT[m], p = M.pal;
+  const open = (cc,rr) => cc>=0 && cc<COLS && rr>=0 && rr<ROWS && !G[idx(cc,rr)];
   px(x,y,TILE,TILE,p[0]);
-  for(let i=0;i<7;i++){                    // deterministic speckle: material, not paint
-    const hx=(hash(c*16+i, r*16+i, 7)*TILE)|0, hy=(hash(r*16+i, c*16+i, 11)*TILE)|0;
-    px(x+hx, y+hy, 2+((hash(c,r,i)*2)|0), 2, (i%2) ? p[2] : p[1]);
+  // Three coarse 4px facets on a 4x4 lattice. Three, not four: at four the tile came out
+  // a checkerboard of its own palette and the material read as noise again.
+  for(let i=0;i<3;i++){
+    const hx = ((hash(c*7+i, r*13+i, 3)*4)|0)*4, hy = ((hash(r*11+i, c*5+i, 5)*4)|0)*4;
+    px(x+hx, y+hy, 4, 4, i===1 ? p[1] : p[2]);
   }
-  if(M.hard>TOOL() && M.hard<9){           // you can see it. you cannot have it.
-    for(let i=0;i<TILE;i+=4) px(x+i,y,1,TILE,'#0d0b12');
-    px(x,y,TILE,1,'#7d8aa0');
+  // Every tile gets a chiselled edge, even buried in a mass. This game is played by
+  // tapping one specific tile, so a tile has to look like a discrete object you could
+  // put a thumb on -- a seamless slab of rock is prettier and much worse to aim at.
+  px(x, y, TILE, 1, 'rgba(255,255,255,.09)'); px(x, y, 1, TILE, 'rgba(255,255,255,.06)');
+  px(x, y+TILE-1, TILE, 1, 'rgba(0,0,0,.28)'); px(x+TILE-1, y, 1, TILE, 'rgba(0,0,0,.20)');
+  // Cut faces catch the lamp properly. This is where the depth comes from: the dug
+  // silhouette lights up and the untouched mass behind it stays flat.
+  if(open(c,r-1)){
+    px(x, y, TILE, 3, p[1]);
+    px(x, y, TILE, 1, 'rgba(255,255,255,.34)');
+  }
+  if(open(c,r+1)) px(x, y+TILE-3, TILE, 3, p[2]);   // undercut face falls into shadow
+  if(open(c-1,r)) px(x, y, 2, TILE, p[2]);
+  if(open(c+1,r)) px(x+TILE-2, y, 2, TILE, p[2]);
+  // You can see it. You cannot have it. This used to be full-height bars every 4px plus a
+  // bright cap, which at depth 11 -- where a starting tool locks both slate and silver --
+  // turned most of the board into a barcode. Locked rock now just recedes behind a veil
+  // with a few faint bands, which says "sealed" without shouting over the material.
+  // Four fillRects, so it stays cheap on a phone even when most of the board is locked.
+  if(M.hard>TOOL() && M.hard<9){
+    px(x,y,TILE,TILE,'rgba(9,7,16,.42)');
+    for(let i=2;i<TILE;i+=5) px(x, y+i, TILE, 1, 'rgba(198,212,238,.13)');
   }
   if(M.anchor){ px(x+2,y,3,TILE,p[1]); px(x+TILE-5,y,3,TILE,p[1]); px(x,y+6,TILE,3,p[2]); }
-  if(M.ore){ px(x+5,y+5,3,3,p[1]); px(x+9,y+9,2,2,p[1]); }
+  // Ore is a cut gem, not a dot: a bright core with a highlight pixel, so the thing you
+  // are down here for is the brightest object on the board.
+  if(M.ore){
+    px(x+5,y+5,6,6,p[2]); px(x+6,y+6,4,4,p[1]); px(x+7,y+7,2,2,'#fffbe8');
+  }
 }
 function edges(G,x,y,c,r){
   if(r>0 && !G[idx(c,r-1)]) px(x,y,TILE,1,'rgba(255,255,255,.22)');
@@ -960,7 +1012,9 @@ function animView(){
 // Darkness is per tile and centred on the lamp. It is mood, never information: the
 // falloff bottoms out well short of black so no part of the screen is ever unreadable,
 // and nothing is revealed that was not already visible (DEC-03).
-const BTINT = ['#150d07','#0a0c15','#05100f','#0c0514','#0a0205'];
+// The tint the lamp falls off into. These used to be brown-first, so the darkness itself
+// was adding brown on top of brown rock; each is now the biome's own hue, cooled.
+const BTINT = ['#120a12','#080b16','#03100f','#0d0616','#0c0208'];
 let VIG = null;
 function lightPass(lx, ly){
   const bi = biomeIdx(depth), dark = BTINT[bi] || '#0a0a10';
@@ -972,9 +1026,11 @@ function lightPass(lx, ly){
     const dx=(c+.5)-lx, dy=(r+.5)-ly;
     const d = Math.sqrt(dx*dx+dy*dy)/R;
     let a = Math.pow(Math.max(0, d-.45), 1.5);
-    // Bottoms out at .44, never black: the far corner of the board has to stay planable
+    // Bottoms out at .54, never black: the far corner of the board has to stay planable
     // or the light would be withholding information instead of setting mood (DEC-03).
-    a = Math.min(1, a) * .44 + breath;
+    // Raised from .44 because the board had almost no falloff left after the palette went
+    // cooler -- the lamp needs somewhere to fall off TO for the room to have any depth.
+    a = Math.min(1, a) * .54 + breath;
     const k = (a*14)|0; if(k<=0) continue;
     if(k!==q){ q=k; ctx.globalAlpha = k/14; ctx.fillStyle = dark; }
     ctx.fillRect(c*TILE, HUD+r*TILE, TILE, TILE);
@@ -1014,7 +1070,7 @@ function render(){
       // A tile that was one row higher last frame is mid-fall: draw it between the two.
       const falling = av && av.prev && r>0 && !av.prev.g[idx(c,r)] && av.prev.g[idx(c,r-1)]===m;
       const x = c*TILE, y = HUD + r*TILE - (falling ? (1-av.t)*TILE : 0);
-      drawTile(x,y,m,c,r); edges(G,x,y,c,r);
+      drawTile(G,x,y,m,c,r); edges(G,x,y,c,r);
       if(F && F[idx(c,r)]){                      // a find, glinting through the rock
         const t = Math.sin(now/220 + c + r)*.5+.5;
         px(x+4,y+4,TILE-8,TILE-8, t>.5?'#f0e0a0':'#d8c070');
@@ -1097,6 +1153,24 @@ function render(){
       px(x+TILE-3,y+TILE-1,3,1,col); px(x+TILE-1,y+TILE-3,1,3,col);
     }
   }
+
+  // The cluster you just took, blown out white and fading. Drawn over the tiles it
+  // removed, so the swing visibly consumes them.
+  for(const f of flashes){
+    ctx.globalAlpha = Math.max(0, 1-f.t) * .8;
+    for(let i=0;i<f.cells.length;i+=2)
+      px(f.cells[i]*TILE, HUD+f.cells[i+1]*TILE, TILE, TILE, '#fff8dc');
+  }
+  ctx.globalAlpha = 1;
+  // Tap rings expand out from under the fingertip so the confirmation is visible around
+  // the thumb that is covering the tile.
+  for(const rg of rings){
+    const s = 3 + rg.t*15, a = Math.max(0, 1-rg.t);
+    ctx.globalAlpha = a*a;
+    px(rg.x-s, rg.y-s, s*2, 1, rg.c); px(rg.x-s, rg.y+s-1, s*2, 1, rg.c);
+    px(rg.x-s, rg.y-s, 1, s*2, rg.c); px(rg.x+s-1, rg.y-s, 1, s*2, rg.c);
+  }
+  ctx.globalAlpha = 1;
 
   // Motes drift in the lamplight. Nothing depends on them; they exist so that a screen
   // you are standing still on is never a photograph.
@@ -1193,19 +1267,21 @@ function tap(x,y){
       if(c !== pc) dig.face = c > pc ? 1 : -1;
       dig.hop = 1;                                 // one bounce per step, however far
       pc=c; pr=r; tone(520,.03,'square',.05);
+      ring(c,r,'#9fe8bb'); buzz(6);
     }
-    else pending = null;
+    else { pending = null; ring(c,r,'#5e5470'); }   // a tap that did nothing still answers
     return;
   }
-  if(!inReach(c,r)){ pending=null; toast('TOO FAR. WALK CLOSER.'); return; }
+  if(!inReach(c,r)){ pending=null; ring(c,r,'#e0604f'); buzz(12); toast('TOO FAR. WALK CLOSER.'); return; }
   if(!breakable(m)){
-    pending=null;
+    pending=null; ring(c,r,'#e0604f'); buzz(12);
     toast(MAT[m].hard===2 ? 'BASALT. YOU NEED THE DRILL.' : 'SLATE. YOU NEED AN IRON PICK.');
     tone(120,.09,'square',.09); return;
   }
-  if(picks<=0){ toast('NO PICKS LEFT ON THIS SCREEN'); tone(120,.12,'square',.09); return; }
+  if(picks<=0){ ring(c,r,'#e0604f'); buzz(12); toast('NO PICKS LEFT ON THIS SCREEN'); tone(120,.12,'square',.09); return; }
   if(pending && pending.c===c && pending.r===r){ commitBreak(); return; }
   pending = planBreak(c,r);
+  ring(c,r,'#fff'); buzz(8);
   tone(660,.04,'square',.06);
 }
 cv.addEventListener('pointerdown', e=>{ e.preventDefault(); ac();
@@ -1231,6 +1307,10 @@ function update(dt){
   if(slide>0)    slide    = Math.max(0, slide - dt*3.4);
   hudBag += (haul - hudBag) * Math.min(1, dt*9);
   for(let i=pips.length-1;i>=0;i--){ pips[i].life -= dt*2.2; if(pips[i].life<=0) pips.splice(i,1); }
+  // Touch feedback runs ahead of the hitstop return below: the ring answers the finger,
+  // so it must never be the thing that freezes.
+  for(let i=rings.length-1;i>=0;i--){ rings[i].t += dt*3.4; if(rings[i].t>=1) rings.splice(i,1); }
+  for(let i=flashes.length-1;i>=0;i--){ flashes[i].t += dt*5.5; if(flashes[i].t>=1) flashes.splice(i,1); }
   if(dig.hop>0) dig.hop = Math.max(0, dig.hop - dt*6);
   if(dig.swing>=0){ dig.swing += dt/.22; if(dig.swing>1) dig.swing = -1; }
 
