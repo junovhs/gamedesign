@@ -402,6 +402,219 @@ function cluster(G, c, r){
   return out;
 }
 
+/* ================= THE BOARD AND THE RESOLUTION CONTRACT (LAB-01) =================
+
+A board is one plain object. Everything the rules read lives in it, and nothing the rules
+read lives anywhere else -- no globals, no reaching into render state. That is the whole
+point: a rule that can only see the board is a rule that can be replayed, previewed and
+tested, and LAB-03's promise (the preview never lies) is only buildable on top of it.
+
+  cell      material id per cell, row-major
+  find      find id + 1 per cell, 0 for none
+  objects   multi-cell rigid bodies that move as one   (LAB-09 fills this)
+  items     things dropped into the world              (LAB-05 fills this)
+  entities  things that act after the player does      (LAB-10 fills this)
+  carried   the hotbar slots                           (LAB-05 fills this)
+  player    where he is and what happened to him
+  picks     the decision budget for this board
+  meta      board name, pick budget, and whatever authored it
+
+The four empty arrays are deliberate. Every later M0 mechanic is a kind of thing that
+already has a home here, so adding one is filling a slot rather than widening the contract.
+
+RESOLUTION ORDER. resolve(board, action) clones, then runs exactly these steps in exactly
+this order, and returns the new board plus an ordered event list:
+
+  1 VALIDATE   the action against the board. Illegal actions change nothing and come back
+               as a single 'rejected' event, so callers never have to pre-check.
+  2 APPLY      the action's own direct effect: remove cells, move the player, place a thing.
+  3 SETTLE     recompute support and move every unsupported mass one row, repeating to a
+               fixed point. The player rides or is buried inside this loop, not after it.
+  4 OUTCOMES   what the settle produced: finds shaken loose, burial, falling out the bottom.
+  5 ENTITIES   things that act strictly after the committed action has fully resolved.
+               (LAB-10. Empty today, and its emptiness is why the order can be stated now.)
+  6 TERMINAL   emit the closing event describing where the board ended up.
+
+DETERMINISM. Nothing inside resolve may call Math.random, read the clock, or touch a
+global. The same board and the same action always produce the same board and the same
+events -- which is what lets LAB-03 preview by resolving against a clone and then replay
+the identical resolution on commit.
+
+Render and animation CONSUME the event list. They never mutate board state. */
+
+const ACT = {BREAK:'break', WALK:'walk', PLACE:'place', SETTLE:'settle'};
+
+function makeBoard(cell, find, playerC, playerR, picksLeft, meta){
+  const n = COLS*ROWS;
+  return {
+    cols:COLS, rows:ROWS,
+    cell: cell ? Uint8Array.from(cell) : new Uint8Array(n),
+    find: find ? Uint8Array.from(find) : new Uint8Array(n),
+    objects: [], items: [], entities: [], carried: [],
+    player: {c:playerC|0, r:playerR|0, buried:false, out:false},
+    picks: picksLeft|0,
+    meta: meta || {},
+    nextId: 1
+  };
+}
+
+// Deep enough that resolve can never write through to its input. The typed arrays and the
+// four collections are all copied; meta is shared because it is authored and read-only.
+function cloneBoard(b){
+  return {
+    cols:b.cols, rows:b.rows,
+    cell: Uint8Array.from(b.cell),
+    find: Uint8Array.from(b.find),
+    objects: b.objects.map(o => ({...o, cells:o.cells.slice()})),
+    items:   b.items.map(i => ({...i})),
+    entities:b.entities.map(e => ({...e})),
+    carried: b.carried.map(s => ({...s})),
+    player: {...b.player},
+    picks: b.picks,
+    meta: b.meta,
+    nextId: b.nextId
+  };
+}
+
+// A board round-trips through plain JSON. LAB-02 authors boards by hand in text and parses
+// them into exactly this shape, so the format and the runtime never diverge.
+function boardToJSON(b){
+  return {cols:b.cols, rows:b.rows,
+          cell:Array.from(b.cell), find:Array.from(b.find),
+          objects:b.objects.map(o=>({...o, cells:o.cells.slice()})),
+          items:b.items.map(i=>({...i})), entities:b.entities.map(e=>({...e})),
+          carried:b.carried.map(s=>({...s})),
+          player:{...b.player}, picks:b.picks, meta:b.meta, nextId:b.nextId};
+}
+function boardFromJSON(o){
+  const b = makeBoard(o.cell, o.find, o.player.c, o.player.r, o.picks, o.meta);
+  b.player.buried = !!o.player.buried; b.player.out = !!o.player.out;
+  b.objects  = (o.objects ||[]).map(x=>({...x, cells:x.cells.slice()}));
+  b.items    = (o.items   ||[]).map(x=>({...x}));
+  b.entities = (o.entities||[]).map(x=>({...x}));
+  b.carried  = (o.carried ||[]).map(x=>({...x}));
+  b.nextId = o.nextId || 1;
+  return b;
+}
+
+/* ---- step 1: validate ---------------------------------------------------------------- */
+// Returns a reason string when the action is illegal, or null when it may proceed. Reach
+// and standability are read off the board's own player position, never off a global.
+function validateAction(b, a){
+  const inBounds = (c,r) => c>=0 && c<COLS && r>=0 && r<ROWS;
+  const nearPlayer = (c,r) => {
+    const p = b.player;
+    const around = [[p.c,p.r-1],[p.c-1,p.r],[p.c+1,p.r],[p.c,p.r+1],[p.c-1,p.r+1],[p.c+1,p.r+1]];
+    for(const q of around) if(q[0]===c && q[1]===r) return true;
+    return false;
+  };
+  switch(a.t){
+    case ACT.SETTLE: return null;
+    case ACT.BREAK: {
+      if(!inBounds(a.c,a.r))                 return 'off board';
+      const m = b.cell[idx(a.c,a.r)];
+      if(!m)                                 return 'nothing there';
+      if(MAT[m].hard > (a.tool|0))           return 'too hard for this tool';
+      if(!nearPlayer(a.c,a.r))               return 'out of reach';
+      if(b.picks <= 0)                       return 'no picks left';
+      return null;
+    }
+    case ACT.WALK: {
+      if(!inBounds(a.c,a.r))                 return 'off board';
+      if(!walkTargets(b.cell, b.player.c, b.player.r)[idx(a.c,a.r)]) return 'cannot get there';
+      return null;
+    }
+    case ACT.PLACE: {
+      if(!inBounds(a.c,a.r))                 return 'off board';
+      if(b.cell[idx(a.c,a.r)])               return 'cell is occupied';
+      if(!nearPlayer(a.c,a.r))               return 'out of reach';
+      if(b.picks <= 0)                       return 'no picks left';
+      return null;
+    }
+  }
+  return 'unknown action';
+}
+
+/* ---- step 2: apply ------------------------------------------------------------------- */
+function applyAction(b, a, events){
+  if(a.t === ACT.SETTLE) return;
+
+  if(a.t === ACT.WALK){
+    b.player.c = a.c; b.player.r = a.r;
+    events.push({t:'walked', c:a.c, r:a.r});
+    return;
+  }
+
+  if(a.t === ACT.PLACE){
+    b.cell[idx(a.c,a.r)] = a.mat;
+    b.picks--;
+    events.push({t:'placed', c:a.c, r:a.r, mat:a.mat});
+    return;
+  }
+
+  // BREAK. One swing takes the cluster; a burst pipe additionally blows a short shaft
+  // straight down, which is the one block that digs for you.
+  const cells = cluster(b.cell, a.c, a.r);
+  const burst = !!MAT[b.cell[idx(a.c,a.r)]].burst;
+  const taken = [], finds = [];
+  let gain = 0;
+  const take = (j) => {
+    const m = b.cell[j]; if(!m) return;
+    if(MAT[m].ore) gain += MAT[m].val;
+    if(b.find[j]) finds.push(b.find[j]-1);
+    b.cell[j] = 0; b.find[j] = 0;
+  };
+  for(let i=0;i<cells.length;i+=2){ taken.push(cells[i], cells[i+1]); take(idx(cells[i], cells[i+1])); }
+  if(burst){
+    for(let i=0;i<cells.length;i+=2){
+      const bc = cells[i];
+      for(let br=cells[i+1]+1, k=0; k<3 && br<ROWS; k++, br++){
+        const j = idx(bc,br);
+        if(b.cell[j] && MAT[b.cell[j]].hard <= (a.tool|0)){ taken.push(bc,br); take(j); } else break;
+      }
+    }
+  }
+  b.picks--;
+  events.push({t:'removed', cells:taken, cluster:cells, at:[a.c,a.r], burst:burst});
+  if(gain > 0)     events.push({t:'gain', v:gain, at:[a.c,a.r]});
+  if(finds.length) events.push({t:'finds', list:finds, when:'cut'});
+}
+
+/* ---- resolve ------------------------------------------------------------------------- */
+function resolve(b0, action){
+  const events = [];
+
+  // 1 VALIDATE
+  const why = validateAction(b0, action);
+  if(why){ events.push({t:'rejected', why:why, action:action}); return {board:b0, events:events, ok:false}; }
+
+  const b = cloneBoard(b0);
+
+  // 2 APPLY
+  applyAction(b, action, events);
+
+  // 3 SETTLE -- settle() mutates the arrays it is handed to the fixed point and hands back
+  // one frame per row of falling. b.cell and b.find are already the clone's, so this is
+  // writing into the new board and never into the caller's.
+  const s = settle(b.cell, b.find, b.player.c, b.player.r);
+  b.player.c = s.pc; b.player.r = s.pr;
+  events.push({t:'settle', frames:s.frames, g0:s.g0, pc0:s.pc0, pr0:s.pr0});
+
+  // 4 OUTCOMES
+  if(s.fell.length) events.push({t:'finds', list:s.fell, when:'fell'});
+  b.player.buried = s.buried;
+  b.player.out    = s.out;
+  if(s.buried) events.push({t:'buried'});
+  if(s.out)    events.push({t:'out'});
+
+  // 5 ENTITIES -- LAB-10 hooks here, strictly after the committed action has resolved.
+  for(const e of b.entities) events.push({t:'entity', id:e.id, kind:e.kind});
+
+  // 6 TERMINAL
+  events.push({t:'settled', picks:b.picks, c:b.player.c, r:b.player.r});
+  return {board:b, events:events, ok:true};
+}
+
 /* ---------------- run state ---------------- */
 let mode = 'boot';           // boot | play | anim | panel
 let scr = null;              // {g,f,ec}
@@ -492,33 +705,44 @@ function inReach(c,r){
 function breakable(m){ return !!m && MAT[m].hard <= TOOL(); }
 
 /* ---------------- the break ---------------- */
+// The live globals, packaged as a board. This is the only place the running game turns
+// itself into the contract's shape, so every rule downstream reads one object.
+function liveBoard(){ return makeBoard(scr.g, scr.f, pc, pr, picks, {depth:depth}); }
+
+// A resolve result, in the shape the renderer and commit path already speak. Nothing here
+// recomputes anything -- it only reads the event list, which is the point of having one.
+function pendingFrom(res, c, r){
+  const ev  = (t) => res.events.find(e => e.t === t);
+  const rm  = ev('removed'), st = ev('settle'), gn = ev('gain');
+  const cut  = res.events.find(e => e.t==='finds' && e.when==='cut');
+  const fell = res.events.find(e => e.t==='finds' && e.when==='fell');
+  return {
+    c:c, r:r,
+    cells: rm ? rm.cluster : [],
+    g: res.board.cell, f: res.board.find,
+    sim: {
+      frames: st ? st.frames : [],
+      buried: res.board.player.buried, out: res.board.player.out,
+      pc: res.board.player.c, pr: res.board.player.r,
+      fell: fell ? fell.list : [],
+      g0: st ? st.g0 : null, pc0: st ? st.pc0 : -1, pr0: st ? st.pr0 : -1
+    },
+    gain: gn ? gn.v : 0,
+    got:  cut ? cut.list : [],
+    board: res.board, events: res.events, ok: res.ok
+  };
+}
+
 function planBreak(c,r){
-  const cells = cluster(scr.g, c, r);
-  const G = Uint8Array.from(scr.g), F = Uint8Array.from(scr.f);
-  const isBurst = !!MAT[scr.g[idx(c,r)]].burst;
-  let gain = 0; const got = [];
-  const take = (j) => { const m=G[j]; if(!m) return;
-    if(MAT[m].ore) gain += MAT[m].val;
-    if(F[j]) got.push(F[j]-1);
-    G[j]=0; F[j]=0; };
-  for(let i=0;i<cells.length;i+=2) take(idx(cells[i], cells[i+1]));
-  // A burst pipe blows a hole straight down: the one block that digs for you.
-  if(isBurst){
-    for(let i=0;i<cells.length;i+=2){
-      const bc = cells[i];
-      for(let br=cells[i+1]+1, k=0; k<3 && br<ROWS; k++, br++){
-        const j = idx(bc,br);
-        if(G[j] && MAT[G[j]].hard <= TOOL()) take(j); else break;
-      }
-    }
-  }
-  const sim = settle(G, F, pc, pr);
-  return {c:c, r:r, cells:cells, g:G, f:F, sim:sim, gain:gain, got:got};
+  return pendingFrom(resolve(liveBoard(), {t:ACT.BREAK, c:c, r:r, tool:TOOL()}), c, r);
 }
 
 function commitBreak(){
   const p = pending; pending = null;
-  picks--;
+  // The board already spent the pick during step 2 of the resolve that produced this
+  // preview. Committing adopts that board wholesale rather than re-deriving any of it --
+  // that identity is the whole reason the preview can be trusted.
+  picks = p.board.picks;
   if(p.c !== pc) dig.face = p.c > pc ? 1 : -1;
   dig.swing = 0;                                  // the arc plays over the break
   pips.push({x:40+(picks%PIPROW)*5, y:4+((picks/PIPROW)|0)*7, life:1});
@@ -621,11 +845,13 @@ function applyBiomeQuirk(){
 }
 
 function placeBeam(c,r){
-  if(!SV.beams || beamsLeft<=0 || picks<=0) return false;
-  if(scr.g[idx(c,r)] || !inReach(c,r)) return false;
-  scr.g[idx(c,r)] = 14; picks--; beamsLeft--;
+  if(!SV.beams || beamsLeft<=0) return false;
+  const res = resolve(liveBoard(), {t:ACT.PLACE, c:c, r:r, mat:14});
+  if(!res.ok) return false;
+  const p = pendingFrom(res, c, r);
+  scr.g = p.g; scr.f = p.f; picks = res.board.picks; beamsLeft--;
   tone(330,.09,'square',.1); toast('BEAM SET');
-  startAnim(settle(scr.g, scr.f, pc, pr));
+  startAnim(p.sim);
   return true;
 }
 
@@ -635,7 +861,9 @@ function enterScreen(d, entryCol){
   depth = d;
   scr = getScreen(d, entryCol);
   pc = scr.ec; pr = 1;
-  const s = settle(scr.g, scr.f, pc, pr);           // drop onto whatever is under the entry
+  // Drop onto whatever is under the entry. A bare settle is a first-class action, so
+  // arriving resolves through exactly the same path as a swing does.
+  const s = pendingFrom(resolve(liveBoard(), {t:ACT.SETTLE}), pc, pr).sim;
   if(s.frames.length) scr.g = s.frames[s.frames.length-1].g;
   pc = s.pc; pr = Math.min(s.pr, ROWS-2);
   awardFinds(s.fell);                               // anything shaken loose on the way in
@@ -669,7 +897,7 @@ function reshapeScreen(){
     delete SV.screens[k];
     scr = genScreen(depth, want, SV.reroll[k]);
     pc = scr.ec; pr = 1;
-    const s = settle(scr.g, scr.f, pc, pr);
+    const s = pendingFrom(resolve(liveBoard(), {t:ACT.SETTLE}), pc, pr).sim;
     if(s.frames.length) scr.g = s.frames[s.frames.length-1].g;
     pc = s.pc; pr = Math.min(s.pr, ROWS-2);
     awardFinds(s.fell);
@@ -1261,12 +1489,14 @@ function tap(x,y){
 
   if(!m){
     if(SV.beams && beamsLeft>0 && !pending && inReach(c,r) && placeBeam(c,r)) return;
-    const reach = walkTargets(scr.g, pc, pr);
-    if(reach[idx(c,r)]){
+    const res = resolve(liveBoard(), {t:ACT.WALK, c:c, r:r});
+    if(res.ok){
       pending=null;
       if(c !== pc) dig.face = c > pc ? 1 : -1;
       dig.hop = 1;                                 // one bounce per step, however far
-      pc=c; pr=r; tone(520,.03,'square',.05);
+      scr.g = res.board.cell; scr.f = res.board.find;
+      pc = res.board.player.c; pr = res.board.player.r;
+      tone(520,.03,'square',.05);
       ring(c,r,'#9fe8bb'); buzz(6);
     }
     else { pending = null; ring(c,r,'#5e5470'); }   // a tap that did nothing still answers
@@ -1379,20 +1609,20 @@ function update(dt){
 // Runs once per settle, not per frame.
 function safeSwingExists(){
   const reach = walkTargets(scr.g, pc, pr);
-  const spc = pc, spr = pr;
-  try{
-    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
-      if(!reach[idx(c,r)]) continue;
-      pc = c; pr = r;
-      for(const p of reachCells()){
-        const nc=p[0], nr=p[1];
-        if(nc<0||nc>=COLS||nr<0||nr>=ROWS) continue;
-        if(!breakable(scr.g[idx(nc,nr)])) continue;
-        if(!planBreak(nc,nr).sim.buried) return true;
-      }
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    if(!reach[idx(c,r)]) continue;
+    // Ask the question on a board standing there, rather than moving the real player and
+    // putting him back. A hypothetical is a board, never a mutated global.
+    const hypo = makeBoard(scr.g, scr.f, c, r, Math.max(1, picks), {depth:depth});
+    for(const p of [[c,r-1],[c-1,r],[c+1,r],[c,r+1],[c-1,r+1],[c+1,r+1]]){
+      const nc=p[0], nr=p[1];
+      if(nc<0||nc>=COLS||nr<0||nr>=ROWS) continue;
+      if(!breakable(scr.g[idx(nc,nr)])) continue;
+      const res = resolve(hypo, {t:ACT.BREAK, c:nc, r:nr, tool:TOOL()});
+      if(res.ok && !res.board.player.buried) return true;
     }
-    return false;
-  } finally { pc = spc; pr = spr; }
+  }
+  return false;
 }
 
 let last = 0;
@@ -1402,6 +1632,12 @@ function loop(ts){
   update(dt); render();
   requestAnimationFrame(loop);
 }
+
+// The contract, reachable from the console. LAB-02's board format and LAB-03's
+// preview-equals-commit check both drive it from here, and so does any check that wants
+// to resolve a board without a running game around it.
+window.LAB = {ACT, makeBoard, cloneBoard, boardToJSON, boardFromJSON, resolve,
+              genScreen, liveBoard, MAT, COLS, ROWS, idx};
 
 /* ---------------- boot ---------------- */
 (async function(){
