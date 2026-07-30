@@ -828,6 +828,9 @@ let parts = [], floats = [], shake = 0, msg = '', msgT = 0, msgAt = 0;
 // Touch response. A finger covers the tile it taps, so the confirmation has to happen
 // OUTSIDE the fingertip -- a ring that expands past the thumb, not a highlight under it.
 let rings = [], flashes = [];
+// A phone has to hold 60fps through the largest break the game can produce. The cap is
+// the budget; effects check it rather than trusting themselves to be modest.
+const PART_CAP = 260;
 // Tiles that just landed. Purely visual: a landed tile is squashed for a beat and
 // springs back, so a mass arriving has weight instead of simply stopping.
 let squashes = [];
@@ -874,11 +877,41 @@ let tapAgainShown = false;
 function toast(m){ msg = m; msgT = now + 1600; msgAt = now; }
 function fl(x,y,t,c){ floats.push({x:x,y:y,t:t,c:c||'#e8b830',life:1,vy:-1.6,pop:1}); }
 // Chunks: varied sizes and real gravity, so a broken tile throws rock rather than confetti.
-function debris(x,y,pal,n){ for(let i=0;i<(n||6);i++) parts.push({
-  x:x+Math.random()*TILE, y:y+Math.random()*TILE,
-  vx:(Math.random()-.5)*2.4, vy:-Math.random()*1.9-.2, g:.17,
-  s:1+((Math.random()*2.4)|0), c:pal[(Math.random()*pal.length)|0],
-  life:.55+Math.random()*.55, fd:1.4}); }
+/* DESTRUCTION (FEEL-01)
+
+   Every tile is pixel data drawn by code, so breaking one can afford far more than a
+   normal 2D game would: the chunks can carry the material's own colours, bounce off what
+   is below them, and break down further as they go. This is the designer's standing note
+   -- the drop already feels good, breaking has to feel enormous -- and DEC-16 makes it
+   part of the mechanic rather than a later polish pass.
+
+   The hard rule: none of this is allowed to touch the simulation. Debris reads the grid to
+   know where the floor is, and never writes to it. If a chunk could affect support or an
+   outcome, the preview would stop being a promise. */
+
+// Chunks carry the material's palette, land on whatever is actually beneath them, bounce,
+// and shed smaller pieces when they do.
+function debris(x,y,pal,n,power){
+  power = power || 1;
+  const want = Math.min(n||6, PART_CAP - parts.length);
+  for(let i=0;i<want;i++) parts.push({
+    x:x+Math.random()*TILE, y:y+Math.random()*TILE,
+    vx:(Math.random()-.5)*2.4*power, vy:(-Math.random()*1.9-.2)*power, g:.17,
+    s:1+((Math.random()*2.4)|0), c:pal[(Math.random()*pal.length)|0],
+    life:.55+Math.random()*.55, fd:1.4,
+    bounce:2, pal:pal});
+}
+
+// Where a falling chunk would come to rest: the top of the first solid cell under it.
+// Read-only against the grid, always.
+function floorUnder(x, y){
+  if(!scr || !scr.g) return -1;
+  const c = (x / TILE) | 0;
+  if(c < 0 || c >= COLS) return -1;
+  let r = Math.max(0, ((y - HUD) / TILE) | 0);
+  for(; r < ROWS; r++) if(scr.g[idx(c, r)]) return HUD + r*TILE;
+  return -1;
+}
 function dust(x,y,n){ for(let i=0;i<(n||5);i++) parts.push({
   x:x+Math.random()*TILE, y:y+Math.random()*TILE,
   vx:(Math.random()-.5)*.7, vy:-Math.random()*.35, g:.02,
@@ -904,16 +937,18 @@ const IMPACT = {
   dirt: {n:9, vx:[1.10, 2.10], vy:[0.00, 0.18], g:.008, size:1, life:[.70,.45],
          shake:0.7, snd:{d:.09, v:.05, lp:220}}
 };
-function landImpact(x, y, mat){
+function landImpact(x, y, mat, power){
+  power = power || 1;
   const loose = !!(MAT[mat] && MAT[mat].loose);
   const k = loose ? IMPACT.dirt : IMPACT.rock;
   const pal = (MAT[mat] && MAT[mat].pal) || ['#8d80a4','#6d6284','#8d80a4'];
-  for(let i=0;i<k.n;i++){
+  const n = Math.min(k.n * power | 0, PART_CAP - parts.length);
+  for(let i=0;i<n;i++){
     const d = Math.random()<.5 ? -1 : 1;
     parts.push({
       x:x+Math.random()*TILE, y:y+TILE-2-Math.random()*3,
-      vx: d*(k.vx[0] + Math.random()*k.vx[1]),
-      vy: -(k.vy[0] + Math.random()*k.vy[1]),
+      vx: d*(k.vx[0] + Math.random()*k.vx[1]) * power,
+      vy: -(k.vy[0] + Math.random()*k.vy[1]) * power,
       g: k.g,
       s: k.size===1 ? 1 : 1+((Math.random()*2)|0),
       c: pal[(Math.random()*3)|0],
@@ -1030,13 +1065,19 @@ function commitBreak(){
   // The swing lands: the whole cluster goes white for a beat, and the phone kicks harder
   // the more rock the swing cut loose.
   flash(p.cells); ring(p.c, p.r, '#fff3c0');
-  buzz(p.sim.frames.length > 2 ? [14,26,40] : 18);
+  // Cutting six tiles has to feel six times bigger than cutting one. Everything below
+  // scales off the size of the cut, so the swing reports how much it actually took.
+  const cut = p.cells.length/2, heft = Math.min(1, cut/MAXBREAK);
+  buzz(p.sim.frames.length > 2 ? [14,26,40] : (cut>3 ? [10,18] : 18));
   for(let i=0;i<p.cells.length;i+=2){
     const m = scr.g[idx(p.cells[i],p.cells[i+1])];
     if(!m) continue;
-    debris(p.cells[i]*TILE, HUD + p.cells[i+1]*TILE, MAT[m].pal, 5);
+    debris(p.cells[i]*TILE, HUD + p.cells[i+1]*TILE, MAT[m].pal, 5 + (heft*4|0), 1 + heft*.5);
     if(MAT[m].ore) spark(p.cells[i]*TILE, HUD + p.cells[i+1]*TILE, MAT[m].pal[1]);
   }
+  // The cut punches the screen on its own account, before anything has even fallen.
+  shake = Math.max(shake, 1.2 + heft*2.6);
+  hitstop = Math.max(hitstop, .02 + heft*.03);
   if(p.gain>0){
     const room = Math.max(0, CAP()-haul), got = Math.min(room, p.gain);
     haul += got; popBag = 1;
@@ -1045,9 +1086,11 @@ function commitBreak(){
   }
   awardFinds(p.got);
   scr.g = p.g; scr.f = p.f;
-  shake = Math.min(7, 1.5 + p.sim.frames.length*.7);
-  // The bigger the thing you just cut loose, the longer the world holds its breath.
-  hitstop = Math.min(.10, .035 + p.sim.frames.length*.012);
+  // Two separate things make a swing feel big: how much rock it took, and how much came
+  // down afterwards. This used to assign, which threw away the first -- a six-tile cut and
+  // a two-tile cut that dislodged the same amount felt identical. Take the larger.
+  shake   = Math.max(shake,   Math.min(7,   1.5  + p.sim.frames.length*.7));
+  hitstop = Math.max(hitstop, Math.min(.10, .035 + p.sim.frames.length*.012));
   if(p.sim.frames.length>2) noise(.3,.22,600);
   startAnim(p.sim);
 }
@@ -2122,6 +2165,19 @@ function update(dt){
   if(shake>0) shake = Math.max(0, shake - dt*14);
   for(let i=parts.length-1;i>=0;i--){ const p=parts[i];
     p.x+=p.vx*dt*60; p.y+=p.vy*dt*60; p.vy+=p.g*dt*60; p.life-=dt*(p.fd||1.4);
+    // A chunk with bounces left lands on whatever is under it, kicks back up at a third
+    // of its speed, loses width, and sheds a smaller piece. Purely visual: floorUnder
+    // only reads the grid.
+    if(p.bounce > 0 && p.vy > 0){
+      const fy = floorUnder(p.x, p.y);
+      if(fy >= 0 && p.y >= fy){
+        p.y = fy - 1; p.vy = -Math.abs(p.vy) * .34; p.vx *= .55; p.bounce--;
+        if(p.s > 1) p.s--;
+        if(p.pal && parts.length < PART_CAP) parts.push({
+          x:p.x, y:p.y, vx:(Math.random()-.5)*1.1, vy:-Math.random()*.7, g:.17,
+          s:1, c:p.pal[(Math.random()*3)|0], life:.3+Math.random()*.3, fd:2.2, bounce:0});
+      }
+    }
     if(p.life<=0 || p.y>H) parts.splice(i,1); }
   for(let i=floats.length-1;i>=0;i--){ const f=floats[i];
     f.y+=f.vy*dt*60; f.vy *= Math.pow(.86, dt*60);      // shoots up, then hangs
@@ -2164,14 +2220,19 @@ function update(dt){
             if(r>0 && r<ROWS-1 && f.g[idx(c,r)] && !prev.g[idx(c,r)]
                && prev.g[idx(c,r-1)]===f.g[idx(c,r)] && f.g[idx(c,r+1)] && landed<5){
               // The material that just stopped decides how the hit reads (LAB-04).
-              lastImpact = landImpact(c*TILE, HUD+r*TILE, f.g[idx(c,r)]); landed++;
+              // How far this mass has been falling decides how hard it arrives.
+              const fell = Math.min(8, anim.i);
+              lastImpact = landImpact(c*TILE, HUD+r*TILE, f.g[idx(c,r)], 1 + fell*.22);
+              landed++;
               // the tile itself takes the hit: squashed for a beat, then springs back
               squashes.push({c:c, r:r, t:0});
             }
           }
           if(landed && lastImpact){
-            shake = Math.max(shake, lastImpact.shake);
-            noise(lastImpact.snd.d, lastImpact.snd.v, lastImpact.snd.lp);
+            const fell = Math.min(8, anim.i);
+            shake = Math.max(shake, lastImpact.shake * (1 + fell*.22));
+            hitstop = Math.max(hitstop, .01 + fell*.006);
+            noise(lastImpact.snd.d, lastImpact.snd.v * (1 + fell*.14), lastImpact.snd.lp);
           }
         }
       } else {
