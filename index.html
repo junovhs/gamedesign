@@ -1856,8 +1856,30 @@ function render(){
     if(dig.swing>=0) drawPick(dx, dy+bob, dig.swing, dig.face);
   }
 
-  // reachable targets, so the constraint is visible instead of learned by failure
+  /* WHERE HE CAN STAND (Q-22)
+
+     The designer could not work out the movement rules and learned them by being refused.
+     The rules are: a cell you can stand in has something solid directly under it; you step
+     sideways, climb exactly one, or drop exactly one; that chains along a surface; and it
+     is always free. None of it was visible anywhere.
+
+     So the ground he can reach gets a footing mark -- a short bar on the surface he would
+     be standing on, not a highlight on the cell. It reads as "you can put your boots
+     here", it never covers material, and it disappears the moment a preview is up, because
+     reading the structure is the real skill and this must not compete with it.
+
+     This is legal under DEC-18: where the player can walk is something he owns, not
+     information about what is hidden in the rock. */
   if(mode==='play' && scr && !pending){
+    const reach = walkTargets(scr.g, pc, pr);
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      if(!reach[idx(c,r)] || (c===pc && r===pr)) continue;
+      const x = c*TILE, y = HUD + r*TILE + TILE - 1;
+      // a two-pixel footing on the floor of the cell, with a gap in the middle so it reads
+      // as a place to stand rather than as a line drawn under the tile
+      px(x+2, y, 4, 1, 'rgba(159,232,187,.55)');
+      px(x+TILE-6, y, 4, 1, 'rgba(159,232,187,.55)');
+    }
     for(const p of reachCells()){
       const c=p[0], r=p[1];
       if(c<0||c>=COLS||r<0||r>=ROWS) continue;
