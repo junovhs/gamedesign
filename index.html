@@ -833,37 +833,10 @@ comparison is one entry here and nothing else. */
 
 const COMPARE_SCALE = 3;
 const COMPARISONS = [
-  {q:'WHICH ONE SAYS DANGER?', note:'the marker over you',
-   mat:2, variants:[
-    {l:'A  STRIPES', d:()=>{                       // what ships today
-      px(-1,-1,TILE+2,TILE+2,'rgba(224,96,79,.55)');
-      for(let k=0;k<TILE+2;k+=3) px(-1,-1+k,TILE+2,1,'rgba(255,255,255,.55)');
-    }},
-    {l:'B  CROSS', d:()=>{
-      px(-1,-1,TILE+2,TILE+2,'rgba(224,96,79,.5)');
-      for(let k=0;k<TILE;k++){ px(k,k,2,2,'#fff'); px(TILE-1-k,k,2,2,'#fff'); }
-    }},
-    {l:'C  JAWS', d:()=>{
-      px(-1,-1,TILE+2,TILE+2,'rgba(224,96,79,.5)');
-      for(let k=0;k<5;k++){ px(k*3,0,2,3+((k%2)*2),'#fff'); px(k*3,TILE-3-((k%2)*2),2,3+((k%2)*2),'#fff'); }
-    }}
-  ]},
-
-  {q:'WHICH ARROW READS ON ORE?', note:'a mass about to fall',
-   mat:3, variants:[
-    {l:'A  PLAIN', d:()=>{                          // what ships today
-      for(let k=0;k<4;k++){ px(4+k,6+k,1,1,'rgba(255,255,255,.75)'); px(11-k,6+k,1,1,'rgba(255,255,255,.75)'); }
-    }},
-    {l:'B  OUTLINED', d:()=>{
-      for(let k=0;k<5;k++){ px(3+k,5+k,3,3,'#08060c'); px(11-k,5+k,3,3,'#08060c'); }
-      for(let k=0;k<4;k++){ px(4+k,6+k,1,1,'#fff'); px(11-k,6+k,1,1,'#fff'); }
-    }},
-    {l:'C  SOLID WEDGE', d:()=>{
-      for(let k=0;k<6;k++) px(3+k,4+k,TILE-6-k*2,1,'#08060c');
-      for(let k=0;k<5;k++) px(4+k,5+k,TILE-8-k*2,1,'#fff3c0');
-    }}
-  ]},
-
+  // Three questions were asked, answered and shipped: the danger marker is a cross, the
+  // falling-mass arrow is outlined so it survives ore, and warning text sits on a plate
+  // with rules. They are gone from here -- a comparison whose answer has shipped is dead
+  // weight on a screen whose whole value is that it only ever asks live questions.
   {q:'WHICH TILE LOOKS LOAD-BEARING?', note:'this tile holds up the mass',
    mat:3, variants:[
     {l:'A  NOTHING', d:()=>{}},                      // what ships today
@@ -874,19 +847,8 @@ const COMPARISONS = [
       px(0,0,TILE,2,'rgba(255,255,255,.45)'); px(0,TILE-2,TILE,2,'rgba(0,0,0,.5)');
       px(1,2,2,2,'rgba(255,255,255,.35)'); px(TILE-3,2,2,2,'rgba(255,255,255,.35)');
     }}
-  ]},
-
-  {q:'WHICH WARNING READS?', note:'over the brightest tile',
-   mat:8, variants:[
-    {l:'A  BARE', d:()=>{ text('BURIED',-4,6,'#e0604f'); }},   // what ships today
-    {l:'B  PLATE', d:()=>{
-      px(-6,4,TILE+12,9,'#08060c'); text('BURIED',-4,6,'#e0604f');
-    }},
-    {l:'C  PLATE+RULE', d:()=>{
-      px(-6,4,TILE+12,9,'#08060c'); px(-6,4,TILE+12,1,'#e0604f'); px(-6,12,TILE+12,1,'#e0604f');
-      text('BURIED',-4,6,'#fff');
-    }}
   ]}
+
 ];
 
 let compareAt = 0;
@@ -1653,6 +1615,15 @@ function drawTile(G,x,y,m,c,r){
     px(x+5,y+5,6,6,p[2]); px(x+6,y+6,4,4,p[1]); px(x+7,y+7,2,2,'#fffbe8');
   }
 }
+// Preview verdicts sit on top of whatever the board happens to look like, including the
+// brightest tile in the game. Bare text lost that fight. A solid plate with a rule above
+// and below wins it regardless of what is underneath. (Designer picked C.)
+function warnBanner(msg, col){
+  const w = textW(msg,1), x = (W-w)>>1, y = HUD+3;
+  px(x-6, y-3, w+12, 13, '#08060c');
+  px(x-6, y-3, w+12, 1, col); px(x-6, y+9, w+12, 1, col);
+  textSh(msg, x, y, '#fff');
+}
 function edges(G,x,y,c,r){
   if(r>0 && !G[idx(c,r-1)]) px(x,y,TILE,1,'rgba(255,255,255,.22)');
   if(r<ROWS-1 && !G[idx(c,r+1)]) px(x,y+TILE-1,TILE,1,'rgba(0,0,0,.45)');
@@ -1820,11 +1791,12 @@ function render(){
           for(let i=0;i<P.cells.length;i+=2) if(P.cells[i]===c && P.cells[i+1]===r) return true;
           return false; })()) continue;
         px(c*TILE, HUD+r*TILE, TILE, 1, 'rgba(255,255,255,.35)');
-        const cx = c*TILE + 8, cy = HUD + r*TILE + 6;    // chevron: this is on its way down
-        for(let k=0;k<4;k++){
-          px(cx-4+k, cy+k, 1, 1, 'rgba(255,255,255,.75)');
-          px(cx+3-k, cy+k, 1, 1, 'rgba(255,255,255,.75)');
-        }
+        // Outlined, not bare: a white chevron vanishes into the bright core of an ore
+        // tile, which is exactly where a falling mass most often is. The dark shadow
+        // underneath is what makes it survive gold and copper. (Designer picked B.)
+        const cx = c*TILE, cy = HUD + r*TILE;
+        for(let k=0;k<5;k++){ px(cx+3+k, cy+5+k, 3, 3, '#08060c'); px(cx+11-k, cy+5+k, 3, 3, '#08060c'); }
+        for(let k=0;k<4;k++){ px(cx+4+k, cy+6+k, 1, 1, '#fff'); px(cx+11-k, cy+6+k, 1, 1, '#fff'); }
       }
       // 3. where it all comes to rest
       ctx.globalAlpha = .40;
@@ -1847,15 +1819,29 @@ function render(){
       if(!P.sim.buried){
         const gy = HUD + fin.pr*TILE;
         ctx.globalAlpha = .8; drawDigger(fin.pc*TILE+1, gy+1); ctx.globalAlpha = 1;
-        if(P.sim.out) textC('THROUGH', HUD+4, '#5ed986');
-        else if(fin.pr > P.sim.pr0 && P.sim.pr0 >= 0) textC('YOU RIDE IT DOWN', HUD+4, '#5ed986');
+        if(P.sim.out) warnBanner('THROUGH', '#5ed986');
+        else if(fin.pr > P.sim.pr0 && P.sim.pr0 >= 0) warnBanner('YOU RIDE IT DOWN', '#5ed986');
       }
     }
     if(P.sim.buried){
-      const bx = pc*TILE, by = HUD + pr*TILE;
-      px(bx-2, by-2, TILE+4, TILE+4, 'rgba(224,96,79,.55)');
-      for(let k=0;k<TILE+4;k+=3) px(bx-2, by-2+k, TILE+4, 1, 'rgba(255,255,255,.55)');
-      textC('THIS BURIES YOU', HUD+4, '#e0604f');
+      // A cross, not stripes. The striped cage read as decoration and was only understood
+      // retroactively, after being buried once; a cross is unambiguous at a glance and
+      // does not depend on colour to say no. (Designer picked B.)
+      // Drawn oversized, spilling two pixels past the cell on every side. The character
+      // sprite is drawn after the preview and would otherwise swallow the middle of the
+      // cross; the arms have to clear him to still read as a cross rather than as four
+      // white specks in the corners.
+      const bx = pc*TILE - 2, by = HUD + pr*TILE - 2, S = TILE + 4;
+      px(bx, by, S, S, 'rgba(224,96,79,.5)');
+      for(let k=0;k<S;k++){
+        px(bx+k,     by+k, 3, 3, '#08060c');
+        px(bx+S-1-k, by+k, 3, 3, '#08060c');
+      }
+      for(let k=0;k<S;k++){
+        px(bx+k+1,     by+k, 2, 2, '#fff');
+        px(bx+S-2-k,   by+k, 2, 2, '#fff');
+      }
+      warnBanner('THIS BURIES YOU', '#e0604f');
     }
   }
 
