@@ -815,69 +815,53 @@ Additional content is not a substitute for a deeper verb.
 
 ---
 
-## 26. DECISION ALIGNMENT
+## 26. DECISIONS AND OPEN QUESTIONS
 
-The project was founded on DOWNSHAFT under **DEC-09**, but several recorded decisions now need
-to be amended or superseded in Ishoo.
+They are not in this document. They are in Ishoo, which is the source of truth for both.
 
-| Decision   | Current direction                                                                           |
-| ---------- | ------------------------------------------------------------------------------------------- |
-| **DEC-07** | Still valid: development and testing are phone-native                                       |
-| **DEC-09** | Still valid: DOWNSHAFT is the project                                                       |
-| **DEC-10** | Revise: the atom is one compact board or meaningful persistent action, not one full descent |
-| **DEC-11** | Revise: the HUD includes a persistent actionable inventory and distance to sparse camps     |
-| **DEC-12** | Still valid: borrowed placeholders are recorded and never ship                              |
-| **DEC-13** | Supersede: JavaScript is the prototype; Rust/Wasm is the intended production implementation |
-| **DEC-14** | Clarify: art remains authored pixel data, independent of implementation language            |
-| **DEC-15** | Still valid: tone escalates into absurdity with depth                                       |
-| **DEC-16** | Still valid: feel ships with the mechanic                                                   |
+Accepted decisions are read with `ishoo_decision` (`op:list` / `op:show`). The ones that settle
+the most arguments before they start:
 
-The Ishoo decisions should be updated so the tracker and this document do not disagree.
+| ADR         | What it settles                                                              |
+| ----------- | ---------------------------------------------------------------------------- |
+| **DEC-07**  | Development and testing are phone-native                                     |
+| **DEC-09**  | DOWNSHAFT is the project                                                     |
+| **DEC-13**  | `index.html` is the game; Rust/Wasm is a later port of a proven design       |
+| **DEC-14**  | All art is authored pixel data; the importer is a separate tool              |
+| **DEC-15**  | Tone escalates into absurdity with depth                                     |
+| **DEC-16**  | Feel ships with the mechanic, not after it                                   |
+| **DEC-17**  | The atom of play is one compact structural board                             |
+| **DEC-18**  | The board is the readout; the HUD carries a persistent, actionable inventory |
+| **DEC-19**  | Prove the board before building the world; 80% of playtime is inside boards  |
 
----
+Open questions are Ishoo issues. This document does not restate them, because two lists of the
+same questions is how contradictory answers accumulate.
 
-## 27. OPEN QUESTIONS
-
-The largest unresolved questions are:
-
-| Question                                                               | Why it matters                                        |
-| ---------------------------------------------------------------------- | ----------------------------------------------------- |
-| What is the complete v1 physics vocabulary?                            | Determines the real puzzle depth                      |
-| What makes structural play remain interesting for hundreds of hours?   | Decides whether the game exists beyond its premise    |
-| What is the progression spine from the backyard to the deepest region? | Connects tools, resources, camps and world escalation |
-| How are boards authored, generated and recombined?                     | Determines replayability and content cost             |
-| How far apart are camps?                                               | Determines expedition pressure and world scale        |
-| How does the player transport large finds?                             | Central to fossils, creatures and machinery           |
-| What persists when a board is left unresolved?                         | Defines the world-state model                         |
-| How much information does the preview guarantee?                       | Defines fairness and technical scope                  |
-| What belongs in the first complete vertical slice?                     | Prevents the RPG breadth from burying the core        |
-| What is the production Rust/Wasm architecture?                         | Determines the final implementation and save model    |
-| What lives in each depth region?                                       | Defines the content and tonal spine                   |
-| What is the pixel-art export pipeline?                                 | Makes final art production sustainable                |
-
-These should be represented in Ishoo rather than accumulating contradictory answers in
-multiple markdown files.
+If something here contradicts an ACCEPTED ADR, this document is stale.
 
 ---
 
-## 28. RELATED DOCUMENTS
+## 27. RELATED DOCUMENTS
 
-[`game-systems-plan.md`](game-systems-plan.md)
+[`current-milestone.md`](current-milestone.md)
 
-The current systems inventory, world structure, content classes and production priorities.
+The only planning document read regularly: what is being built right now, why, and what will
+answer it. Everything below is reference material.
+
+[`game-system-plan.md`](game-system-plan.md)
+
+The larger planned system space: the systems inventory, world structure, content classes and
+production priorities.
 
 [`north-star-catalogue.md`](north-star-catalogue.md)
 
 A literal catalogue of every object shown in `north-star.png`, including what exists in the
-prototype and what the image suggests.
+prototype and what the image suggests. It preserves the source image’s observations; it is not
+the authoritative systems specification.
 
-This document preserves the source image’s observations. It is not the authoritative systems
-specification.
+[`wiki-idea.md`](wiki-idea.md)
 
-[`philosophy.md`](philosophy.md)
-
-The designer’s project-independent preferences: what he values in games and why. It should be
-consulted before proposing systems, but it is not specific to DOWNSHAFT.
+How the future content reference system will work. Not built yet.
 
 [`north-star.png`](north-star.png)
 

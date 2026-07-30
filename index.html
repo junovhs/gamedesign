@@ -423,7 +423,7 @@ let now = 0;
 
 /* ---------------- feel ----------------
    Everything below is presentation. None of it may answer a question the player is
-   supposed to answer by swinging (DEC-03): light, weight and motion set mood, and the
+   supposed to answer by swinging (DEC-18): light, weight and motion set mood, and the
    preview is still the only thing that tells you what a swing does. */
 const STEP = .058;              // seconds a collapse spends on each row it falls
 let hitstop = 0;                // impact freeze; render keeps drawing the stalled frame
@@ -922,7 +922,7 @@ function wipePanel(back){
 // coarse and grid-aligned (they read as rock at 16px instead of TV static) and the light
 // lives entirely on exposed faces, which makes the dug silhouette the thing you see.
 // This carries no information the player did not already have: an exposed face is exposed
-// whether or not it catches light (DEC-03).
+// whether or not it catches light (DEC-18).
 function drawTile(G,x,y,m,c,r){
   const M = MAT[m], p = M.pal;
   const open = (cc,rr) => cc>=0 && cc<COLS && rr>=0 && rr<ROWS && !G[idx(cc,rr)];
@@ -1011,7 +1011,7 @@ function animView(){
 
 // Darkness is per tile and centred on the lamp. It is mood, never information: the
 // falloff bottoms out well short of black so no part of the screen is ever unreadable,
-// and nothing is revealed that was not already visible (DEC-03).
+// and nothing is revealed that was not already visible (DEC-18).
 // The tint the lamp falls off into. These used to be brown-first, so the darkness itself
 // was adding brown on top of brown rock; each is now the biome's own hue, cooled.
 const BTINT = ['#120a12','#080b16','#03100f','#0d0616','#0c0208'];
@@ -1027,7 +1027,7 @@ function lightPass(lx, ly){
     const d = Math.sqrt(dx*dx+dy*dy)/R;
     let a = Math.pow(Math.max(0, d-.45), 1.5);
     // Bottoms out at .54, never black: the far corner of the board has to stay planable
-    // or the light would be withholding information instead of setting mood (DEC-03).
+    // or the light would be withholding information instead of setting mood (DEC-18).
     // Raised from .44 because the board had almost no falloff left after the palette went
     // cooler -- the lamp needs somewhere to fall off TO for the room to have any depth.
     a = Math.min(1, a) * .54 + breath;

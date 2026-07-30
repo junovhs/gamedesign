@@ -12,7 +12,7 @@ something the build does not have · `DRESS` pure scenery, no rules attached.
 ## 0. THE READOUT
 
 The HUD in the image is stricter than the one in the build, and better. It says four things
-and all four are things you own (DEC-11).
+and all four are things you own (DEC-18).
 
 | # | In the image | Kind | Role | Status |
 |---|---|---|---|---|
