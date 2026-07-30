@@ -14,10 +14,6 @@
   #ui{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
   .panel{pointer-events:auto;width:100%;height:100%;background:rgba(8,6,12,.93);
     display:flex;align-items:center;justify-content:center;padding:4%}
-  /* The compare screen draws its variants on the canvas, so its controls have to sit over
-     the canvas rather than behind a blackout. Same buttons, no backdrop, pinned low. */
-  .panel.clear{background:none;align-items:flex-end;padding:0 3% 3%}
-  .panel.clear .card{background:rgba(8,6,12,.86)}
   .card{width:100%;max-width:440px;max-height:100%;overflow:auto;background:#1e1826;
     border:4px solid #08060c;box-shadow:6px 6px 0 #08060c;padding:13px}
   .card::-webkit-scrollbar{width:8px}.card::-webkit-scrollbar-thumb{background:#4d3d63}
@@ -814,91 +810,13 @@ function parseBoard(def){
 // broken level select three taps in.
 const BOARDS_PARSED = BOARDS.map(parseBoard);
 
-/* ================= COMPARE (TOOL-02) =================
+/* The COMPARE screen is gone. It did its job: three treatments were asked about, chosen
+   on a phone and shipped -- the danger marker, the falling-mass arrow and the warning
+   plate. The fourth question, how to make a tile look load-bearing, was answered "none of
+   these", and the designer then ruled the whole question out: the player figures out what
+   is holding what up by looking at the board and breaking it. With no live questions left
+   it was a dead screen with a button pointing at it. */
 
-Every question currently blocking progress is one an agent cannot answer: does this shape
-read as danger, does this tile look like it is holding something up, is this arrow visible
-against bright ore. Measuring thumb targets and asserting zero mismatches does not touch
-any of it. Only the designer, on a phone, can say.
-
-So: one subject, drawn two to four times, with exactly ONE tiny difference between them.
-He taps nothing and nothing is recorded -- he just looks, and tells whoever is building.
-
-THE RULE THAT KEEPS THIS HONEST: a variant is a handful of lines. If writing three of them
-is real work, the question is too big for this screen and belongs in a normal issue. That
-constraint is the designer's, and it is what stops this becoming a settings menu.
-
-Each variant draws in TILE-space at the origin; the screen scales it up. Adding a
-comparison is one entry here and nothing else. */
-
-const COMPARE_SCALE = 3;
-const COMPARISONS = [
-  // Three questions were asked, answered and shipped: the danger marker is a cross, the
-  // falling-mass arrow is outlined so it survives ore, and warning text sits on a plate
-  // with rules. They are gone from here -- a comparison whose answer has shipped is dead
-  // weight on a screen whose whole value is that it only ever asks live questions.
-  {q:'WHICH TILE LOOKS LOAD-BEARING?', note:'this tile holds up the mass',
-   mat:3, variants:[
-    {l:'A  NOTHING', d:()=>{}},                      // what ships today
-    {l:'B  SEAM', d:()=>{
-      px(2,0,2,TILE,'rgba(255,255,255,.30)'); px(TILE-4,0,2,TILE,'rgba(0,0,0,.45)');
-    }},
-    {l:'C  BRACED', d:()=>{
-      px(0,0,TILE,2,'rgba(255,255,255,.45)'); px(0,TILE-2,TILE,2,'rgba(0,0,0,.5)');
-      px(1,2,2,2,'rgba(255,255,255,.35)'); px(TILE-3,2,2,2,'rgba(255,255,255,.35)');
-    }}
-  ]}
-
-];
-
-let compareAt = 0;
-
-// Draws one comparison across the board area: the question, then each variant blown up
-// over the material the question is actually about.
-function drawCompare(){
-  const C = COMPARISONS[compareAt];
-  px(0,0,W,H,'#0d0a14');
-  textC('COMPARE  '+(compareAt+1)+'/'+COMPARISONS.length, 4, '#665a80');
-  const qy = 13;
-  const fit = (t) => { const max = ((W-6)/4)|0; return t.length>max ? t.slice(0,max) : t; };
-  textC(fit(C.q), qy, '#e8b830');
-  textC(fit(C.note.toUpperCase()), qy+9, '#665a80');
-
-  // a 3x3 patch of the subject material, so the treatment is judged in context
-  const patch = new Uint8Array(COLS*ROWS);
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) patch[idx(c,r)] = C.mat;
-
-  const S = COMPARE_SCALE, cell = TILE*S;
-  let y = qy + 20;
-  for(const v of C.variants){
-    const x = 8;
-    ctx.save(); ctx.translate(x, y); ctx.scale(S, S);
-    drawTile(patch, 0, 0, C.mat, 4, 4);
-    v.d();
-    ctx.restore();
-    textSh(v.l, x + cell + 7, y + (cell>>1) - 2, '#c0b4d8');
-    y += cell + 7;
-  }
-  // Directly under the last variant, not pinned to the bottom -- the controls live there.
-  textC('TELL THE AI WHICH ONE READS', y + 2, '#5ed986');
-}
-
-function comparePanel(back){
-  mode = 'compare'; restartEl.hidden = true;
-  ui(`<div class="panel clear"><div class="card">
-    <div class="row">
-      <button class="b g" id="prev">&lt;</button>
-      <button class="b g" id="next">&gt;</button>
-    </div>
-    <div class="row"><button class="b g" id="back">BACK</button></div>
-  </div></div>`);
-  const n = COMPARISONS.length;
-  on('#prev', ()=>{ compareAt = (compareAt + n - 1) % n; comparePanel(back); });
-  on('#next', ()=>{ compareAt = (compareAt + 1) % n; comparePanel(back); });
-  on('#back', back || surface);
-}
-
-/* ---------------- run state ---------------- */
 let mode = 'boot';           // boot | play | anim | panel
 let scr = null;              // {g,f,ec}
 let lab = null;              // {i, def} while a handcrafted board is loaded, else null
@@ -1218,10 +1136,8 @@ function labPanel(back){
     <p class="s">Handcrafted problems. Each one is asking a single question. Restart costs
     nothing, so try the thing you think will not work.</p>
     ${rows}
-    <div class="row"><button class="b a" id="cmp">COMPARE TREATMENTS</button></div>
     <div class="row"><button class="b g" id="back">BACK</button></div>
   </div></div>`);
-  on('#cmp', ()=>comparePanel(()=>labPanel(back)));
   uiEl.querySelectorAll('[data-lab]').forEach(n => {
     n.onclick = () => { ac(); tone(700,.04,'square',.08); loadLab(+n.getAttribute('data-lab')); };
   });
@@ -1618,8 +1534,15 @@ function drawTile(G,x,y,m,c,r){
 // Preview verdicts sit on top of whatever the board happens to look like, including the
 // brightest tile in the game. Bare text lost that fight. A solid plate with a rule above
 // and below wins it regardless of what is underneath. (Designer picked C.)
-function warnBanner(msg, col){
-  const w = textW(msg,1), x = (W-w)>>1, y = HUD+3;
+// A verdict belongs beside the man it is about. Centred horizontally on him where it
+// fits, clamped to the board otherwise; above him by default, below when he is near the
+// top. The plate keeps it readable over any material.
+function warnAt(msg, c, r, col){
+  const w = textW(msg,1);
+  let x = c*TILE + (TILE>>1) - (w>>1);
+  x = Math.max(7, Math.min(W - w - 7, x));
+  const above = r > 2;
+  const y = HUD + (above ? r*TILE - 13 : (r+1)*TILE + 5);
   px(x-6, y-3, w+12, 13, '#08060c');
   px(x-6, y-3, w+12, 1, col); px(x-6, y+9, w+12, 1, col);
   textSh(msg, x, y, '#fff');
@@ -1635,16 +1558,29 @@ const DIGP = {'1':'#e8c23a','2':'#c2582f','3':'#3b2a1c','0':'#08060c'};
 // Squash and stretch by *resampling to a different block count* rather than scaling the
 // rects: 7 rows by 9 columns is a real squash that still lands on whole pixels, so the
 // character keeps its edges instead of going soft the moment it moves.
+// Set for one frame by the preview when the pending action would bury him.
+let digDoomed = false;
+const DIGP_DOOM = {'1':'#e0604f','2':'#8f2f2f','3':'#3b1c1c','0':'#08060c'};
 function drawDigger(x,y,rows,cols,face){
   rows = rows||8; cols = cols||8; face = face||1;
   const ox = x + ((16 - cols*2)>>1), oy = y + (16 - rows*2);
+  const pal = digDoomed ? DIGP_DOOM : DIGP;
   for(let r=0;r<rows;r++){
     const row = DIGGER[(r*8/rows)|0];
     for(let c=0;c<cols;c++){
       let s = (c*8/cols)|0; if(face<0) s = 7-s;
       const ch = row[s];
       if(ch==='.'||ch===undefined) continue;
-      px(ox+c*2, oy+r*2, 2, 2, DIGP[ch]);
+      px(ox+c*2, oy+r*2, 2, 2, pal[ch]);
+    }
+  }
+  // XX for eyes. Drawn over the hat brim row, which is where the face reads.
+  if(digDoomed){
+    const ey = oy + ((2*rows/8)|0)*2;
+    for(const ex of [ox+3, ox+9]){
+      px(ex,   ey,   1,1,'#fff'); px(ex+2, ey,   1,1,'#fff');
+      px(ex+1, ey+1, 1,1,'#fff');
+      px(ex,   ey+2, 1,1,'#fff'); px(ex+2, ey+2, 1,1,'#fff');
     }
   }
 }
@@ -1700,7 +1636,7 @@ function lightPass(lx, ly){
 }
 
 function render(){
-  if(mode==='compare'){ drawCompare(); return; }   // its own screen, no board underneath
+  digDoomed = false;                 // set by the preview below, read when he is drawn
   const B = biomeAt(depth||1);
   // Shake leans vertical: what hits you in this game always arrives from above.
   const sx = shake>0 ? (Math.random()-.5)*shake*.6 : 0;
@@ -1819,29 +1755,18 @@ function render(){
       if(!P.sim.buried){
         const gy = HUD + fin.pr*TILE;
         ctx.globalAlpha = .8; drawDigger(fin.pc*TILE+1, gy+1); ctx.globalAlpha = 1;
-        if(P.sim.out) warnBanner('THROUGH', '#5ed986');
-        else if(fin.pr > P.sim.pr0 && P.sim.pr0 >= 0) warnBanner('YOU RIDE IT DOWN', '#5ed986');
+        if(P.sim.out) warnAt('THROUGH', fin.pc, fin.pr, '#5ed986');
+        else if(fin.pr > P.sim.pr0 && P.sim.pr0 >= 0) warnAt('YOU RIDE IT DOWN', fin.pc, fin.pr, '#5ed986');
       }
     }
     if(P.sim.buried){
-      // A cross, not stripes. The striped cage read as decoration and was only understood
-      // retroactively, after being buried once; a cross is unambiguous at a glance and
-      // does not depend on colour to say no. (Designer picked B.)
-      // Drawn oversized, spilling two pixels past the cell on every side. The character
-      // sprite is drawn after the preview and would otherwise swallow the middle of the
-      // cross; the arms have to clear him to still read as a cross rather than as four
-      // white specks in the corners.
-      const bx = pc*TILE - 2, by = HUD + pr*TILE - 2, S = TILE + 4;
-      px(bx, by, S, S, 'rgba(224,96,79,.5)');
-      for(let k=0;k<S;k++){
-        px(bx+k,     by+k, 3, 3, '#08060c');
-        px(bx+S-1-k, by+k, 3, 3, '#08060c');
-      }
-      for(let k=0;k<S;k++){
-        px(bx+k+1,     by+k, 2, 2, '#fff');
-        px(bx+S-2-k,   by+k, 2, 2, '#fff');
-      }
-      warnBanner('THIS BURIES YOU', '#e0604f');
+      // The warning is drawn ON the man. A marker around him was occluded by his own
+      // sprite and read as clutter; and a banner at the top of the board is nowhere near
+      // where the player is looking, so contrast never was the problem -- proximity was.
+      // He goes red and his eyes become XX. That is the whole warning, and it is on the
+      // one object the player is already watching.
+      digDoomed = true;
+      warnAt('THIS BURIES YOU', pc, pr, '#e0604f');
     }
   }
 
@@ -1983,7 +1908,6 @@ function tileAt(x,y){
   return [c,r];
 }
 function tap(x,y){
-  if(mode==='compare') return;     // the compare screen is looked at, not played
   if(y<HUD) return;                                // the HUD is a readout; the menu is a DOM button
   if(mode!=='play' || !scr) return;
   const t = tileAt(x,y); if(!t) return;
