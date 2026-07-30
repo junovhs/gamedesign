@@ -828,6 +828,9 @@ let parts = [], floats = [], shake = 0, msg = '', msgT = 0, msgAt = 0;
 // Touch response. A finger covers the tile it taps, so the confirmation has to happen
 // OUTSIDE the fingertip -- a ring that expands past the thumb, not a highlight under it.
 let rings = [], flashes = [];
+// Tiles that just landed. Purely visual: a landed tile is squashed for a beat and
+// springs back, so a mass arriving has weight instead of simply stopping.
+let squashes = [];
 function ring(c,r,col){ rings.push({x:c*TILE+TILE/2, y:HUD+r*TILE+TILE/2, t:0, c:col||'#fff'}); }
 function flash(cells){ flashes.push({cells:cells, t:0}); }
 // The one channel that still reaches the player through a thumb and a noisy room.
@@ -840,7 +843,25 @@ let now = 0;
    Everything below is presentation. None of it may answer a question the player is
    supposed to answer by swinging (DEC-18): light, weight and motion set mood, and the
    preview is still the only thing that tells you what a swing does. */
-const STEP = .058;              // seconds a collapse spends on each row it falls
+/* FALL TIMING (FIX-06)
+
+   A collapse used to spend the same .058s on every row, so a long drop read as a conveyor
+   belt rather than as weight -- it hit top speed instantly and never changed. Real falling
+   accelerates, and the eye knows it.
+
+   So each row is faster than the one before, easing from STEP_FIRST down to STEP_LAST.
+   The first row or two stay slow enough to read, which is what the designer liked about
+   the old timing and what makes a collapse plannable; by the fifth row it is moving. A
+   seven-row fall comes out slightly SHORTER than it used to, not longer.
+
+   This only changes how the frames are timed. The frames themselves were computed and
+   frozen by resolve() before any of this runs, so nothing here can alter an outcome. */
+const STEP_FIRST = .080, STEP_LAST = .026, STEP_RAMP = 4;
+const stepFor = (i) => {
+  const k = Math.min(1, i / STEP_RAMP);
+  return STEP_FIRST + (STEP_LAST - STEP_FIRST) * (k*k);   // ease in, like gravity
+};
+const STEP = .058;              // still used where a single nominal step is wanted
 let hitstop = 0;                // impact freeze; render keeps drawing the stalled frame
 let motes = [];                 // ambient drift, so a screen with nothing happening still breathes
 let slide = 0;                  // 1 -> 0: the new screen rising into place under you
@@ -1154,6 +1175,7 @@ function loadLab(i){
   dig.x = pc; dig.y = pr; dig.sq = .7; dig.swing = -1; dig.hop = 0;
   slide = 1; hudBag = 0;
   parts.length = 0; floats.length = 0; pips.length = 0; rings.length = 0; flashes.length = 0;
+  squashes.length = 0;
   if(!motes.length) for(let k=0;k<14;k++) motes.push(newMote(true));
   clearUI(); restartEl.hidden = false;
   if(!previewBoundaryNotice()) toast(def.name);
@@ -1664,7 +1686,7 @@ function animView(){
   const i = Math.min(anim.i, anim.frames.length-1);
   const prev = i>0 ? anim.frames[i-1]
                    : (anim.sim.g0 ? {g:anim.sim.g0, pc:anim.sim.pc0, pr:anim.sim.pr0} : null);
-  return {cur:anim.frames[i], prev:prev, t:Math.min(1, anim.t/STEP)};
+  return {cur:anim.frames[i], prev:prev, t:Math.min(1, anim.t/stepFor(i))};
 }
 
 // Darkness is per tile and centred on the lamp. It is mood, never information: the
@@ -1911,6 +1933,18 @@ function render(){
   }
   ctx.globalAlpha = 1;
 
+  // The landing squash. A tile that just arrived is drawn a couple of pixels short and
+  // proud of its cell for a beat, which reads as impact absorbed rather than as a tile
+  // that simply stopped existing in one place and started existing in another.
+  for(const q of squashes){
+    const m = G && G[idx(q.c,q.r)]; if(!m) continue;
+    const e = Math.sin(q.t*Math.PI), squash = Math.round(e*3);
+    if(squash<=0) continue;
+    const x = q.c*TILE, y = HUD + q.r*TILE;
+    px(x, y, TILE, squash, B.wall);                       // the gap it left at the top
+    drawTile(G, x-squash, y+squash, m, q.c, q.r);         // and the tile, flattened wide
+  }
+
   // Motes drift in the lamplight. Nothing depends on them; they exist so that a screen
   // you are standing still on is never a photograph.
   for(const mo of motes){
@@ -2071,6 +2105,7 @@ function update(dt){
   // so it must never be the thing that freezes.
   for(let i=rings.length-1;i>=0;i--){ rings[i].t += dt*3.4; if(rings[i].t>=1) rings.splice(i,1); }
   for(let i=flashes.length-1;i>=0;i--){ flashes[i].t += dt*5.5; if(flashes[i].t>=1) flashes.splice(i,1); }
+  for(let i=squashes.length-1;i>=0;i--){ squashes[i].t += dt*7; if(squashes[i].t>=1) squashes.splice(i,1); }
   if(dig.hop>0) dig.hop = Math.max(0, dig.hop - dt*6);
   if(dig.swing>=0){ dig.swing += dt/.22; if(dig.swing>1) dig.swing = -1; }
 
@@ -2114,7 +2149,7 @@ function update(dt){
 
   if(mode==='anim' && anim){
     anim.t += dt;
-    if(anim.t > STEP){
+    if(anim.t > stepFor(anim.i)){
       anim.t = 0;
       const prev = anim.frames[anim.i];
       anim.i++;
@@ -2130,6 +2165,8 @@ function update(dt){
                && prev.g[idx(c,r-1)]===f.g[idx(c,r)] && f.g[idx(c,r+1)] && landed<5){
               // The material that just stopped decides how the hit reads (LAB-04).
               lastImpact = landImpact(c*TILE, HUD+r*TILE, f.g[idx(c,r)]); landed++;
+              // the tile itself takes the hit: squashed for a beat, then springs back
+              squashes.push({c:c, r:r, t:0});
             }
           }
           if(landed && lastImpact){
