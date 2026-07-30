@@ -44,10 +44,22 @@
   .fc .l{font-size:7px;letter-spacing:.3px;color:#665a80;margin-top:2px;line-height:1.3}
   .fc.got .q{color:#e8b830}
   .fc.got .l{color:#9c90b4}
+  /* The way out is a DOM button, not canvas pixels. Sized in CSS pixels it stays a real
+     thumb target (>=44px) no matter how small the canvas scales on a given phone, which
+     the old 10x7 canvas-space glyph never was. */
+  #menu{position:absolute;top:0;right:0;width:46px;height:46px;padding:0;margin:0;
+    pointer-events:auto;cursor:pointer;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:4px;background:#392c4c;border:0;
+    border-left:2px solid #08060c;border-bottom:2px solid #08060c}
+  #menu i{display:block;width:20px;height:3px;background:#c0b4d8}
+  #menu:active{background:#5ed986}
+  #menu:active i{background:#0b2a16}
+  #menu[hidden]{display:none}
 </style>
 </head>
 <body>
-<div id="wrap"><div id="stage"><canvas id="cv"></canvas><div id="ui"></div></div></div>
+<div id="wrap"><div id="stage"><canvas id="cv"></canvas><div id="ui"></div>
+<button id="menu" aria-label="Menu" hidden><i></i><i></i><i></i></button></div></div>
 <script>
 "use strict";
 /* ==================================================================
@@ -59,19 +71,25 @@
    ================================================================== */
 
 const TILE = 16, COLS = 10, ROWS = 16, HUD = 28;
+// The top-right of the HUD belongs to the menu button, which is a DOM element sized in
+// CSS pixels. Nothing on the canvas may be drawn under it, so the readouts reserve this
+// much width; PIPROW is the pick-pip wrap, kept short enough to clear the bag meter.
+const MENUW = 36, PIPROW = 8;
 const W = COLS*TILE, H = HUD + ROWS*TILE;      // 160 x 284
 const idx = (c,r) => r*COLS + c;
 
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d',{alpha:false});
 const uiEl = document.getElementById('ui'), stage = document.getElementById('stage');
+const menuEl = document.getElementById('menu');
 
 let SCALE = 2;
 function fit(){
-  // Largest scale that still fits. Integer when we have room for 2x or more, so the
-  // pixels stay square in portrait; the exact fractional ratio otherwise, so a short
-  // landscape screen fills instead of overflowing off the bottom.
-  const exact = Math.min(window.innerWidth/W, window.innerHeight/H);
-  SCALE = exact >= 2 ? Math.floor(exact) : exact;
+  // The exact ratio, never floored. Flooring to an integer scale threw away up to a
+  // whole step of size -- a 390-wide phone landed on 2x and played inside a 320px box
+  // with black bars, which shrank every touch target with it. The device pixel ratio is
+  // 2-3 on any phone this runs on, so a fractional CSS scale still lands each game pixel
+  // on several device pixels and stays crisp under image-rendering:pixelated.
+  SCALE = Math.min(window.innerWidth/W, window.innerHeight/H);
   cv.width = W; cv.height = H;
   cv.style.width = (W*SCALE)+'px'; cv.style.height = (H*SCALE)+'px';
   stage.style.width = (W*SCALE)+'px'; stage.style.height = (H*SCALE)+'px';
@@ -183,7 +201,8 @@ const FINDS = [
 /* ---------------- save ---------------- */
 const KEY='digger:v2';
 const NEW = () => ({bank:0, deepest:0, tool:0, lantern:0, satchel:0, beams:0,
-                    finds:[], screens:{}, dives:0, best:0, seed:(Math.random()*1e9)|0, seen:0});
+                    finds:[], screens:{}, reroll:{}, dives:0, best:0,
+                    seed:(Math.random()*1e9)|0, seen:0});
 let SV = NEW(), mem = null;
 async function load(){ try{ const r=localStorage.getItem(KEY); if(r) return JSON.parse(r);}catch(e){} return mem; }
 async function save(){ mem=JSON.parse(JSON.stringify(SV)); try{ localStorage.setItem(KEY, JSON.stringify(SV)); }catch(e){} }
@@ -206,9 +225,11 @@ function hash(a,b,s){
 function pickMix(mix,t){ let s=0; for(const m of mix) s+=m[1]; let x=t*s;
   for(const m of mix){ x-=m[1]; if(x<=0) return m[0]; } return mix[0][0]; }
 
-function genScreen(d, entryCol){
+function genScreen(d, entryCol, salt){
   const B = biomeAt(d), G = new Uint8Array(COLS*ROWS), F = new Uint8Array(COLS*ROWS);
-  const s = SV.seed + d*7919;
+  // salt re-rolls one depth without disturbing the rest of the shaft: the seed is the
+  // world, so a wedged screen has to be reshaped locally or not at all.
+  const s = SV.seed + d*7919 + (salt||0)*104729;
   // 2x2 blocks, each forced to differ from its left and upper neighbour. That keeps
   // material arriving in small readable chunks instead of one continent of dirt.
   const bcols = Math.ceil(COLS/2), brows = Math.ceil(ROWS/2);
@@ -281,7 +302,7 @@ function getScreen(d, entryCol){
     openEntry(st, want);               // re-open the way in, in case a later visit filled it
     return st;
   }
-  return genScreen(d, want);
+  return genScreen(d, want, SV.reroll[k]||0);
 }
 function storeScreen(d, st){
   if(!st) return;
@@ -485,7 +506,7 @@ function commitBreak(){
   picks--;
   if(p.c !== pc) dig.face = p.c > pc ? 1 : -1;
   dig.swing = 0;                                  // the arc plays over the break
-  pips.push({x:40+(picks%9)*5, y:4+((picks/9)|0)*7, life:1});
+  pips.push({x:40+(picks%PIPROW)*5, y:4+((picks/PIPROW)|0)*7, life:1});
   ac(); tone(220,.06,'square',.1,90); noise(.13,.2,1400);
   for(let i=0;i<p.cells.length;i+=2){
     const m = scr.g[idx(p.cells[i],p.cells[i+1])];
@@ -610,9 +631,34 @@ function enterScreen(d, entryCol){
   shake = Math.max(shake, 2.5);
   if(d > SV.deepest) SV.deepest = d;
   if(d > SV.best) SV.best = d;
+  // You can arrive on a screen where every swing in reach buries you. finishSim() only
+  // ever ran that check after a break, so an arrival like that left the player standing
+  // with no legal input and nothing to press. Worse, the screen is persistent: ending
+  // the leg would strand them again on the next visit. Reshape it instead.
+  if(!safeSwingExists()) reshapeScreen();
   storeScreen(depth, scr); save();
   if(depth % 3 === 0) landingPanel();
   else { mode='play'; clearUI(); toast(biomeAt(d).name); }
+}
+
+// Re-roll this one depth and drop the player back into it. Destructive to whatever was
+// already dug here, which is why it only ever runs when the alternative is a dead end.
+function reshapeScreen(){
+  const k = String(depth), want = scr ? scr.ec : (COLS>>1);
+  for(let tries=0; tries<6; tries++){
+    SV.reroll[k] = (SV.reroll[k]||0) + 1;
+    delete SV.screens[k];
+    scr = genScreen(depth, want, SV.reroll[k]);
+    pc = scr.ec; pr = 1;
+    const s = settle(scr.g, scr.f, pc, pr);
+    if(s.frames.length) scr.g = s.frames[s.frames.length-1].g;
+    pc = s.pc; pr = Math.min(s.pr, ROWS-2);
+    awardFinds(s.fell);
+    dig.x = pc; dig.y = pr; dig.sq = .7; dig.swing = -1; dig.hop = 0;
+    if(safeSwingExists()) break;
+  }
+  storeScreen(depth, scr); save();
+  toast('THE ROCK SHIFTED');
 }
 
 function fellThrough(){
@@ -675,8 +721,10 @@ function landingPanel(){
 }
 
 /* ---------------- menus ---------------- */
-function clearUI(){ uiEl.innerHTML=''; }
-function ui(h){ clearUI(); const d=document.createElement('div'); d.innerHTML=h.trim(); uiEl.appendChild(d.firstChild); }
+// The menu button is visible exactly when there is no panel already covering the screen.
+function clearUI(){ uiEl.innerHTML=''; menuEl.hidden = false; }
+function ui(h){ uiEl.innerHTML=''; menuEl.hidden = true;
+  const d=document.createElement('div'); d.innerHTML=h.trim(); uiEl.appendChild(d.firstChild); }
 function on(sel,fn){ const n=uiEl.querySelector(sel); if(n) n.onclick=()=>{ ac(); tone(700,.04,'square',.08); fn(); }; }
 
 const SHOP = [
@@ -765,12 +813,14 @@ function surface(){
       <button class="b g" id="finds">THE HOLE</button>
       <button class="b g" id="how">HOW</button>
     </div>
+    <div class="row"><button class="b g" id="wipe">START THE WHOLE HOLE OVER</button></div>
   </div></div>`);
   on('#dig',  ()=>{ clearUI(); enterScreen(1, COLS>>1); });
   on('#lift', ()=>{ clearUI(); enterScreen(lm, COLS>>1); });
   on('#shop', ()=>shop(surface));
   on('#finds',()=>findsPanel(surface));
   on('#how',  ()=>howPanel(surface));
+  on('#wipe', ()=>wipePanel(surface));
 }
 
 function howPanel(back){
@@ -790,24 +840,60 @@ function howPanel(back){
   on('#back', back);
 }
 
+// Resuming has to put back the mode we interrupted. Pausing mid-collapse and resuming
+// into 'play' would leave the animation half-run and the board reading from a frame the
+// rules had already moved past -- a second way to get stuck, introduced by the fix for
+// the first one.
+let pausedFrom = 'play';
 function pausePanel(){
+  if(mode!=='panel') pausedFrom = mode;
   mode='panel';
+  // Only offered when the screen really is finished with you, so it stays an escape
+  // hatch rather than a free re-roll to fish for a richer screen.
+  const wedged = pausedFrom==='play' && scr && !safeSwingExists();
   ui(`<div class="panel"><div class="card">
     <h1>DEPTH ${depth}</h1><h2>${biomeAt(depth).name}</h2>
     <div class="st"><span>CARRYING</span><b>${haul} / ${CAP()}</b></div>
     <div class="st"><span>PICKS LEFT</span><b>${picks}</b></div>
     <div class="st"><span>PURSE</span><b>${SV.bank}</b></div>
     <div class="row"><button class="b" id="res">KEEP DIGGING</button></div>
+    ${wedged?`<div class="row"><button class="b a" id="shift">I AM STUCK — SHIFT THE ROCK</button></div>`:''}
     <div class="row">
       <button class="b g" id="mute">SOUND ${MUTED?'OFF':'ON'}</button>
       <button class="b g" id="how">HOW</button>
     </div>
-    <div class="row"><button class="b a" id="quit">CLIMB OUT WITH IT</button></div>
+    <div class="row"><button class="b a" id="quit">GET ME OUT (KEEP THE HAUL)</button></div>
+    <div class="row"><button class="b g" id="wipe">START THE WHOLE HOLE OVER</button></div>
   </div></div>`);
-  on('#res', ()=>{ clearUI(); mode='play'; });
-  on('#mute',()=>{ MUTED=!MUTED; pausePanel(); });
-  on('#how', ()=>howPanel(pausePanel));
-  on('#quit',()=>{ clearUI(); endLeg('quit'); });
+  on('#res',  ()=>{ clearUI(); mode=pausedFrom; });
+  on('#shift',()=>{ clearUI(); mode='play'; reshapeScreen(); });
+  on('#mute', ()=>{ MUTED=!MUTED; pausePanel(); });
+  on('#how',  ()=>howPanel(pausePanel));
+  on('#quit', ()=>{ clearUI(); endLeg('quit'); });
+  on('#wipe', ()=>wipePanel(pausePanel));
+}
+
+// Wiping is the only irreversible button in the game, so it asks once and says exactly
+// what it costs before it does it.
+function wipePanel(back){
+  mode='panel';
+  ui(`<div class="panel"><div class="card">
+    <h1>START OVER?</h1><h2 class="bad">THIS CANNOT BE UNDONE</h2>
+    <p class="s">Fills in the whole hole. You lose the <b>${SV.bank}</b> in your purse,
+      depth <b>${SV.deepest}</b>, every tool you bought and all <b>${SV.finds.length}</b>
+      of the things you found down there. A brand new backyard.</p>
+    <div class="row"><button class="b g" id="no">NO, GO BACK</button></div>
+    <div class="row"><button class="b a" id="yes">YES, FILL IT IN</button></div>
+  </div></div>`);
+  on('#no', back);
+  on('#yes',()=>{
+    try{ localStorage.removeItem(KEY); }catch(e){}
+    mem = null; SV = NEW();
+    scr=null; depth=0; haul=0; picks=0; anim=null; pending=null;
+    parts.length=0; floats.length=0; pips.length=0; motes.length=0;
+    SV.seen = 1;                       // they have played; do not re-teach the tutorial
+    save(); tone(140,.3,'sawtooth',.12,60); surface();
+  });
 }
 
 /* ---------------- tile art ---------------- */
@@ -1062,7 +1148,7 @@ function drawHUD(){
 
   const px0 = 40;                                // picks as pips: a count you read at a glance
   for(let i=0;i<Math.max(0,picks);i++){
-    const x = px0 + (i%9)*5, y = 4 + ((i/9)|0)*7;
+    const x = px0 + (i%PIPROW)*5, y = 4 + ((i/PIPROW)|0)*7;
     px(x,y,3,5,'#5ed986'); px(x+1,y+5,1,1,'#3a8a55');
   }
   // The pip you just spent flies off rather than blinking out, so a swing visibly costs.
@@ -1072,9 +1158,9 @@ function drawHUD(){
   }
   ctx.globalAlpha = 1;
   if(picks<=0 && mode!=='panel' && scr) textSh('NO PICKS', px0, 5, '#e0604f');
-  if(depth>0 && depth%3!==0) textSh((3-(depth%3))+' TO LANDING', px0, 19, '#665a80');
+  if(depth>0 && depth%3!==0) textSh((3-(depth%3))+' TO LAND', px0, 19, '#665a80');
 
-  const bw = 44, bx = W-bw-3, cap = Math.max(1,CAP());
+  const bw = 40, bx = W-MENUW-bw-3, cap = Math.max(1,CAP());
   textSh('BAG', bx, 3, '#665a80');
   px(bx, 11, bw, 6, '#251d33');
   const full = haul>=CAP();
@@ -1082,9 +1168,6 @@ function drawHUD(){
   const fillc = full ? (Math.sin(now/160)>0 ? '#e0604f' : '#f0836f') : (popBag>0 ? '#fff3c0' : '#e8b830');
   px(bx, 11, Math.round(bw*Math.min(1, hudBag/cap)), 6, fillc);
   textSh(String(haul), bx+2, 19, popBag>0?'#fff3c0':'#c0b4d8');
-
-  px(W-13, 19, 10, 7, '#392c4c');                // menu
-  px(W-11, 21, 6, 1, '#c0b4d8'); px(W-11, 23, 6, 1, '#c0b4d8');
 }
 
 /* ---------------- input ---------------- */
@@ -1097,7 +1180,7 @@ function tileAt(x,y){
   return [c,r];
 }
 function tap(x,y){
-  if(y<HUD){ if(x>W-16 && y>17 && mode==='play') pausePanel(); return; }
+  if(y<HUD) return;                                // the HUD is a readout; the menu is a DOM button
   if(mode!=='play' || !scr) return;
   const t = tileAt(x,y); if(!t) return;
   const c=t[0], r=t[1], m = scr.g[idx(c,r)];
@@ -1127,6 +1210,11 @@ function tap(x,y){
 }
 cv.addEventListener('pointerdown', e=>{ e.preventDefault(); ac();
   const p = local(e); tap(p[0], p[1]); }, {passive:false});
+// Reachable from play AND from mid-collapse. A collapse that somehow never finishes used
+// to leave the player with no legal input at all; the way out must not depend on the
+// simulation being in a good mood.
+menuEl.addEventListener('click', e=>{ e.preventDefault(); ac();
+  if(mode!=='panel') pausePanel(); }, {passive:false});
 
 /* ---------------- update ---------------- */
 function update(dt){
@@ -1240,6 +1328,7 @@ function loop(ts){
   const s = await load();
   if(s) SV = Object.assign(NEW(), s);
   if(!SV.screens) SV.screens = {};
+  if(!SV.reroll) SV.reroll = {};
   if(!SV.finds) SV.finds = [];
   requestAnimationFrame(loop);
   if(!SV.seen){ SV.seen = 1; save(); howPanel(surface); }
