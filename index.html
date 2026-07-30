@@ -846,6 +846,9 @@ let motes = [];                 // ambient drift, so a screen with nothing happe
 let slide = 0;                  // 1 -> 0: the new screen rising into place under you
 let dig = {x:0, y:0, face:1, sq:1, swing:-1, hop:0};
 let hudBag = 0, popDepth = 0, popBag = 0, pips = [];
+// The two-tap commit is learnable in seconds but is not discoverable on the very first
+// preview: nothing on screen says the game is waiting for confirmation. Say it once.
+let tapAgainShown = false;
 
 function toast(m){ msg = m; msgT = now + 1600; msgAt = now; }
 function fl(x,y,t,c){ floats.push({x:x,y:y,t:t,c:c||'#e8b830',life:1,vy:-1.6,pop:1}); }
@@ -931,6 +934,23 @@ function walkTargets(G, c, r){
   }
   return seen;
 }
+// Tapping empty ground is an unambiguous "go that way". If the exact cell is out of
+// range, walking as far toward it as the rules allow is a far better answer than refusing:
+// a refusal answers a question the player did not ask, and "TOO FAR" taught him nothing
+// about why. Returns the reachable standing spot closest to where he pointed, or null when
+// he genuinely cannot move at all.
+function walkToward(c, r){
+  const reach = walkTargets(scr.g, pc, pr);
+  let best = null, bestD = Infinity;
+  for(let rr=0; rr<ROWS; rr++) for(let cc=0; cc<COLS; cc++){
+    if(!reach[idx(cc,rr)]) continue;
+    const d = Math.abs(cc-c) + Math.abs(rr-r);
+    if(d < bestD){ bestD = d; best = [cc,rr]; }
+  }
+  if(!best || (best[0]===pc && best[1]===pr)) return null;
+  return best;
+}
+
 // Arm's reach. You have to stand next to what you break, which is exactly why a
 // collapse is dangerous.
 function reachCells(){
@@ -977,6 +997,7 @@ function planBreak(c,r){
 
 function commitBreak(){
   const p = pending; pending = null;
+  tapAgainShown = true;                            // he has done it; never explain it again
   // The board already spent the pick during step 2 of the resolve that produced this
   // preview. Committing adopts that board wholesale rather than re-deriving any of it --
   // that identity is the whole reason the preview can be trusted.
@@ -1799,6 +1820,7 @@ function render(){
         else if(fin.pr > P.sim.pr0 && P.sim.pr0 >= 0) warnAt('YOU RIDE IT DOWN', fin.pc, fin.pr, '#5ed986');
       }
     }
+    if(!tapAgainShown && !P.sim.buried) warnAt('TAP AGAIN', P.c, P.r, '#e8b830');
     if(P.sim.buried){
       // The warning is drawn ON the man. A marker around him was occluded by his own
       // sprite and read as clutter; and a banner at the top of the board is nowhere near
@@ -1968,7 +1990,23 @@ function tap(x,y){
       tone(520,.03,'square',.05);
       ring(c,r,'#9fe8bb'); buzz(6);
     }
-    else { pending = null; ring(c,r,'#5e5470'); }   // a tap that did nothing still answers
+    else {
+      // Not standable, or out of range. Go as far that way as he can rather than refusing.
+      pending = null;
+      const step = walkToward(c, r);
+      if(step){
+        const w = resolve(liveBoard(), {t:ACT.WALK, c:step[0], r:step[1]});
+        if(w.ok){
+          if(step[0] !== pc) dig.face = step[0] > pc ? 1 : -1;
+          dig.hop = 1;
+          scr.g = w.board.cell; scr.f = w.board.find;
+          pc = w.board.player.c; pr = w.board.player.r;
+          tone(520,.03,'square',.05); ring(step[0],step[1],'#9fe8bb'); buzz(6);
+          return;
+        }
+      }
+      ring(c,r,'#5e5470');                         // truly nowhere to go: still answer the tap
+    }
     return;
   }
   if(!inReach(c,r)){ pending=null; ring(c,r,'#e0604f'); buzz(12); toast('TOO FAR. WALK CLOSER.'); return; }
