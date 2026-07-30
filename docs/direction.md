@@ -1,16 +1,48 @@
 # THE LITTLE DIGGER — DIRECTION
 
-*Updated 2026-07-29, after the first playable test on a phone.*
+*Updated 2026-07-29, after the 2-D pivot (DEC-08).*
 
 ---
 
-## 1. WHERE WE ARE
+## 0. THE PIVOT
 
-There is a playable prototype at `index.html` (live at <https://junovhs.github.io/gamedesign/>).
-It covers steps 1–4 of the build order in `brief.md`: movement, the hunt,
-maps-as-pictures, and the graded dig response.
+The 3-D line is shelved. Q-07's phone comparator asked which look the designer preferred on
+screen and voxel won, but it never asked who makes the assets. Nobody does: the art capacity
+on this project is 2-D generation and hand-painting, free 3-D models are incoherent as a set,
+and AI 3-D generation is not a pipeline in 2026-07. A look you cannot staff turns every
+content task into a blocked task. **DEC-08** therefore supersedes DEC-06: hand-painted 2-D at
+a fixed camera, and no production path may require authoring or sourcing 3-D geometry.
 
-It was tested on a phone and the verdict was: **pursue this.** Specifically what landed:
+The reference was always 2-D. Chocobo Hot and Cold is top-down painted art and needed nothing
+else, so this is not a compromise — it is the target.
+
+Two open questions move on their own as a result:
+
+- **Q-02 largely dissolves.** Awkward thumb steering was a camera-relative-input problem. At a
+  fixed camera, thumb direction is world direction; there is nothing left to solve.
+- **Q-06 gets the reference's answer.** Painted terrain is authored terrain. In FF9 the field
+  is fixed and hand-drawn and only the *contents* are random — generated at the first peck, not
+  at the start of the game. Arena authored, contents generated.
+
+And the reference hands us the deep loop for free: **the progression reward is itself a
+painting.** A Chocograph is a hand-painted still with a riddle in it, and finding the place it
+depicts is the 500-hour layer. That makes the game's collectible currency the exact artefact
+the designer is best at making, with no numbers anywhere in it (DEC-03), and it banks something
+permanent inside three minutes.
+
+The live build is now the 2-D `DOWNSHAFT` prototype, restored from `old/`. Note that its verb
+is not the hunt — it is "break the vein that drops you furthest." The top-down painted hunt
+arena is the next piece of work, not something that exists yet.
+
+---
+
+## 1. WHERE WE WERE
+
+The 3-D prototype (now `git show iteration/3d-diorama:index.html`) covered steps 1–4 of the
+build order in `brief.md`: movement, the hunt, maps-as-pictures, and the graded dig response.
+
+It was tested on a phone and the verdict was: **pursue this.** Specifically what landed, and
+what the 2-D rebuild must carry across:
 
 - The palette and the light. The world reads bright and worth walking into.
 - The creature is cute enough to carry the game.
@@ -21,10 +53,13 @@ And what did not:
 
 - **Steering under the lifted hunt camera is awkward**, especially with a thumb. This was
   true of the original Chocobo game too — it is not a bug we introduced, it is an unsolved
-  problem in the reference. Q-02.
+  problem in the reference. Q-02. *Answered by DEC-08's fixed camera.*
 - **Digging is too thin to carry hundreds of hours.** Right now it is: walk, press, read the
-  call, repeat. There is no craft in it yet. Q-04.
-- The look is placeholder. Q-01.
+  call, repeat. There is no craft in it yet. Q-04. The reference's own strategy notes say where
+  the craft lives: keeping a mental map of where you have already dug, and building a feel for
+  how wide an area the creature can detect in. Spatial memory plus an internal probability
+  model — free depth, and still missing from anything we have built.
+- The look is placeholder. Q-01. *Answered by DEC-08.*
 
 ---
 
@@ -46,7 +81,10 @@ wraps that atom without ever making it longer.
 
 ---
 
-## 3. A CORRECTION ABOUT THE PROTOTYPE'S RENDERER
+## 3. A CORRECTION ABOUT THE SHELVED PROTOTYPE'S RENDERER
+
+*Kept for the record. Superseded by DEC-08 — the question is no longer how to add fidelity to
+3-D geometry, it is that we do not author 3-D geometry at all.*
 
 The impression from the test was that the prototype draws "2-D planes in a 3-D world,"
 possibly for performance. That is not what it does, and the difference matters for the
@@ -94,24 +132,25 @@ New, learned from the test:
 
 ## 5. THE OPEN QUESTIONS, IN PRIORITY ORDER
 
-| # | Question | Issue |
-|---|---|---|
-| 1 | What render style do we want — voxel, clay, or lit boxes? | Q-01 (urgent) |
-| 2 | How does the player move and dig on a phone? | Q-02 (urgent) |
-| 3 | What are all the v1 mechanics? | Q-03 |
-| 4 | What makes digging deep without becoming grind? | Q-04 |
-| 5 | What is the progression spine, hour 0 to hour 500? | Q-05 |
-| 6 | How much of the world is authored, how much generated? | Q-06 |
+| # | Question | Issue | Status |
+|---|---|---|---|
+| 1 | What render style do we want? | Q-01 | Answered by DEC-08: hand-painted 2-D |
+| 2 | How does the player move and dig on a phone? | Q-02 | Mostly answered — fixed camera removes the steering problem |
+| 3 | What are all the v1 mechanics? | Q-03 | Open |
+| 4 | What makes digging deep without becoming grind? | Q-04 | Open — the reference points at spatial memory and the detection radius |
+| 5 | What is the progression spine, hour 0 to hour 500? | Q-05 | Open — candidate: paintings as the collectible currency |
+| 6 | How much of the world is authored, how much generated? | Q-06 | Leaning: arena authored, contents generated per session |
 
 They live in Ishoo, in the plan `core-questions`. Each is deliberately broad — decompose it
 into real issues when we reach it. The creature's own voice (replacing the placeholder) is
-governed by DEC-04 and gets its issues when Q-01 settles what a creature is made of.
+governed by DEC-04, and DEC-08 now settles what a creature is made of: painted 2-D frames.
 
 ---
 
 ## 6. INDEX
 
-- Decisions: in Ishoo — `ishoo decision list` (DEC-01..07).
+- Decisions: in Ishoo — `ishoo decision list` (DEC-01..08; DEC-06 superseded by DEC-08).
 - Open questions: in Ishoo — `ishoo plan show core-questions` (Q-01..06).
+- Retired prototypes and shelved iterations: [`../old/README.md`](../old/README.md)
 - Original brief: [`brief.md`](brief.md)
 - Concept: [`concept.md`](concept.md)
