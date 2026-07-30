@@ -1,156 +1,884 @@
 # DOWNSHAFT — DESIGN
 
-*The one design document. Updated 2026-07-30, when the project was re-founded on DOWNSHAFT
-(**DEC-09**) after a week of prototypes.*
+_The authoritative design document._
+
+_Updated 2026-07-30 after the project was reframed as a persistent structural puzzle-RPG:
+compact physics boards, one continuous underground world, a permanent home, sparse camps,
+physical inventory, and a production target of Rust compiled to WebAssembly._
 
 ---
 
-## 1. WHAT IT IS
+## 1. THE PITCH
 
-You are an ordinary guy in your backyard with a pickaxe. You dig down.
+You are an ordinary guy in your backyard with a pickaxe.
 
-It keeps going. It gets stranger.
+You dig down.
 
-That is the whole pitch, and the strangeness is the point: the top of the shaft is a suburban
-lawn with a dog and a plastic flamingo, and a long way below it there is a skeleton drinking
-coffee, a neon-lit motel run by a mole, a clown, and a UFO abducting a cow. Depth is the
-delivery mechanism for the joke (**DEC-15**).
+Under the lawn are dinosaur bones, buried rooms, impossible machines, a motel run by a mole,
+a subterranean carnival, and eventually a UFO abducting a cow.
 
-The reference of record for the look and the tone is **[`north-star.png`](north-star.png)**.
-Read it top to bottom: that ladder is the game.
+The world starts mundane and becomes stranger with depth. Nothing becomes grim. Nothing turns
+into horror. The absurdity escalates, but the world treats all of it as normal.
 
-## 2. THE VERB
+The visual and tonal reference of record is
+**[`north-star.png`](north-star.png)**.
 
-One thumb, portrait, a grid you can see all of.
+Read it from top to bottom. That descent is the game.
 
-You walk a little. You look at the ground. You tap a tile and it comes apart.
+---
 
-What makes that a decision rather than a chore is the collapse. Everything in the shaft hangs
-off the two side walls; cut a mass free of both walls and it drops, and if you are standing on
-it, you drop with it. Dirt and cutlery slide on their own. Roots grow back while you work.
-Burst a pipe and the water digs for you. So the question in the player's head is never "which
-tile", it is *what will this do*.
+## 2. WHAT THE GAME IS
 
-That single second is the product (**DEC-16**). It ships with its impact, its particles, its
-shake and its sound in the same issue that adds the mechanic — never in a later polish pass,
-because polish passes get cut. Candy Crush is the bar.
+**DOWNSHAFT is a persistent puzzle-RPG about engineering collapses.**
 
-## 3. THE SHAPE OF A SESSION
+It is not a free-form mining game.
 
-Three minutes to pick up, five hundred hours deep, one build, no modes (**DEC-10**).
+The underground is divided into compact spatial problems. Each screen is closer to an
+individual Candy Crush, Critter Crunch, Grindstone or puzzle-game level than to a continuous
+sandbox.
 
-The atom is **one descent**, about two minutes: drop some depth, bank something permanent,
-close the tab. Nothing may hold the player mid-descent, nothing asks them to come back at a
-particular time, and every descent ends with something kept. The shaft persists between
-visits, which is what makes two minutes bankable — you are always continuing one hole, not
-restarting a run.
+A screen presents a legible arrangement of:
 
-Depth for the long game comes from *knowing the world*: what a band does, what breaks it, what
-falls, how to route back down. Not from grind, and not from a content treadmill.
+- structural rock;
+- loose material;
+- supports and anchors;
+- resources;
+- objects;
+- creatures;
+- machinery;
+- hazards;
+- routes;
+- and one or more things worth preserving, reaching, moving or extracting.
 
-## 4. WHAT THE PLAYER IS TOLD
+The screens are not selected from a level menu and discarded after completion. They are
+connected sections of one persistent underground world.
 
-The ground is the readout (**DEC-11**). The HUD counts only what the player already owns —
-depth, picks, bag, purse. Nothing summarises what is underground: no minimap, no ore radar, no
-stability meter, no arrow pointing at the good stuff. A material announces itself by looking
-like itself, and you find out what it does by breaking one.
+What the player breaks stays broken.
 
-This is also an art constraint: every material has to be legible at 16 px, so tile art carries
-mechanics and not just mood.
+What falls stays where it lands.
 
-## 5. WHAT EXISTS IN THE BUILD TODAY
+Items can be dropped and recovered later. Creatures can move into excavated spaces. Old routes
+remain useful. Unsolved objects remain underground. Equipment acquired much later can create
+new solutions to old screens.
 
-`index.html`, live at <https://junovhs.github.io/grapeghost/>.
+The player is not clearing levels.
 
-- **The shaft.** A 10 × 16 tile screen per depth, generated from a seed in 2 × 2 blocks and
-  then stored, so a screen you carved stays carved.
-- **Materials.** Dirt, stone, slate, basalt, tile, pipe, root, cutlery, meat, beams, and four
-  ores. Each has a tool level, a value, and a behaviour: `loose` slides, `anchor` holds
-  whatever touches it, `burst` floods, `regrow` grows back, `alive` moves.
-- **Collapse.** Support is flood-filled from the walls and anchors; anything cut free falls,
-  and the player falls with it. This is the strategic layer.
-- **Depth bands.** THE BACKYARD → THE CUTLERY → SOMEONES FLOOR → THE UPSIDE ORCHARD →
-  IT BREATHES. Each introduces one new behaviour and one new palette.
-- **Finds.** Visible in the rock, worth money, and each one permanently adds a pick or bag
-  space: a sprinkler head, a garden gnome, a fork, a wedding ring, a rubber duck, a doorknob,
-  an apple core, a tooth, something warm.
-- **Landings and the lift.** Every third screen is a landing; once reached, the lift stops
-  there forever, so the trip back down is short.
-- **The shop.** Iron pick, the drill, lantern, satchel, beams — bought with the purse.
-- **Reset.** Filling the hole in is available and costs the purse.
+The player is excavating a place.
 
-Everything in that list is subject to the open questions below; none of it is sacred except
-the verb.
+---
 
-## 6. HOW THE ART WORKS
+## 3. THE CORE QUESTION
 
-There are no art assets (**DEC-14**). Every tile is pixel data drawn by code at runtime, which
-is why destruction, lighting, damage states and per-depth palettes are cheap — the pixels are
-addressable, so an effect is a transform on data rather than a stack of pre-rendered frames.
-It also keeps the game one file that a phone opens from a URL.
+Everything in the shaft is structurally connected to the two side walls.
 
-The art is still *drawn*, not typed. Pixel art is authored outside the game and converted into
-tile data by a separate importer (**TOOL-01**), which is its own page and never becomes a
-build step. That tool is what makes a tile-by-tile art pass affordable, and it is the bridge
-between the current placeholder palette and `north-star.png`.
+Rock connected to either wall is stable.
 
-Nothing 3-D, ever — not because of taste but because there is no one to model it (the finding
-DEC-08 made and DEC-14 keeps).
+Cut a formation free of both walls and the unsupported mass collapses.
 
-## 7. HOW IT GETS BUILT
+Stand on the mass and you ride it down.
 
-`index.html` is the game, not a sketch of it (**DEC-13**): one file, no dependencies, no build
-step, published to GitHub Pages on push to `main`. The whole design gets built there.
+Stand beneath it and you are buried.
 
-The designer tests on a phone browser during the day, and that is the only testing window that
-exists — so phone-native is not a porting concern, it is the definition of done (**DEC-07**).
+Other materials modify that rule:
 
-Rust compiled to wasm comes *after* the design is proven, as a port with final art, sound and
-music. It is not a rescue plan and never an excuse to defer a fix.
+- dirt slides;
+- ice carries things sideways;
+- roots regrow;
+- webs catch falling objects;
+- pipes release water, steam, gas or pressure;
+- beams anchor structures;
+- balloons make masses rise;
+- machinery pushes, pulls or transforms material;
+- explosives remove broad areas and threaten everything nearby.
 
-## 8. WHAT IS DECIDED
+Before the player commits an action, the game previews its exact immediate result.
 
-Full text: `ishoo decision list`, `ishoo decision show DEC-09`.
+The challenge is not discovering what the simulation means after losing. The challenge is
+choosing the most useful consequence.
 
-| | |
-|---|---|
-| **DEC-07** | Prototypes are phone-native web builds |
-| **DEC-09** | DOWNSHAFT is the project: a guy in his backyard, digging down |
-| **DEC-10** | Three minutes to pick up, five hundred hours deep; the atom is one descent |
-| **DEC-11** | The ground is the readout; the HUD only counts what you already own |
-| **DEC-12** | Borrowed placeholders are written down and never ship |
-| **DEC-13** | The web build is the game; Rust/wasm is a later port of a proven design |
-| **DEC-14** | All art is pixel data drawn by code; the importer is a separate tool |
-| **DEC-15** | The tone is escalating absurdism, ordered by depth |
-| **DEC-16** | The tap is the product: feel ships with the mechanic, not after it |
+The question in the player’s head should always be:
 
-DEC-01 to DEC-06 and DEC-08 are superseded; the reasoning chain is kept in Ishoo.
+> What happens if I cut this?
 
-## 9. WHAT IS OPEN
+That question is the product.
 
-`ishoo plan show downshaft`.
+---
 
-| | | |
-|---|---|---|
-| **Q-03** | What is the complete verb list for the v1 vertical slice? | crafting, bases, ladders, throwables, residents — in, later or cut |
-| **Q-04** | What makes digging deep enough for hundreds of hours without becoming grind? | the one that decides whether this is a game |
-| **Q-05** | What is the progression spine from hour zero to hour five hundred? | |
-| **Q-06** | How much of the shaft is authored and how much is generated? | |
-| **Q-17** | What lives at each depth band, and how does the joke escalate? | the content spine implied by `north-star.png` |
-| **TOOL-01** | Build the pixel-art importer that converts drawn art into tile data | |
+## 4. THE ATOM OF PLAY
 
-Ideas on the table and not yet ruled on: crafting from what you dug up, bases you place and
-furnish at a depth you have reached, the Mole Motel as a rest stop or a shop, side-view rooms
-that play laterally, dinosaur bones and alien junk as collections, zombies and wizards and
-vampires as residents. All of it is welcome and none of it is committed — it goes through
-Q-03 and Q-17.
+The atom is **one compact structural board**, not one complete descent.
 
-## 10. ALSO IN THIS FOLDER
+A board should usually take between one and three minutes to understand and change
+meaningfully. A player opening the game for three minutes should be able to:
 
-[`north-star-catalogue.md`](north-star-catalogue.md) — every object in `north-star.png`, item
-by item, with the role it would play in the game, what already exists in the build, and the
-seven mechanics the picture is asking for. Read it before proposing content.
+- solve a board;
+- create a useful route;
+- extract an object;
+- reach a side room;
+- move closer to a camp;
+- alter a persistent structure;
+- or make another permanent contribution to the world.
 
-[`philosophy.md`](philosophy.md) — the designer's own preferences: what he likes in games and
-why, from Stardew to Grindstone to Plants vs. Zombies. Not about DOWNSHAFT specifically, and
-it outlives any one project. Read it before proposing a system.
+The player does not need to return home every few minutes for the session to count.
+
+Progress can be banked as:
+
+- changed terrain;
+- opened routes;
+- moved objects;
+- collected resources;
+- reached landmarks;
+- discovered rooms;
+- activated machinery;
+- established camps;
+- rescued residents;
+- or knowledge of the world.
+
+The game must support both a three-minute phone session and a long expedition without dividing
+itself into separate modes.
+
+---
+
+## 5. THE BOARD LOOP
+
+A typical board works like this:
+
+1. Enter a compact section of the shaft.
+2. Read its supports, materials, valuables, hazards and exits.
+3. Move into position.
+4. Select a tool or carried object.
+5. Preview the exact consequence of the action.
+6. Commit.
+7. Ride, evade, redirect or exploit the resulting movement.
+8. Collect, use, drop, preserve or transport what remains.
+9. Leave the board permanently changed.
+10. Continue downward, return through an old route, or enter a lateral branch.
+
+Picks are a decision budget, not a real-time fuel meter.
+
+Every committed cut should accomplish something. It should release a mass, expose a route,
+preserve a find, trigger a device, move an object, rescue a creature, or create a position from
+which the next action becomes possible.
+
+Repeatedly removing blocks for no strategic reason is failure.
+
+---
+
+## 6. THE PHYSICS VOCABULARY
+
+Progression should give the player new operations, not merely larger damage numbers.
+
+| Operation | What it changes                                  | Example tools or objects              |
+| --------- | ------------------------------------------------ | ------------------------------------- |
+| Remove    | Deletes selected material                        | Pickaxe, chisel, drill, acid          |
+| Push      | Moves a mass laterally                           | Sledgehammer, piston, blast           |
+| Pull      | Draws an object toward a point                   | Magnet, winch, tractor beam           |
+| Lift      | Moves an object or mass upward                   | Jack, balloon, inflatable bag         |
+| Anchor    | Makes a structure stable                         | Beam, clamp, web, roots               |
+| Tether    | Connects the player or an object to an anchor    | Rope, chain, cable                    |
+| Trigger   | Activates a remote or connected mechanism        | Plate, lever, fuse, gear              |
+| Transform | Changes the physical state of a material         | Furnace, water, electricity, freezing |
+| Preserve  | Protects a fragile object from impact            | Foam, crate, suspension rig           |
+| Reveal    | Improves the information available before acting | Lamp, scanner, map, specialist        |
+
+Many objects can share an underlying operation.
+
+A balloon, anti-gravity crystal and tractor beam can all use the same lift rule while feeling
+different because of their availability, presentation, scale and consequences.
+
+The game should achieve variety by recombining a strong set of physical rules, not by creating
+hundreds of unrelated one-off mechanics.
+
+---
+
+## 7. RESOURCES
+
+Resources are not interchangeable colors with different sale prices.
+
+Every important material needs three identities:
+
+1. **Physical:** how it behaves inside a structural board.
+2. **Economic:** why the player wants to extract it.
+3. **World-facing:** what it builds, unlocks, decorates or changes.
+
+Examples:
+
+| Resource    | Underground identity                                | Long-term use                                |
+| ----------- | --------------------------------------------------- | -------------------------------------------- |
+| Copper      | Conducts power through connected cells              | Wiring, lamps, powered tools                 |
+| Iron        | Heavy and structurally strong                       | Beams, tools, machinery                      |
+| Gold        | Valuable, heavy and tempting to destabilize         | Expensive upgrades and decoration            |
+| Ice         | Causes sliding and preserves frozen objects         | Cooling devices and protective clothing      |
+| Crystal     | Stores, emits or redirects energy                   | Scanners, teleporters and advanced equipment |
+| Roots       | Regrow through available space                      | Medicine, cultivation and organic tools      |
+| Fossils     | Fragile multi-cell objects                          | Collections, research and prestige           |
+| Alien alloy | Resists ordinary tools and may be unnaturally light | Endgame force-manipulation devices           |
+
+A resource should be interesting when encountered, difficult or satisfying to extract, and
+meaningful after it reaches home.
+
+---
+
+## 8. FINDS AND EXTRACTION
+
+Important finds should not all be single collectible tiles.
+
+Large fossils, furniture, machinery, statues, creatures and strange artifacts can occupy
+multiple cells. Extracting them becomes a structural objective:
+
+- expose the object;
+- keep it supported;
+- avoid crushing it;
+- create a route;
+- move or lower it safely;
+- transport it to a camp or the surface.
+
+A dinosaur skull should not be awarded because the player tapped it.
+
+The player should excavate it.
+
+Multi-cell fragile finds are one of the main ways the game turns its existing collapse rules
+into varied objectives.
+
+---
+
+## 9. INVENTORY
+
+The player has a persistently visible inventory hotbar.
+
+The inventory is not represented by an abstract bag-fullness meter hidden behind another
+screen. Carried things should remain visible and actionable during play.
+
+The player can:
+
+- select an item;
+- use it on the board;
+- drop it;
+- rearrange it;
+- swap it;
+- consume it;
+- leave it behind;
+- or carry it to another location.
+
+Common materials may stack. Tools, consumables and unusual finds may occupy individual slots.
+
+Large objects do not disappear into ordinary inventory slots. They must be moved, dragged,
+lowered, tethered, carried by machinery or transported through another explicit system.
+
+When the inventory is full, collecting another item requires a real decision:
+
+- leave it;
+- drop something;
+- consume something;
+- move it to nearby storage;
+- or arrange transportation.
+
+The game should never silently turn an unwanted object into money.
+
+Money remains separate from physical inventory.
+
+---
+
+## 10. EQUIPMENT, CLOTHING AND PERKS
+
+Equipment should change how the player solves boards.
+
+Examples:
+
+| Equipment        | New capability                                    |
+| ---------------- | ------------------------------------------------- |
+| Pickaxe          | Removes a connected cluster                       |
+| Chisel           | Removes one exact cell                            |
+| Drill            | Cuts a narrow line through hard material          |
+| Sledgehammer     | Pushes a mass instead of destroying it            |
+| Support beam     | Permanently anchors a structure                   |
+| Rope             | Tethers the player or an object                   |
+| Jack             | Raises a mass one cell                            |
+| Magnet           | Pulls metal through open space                    |
+| Balloon          | Reverses gravity for one object or mass           |
+| TNT              | Removes a large area and threatens nearby objects |
+| Foam             | Creates temporary support                         |
+| Remote detonator | Sequences multiple explosions                     |
+
+Clothing changes the risks the player can tolerate rather than supplying meaningless armor
+numbers.
+
+Examples:
+
+- a hard hat survives one small falling impact;
+- climbing gloves extend the ability to ride a falling mass;
+- steel-toed boots resist sliding or pushing;
+- a rubber suit protects against powered conductive structures;
+- fireproof clothing permits access to heated regions;
+- a tool belt changes the usable inventory layout;
+- a miner’s lamp reveals hidden cavities or internal material properties.
+
+Perks should primarily affect:
+
+- removal;
+- force;
+- support;
+- information;
+- carrying;
+- preservation;
+- survival;
+- or the economics of extraction.
+
+---
+
+## 11. CREATURES AND CONFLICT
+
+Creatures belong inside the structural puzzle.
+
+They should act after committed moves, react to collapses, or modify terrain. They should not
+start a separate reflex-combat game.
+
+Examples:
+
+| Creature            | Structural role                                               |
+| ------------------- | ------------------------------------------------------------- |
+| Mouse               | Moves through open tunnels and may reveal routes or valuables |
+| Spider              | Builds webs that catch falling objects                        |
+| Worm                | Removes cells and creates new passages                        |
+| Mole                | Digs, pushes material or reshapes a board                     |
+| Cow                 | Large fragile rescue and transportation objective             |
+| Living plant        | Regrows roots and changes support                             |
+| Mechanical creature | Pushes, pulls or activates connected devices                  |
+
+Weapons should also behave as physics tools.
+
+A shotgun applies directional force. A freeze device creates temporary support. A net pins a
+creature or object to a wall. A flare attracts living things. A sonic device loosens one kind
+of material.
+
+The interesting question is:
+
+> What will attacking this cause?
+
+Not:
+
+> How quickly can I empty its health bar?
+
+---
+
+## 12. HOME
+
+The backyard is the center of the game.
+
+It remains the player’s primary home throughout the entire experience.
+
+The house and yard provide:
+
+- long-term storage;
+- equipment preparation;
+- crafting and repair;
+- wardrobe and customization;
+- collections;
+- records;
+- relationships;
+- and visible evidence of progress.
+
+Recovered objects can be displayed physically.
+
+The garden gnome dug out of the shaft can stand on the lawn. Fossils can be reconstructed.
+Impossible plants can grow in pots. Underground signs, machinery, furniture and trophies can
+accumulate around the house.
+
+The surface becomes a visual record of this particular player’s excavation.
+
+It should begin as an ordinary backyard and slowly become a museum of impossible things.
+
+---
+
+## 13. CAMPS
+
+Underground camps are rare, persistent and widely separated.
+
+They are not automatic landings every few screens.
+
+Reaching or establishing a camp should feel like a major expedition milestone. A camp may be
+dozens of boards from the previous safe base and may sit inside a lateral branch rather than
+directly on the central shaft.
+
+A camp can provide some combination of:
+
+- storage;
+- rest;
+- equipment changes;
+- a resident service;
+- a shop;
+- local information;
+- power;
+- and a reliable return point.
+
+Camps extend the range of an expedition.
+
+They do not replace home.
+
+Each camp must have a distinct identity. A camp should be a memorable place with a resident,
+biome function, landmark or story—not a repeated checkpoint template.
+
+The Mole Motel is a natural candidate for a major underground camp.
+
+---
+
+## 14. WORLD STRUCTURE
+
+The world consists of:
+
+- compact structural boards;
+- a persistent central descent;
+- lateral branches;
+- authored interiors;
+- rare camps;
+- resident spaces;
+- machinery networks;
+- large extraction sites;
+- and fixed landmarks.
+
+Lateral branches are essential. They prevent the world from feeling like a simple vertical
+stack and give natural homes to:
+
+- camps;
+- shops;
+- residents;
+- puzzles;
+- machinery;
+- fossils;
+- optional resources;
+- and strange rooms.
+
+Old areas remain relevant because they can contain:
+
+- unresolved finds;
+- alternate routes;
+- resources that previously could not be extracted;
+- devices requiring later equipment;
+- objects left in storage;
+- and consequences of earlier actions.
+
+The player should learn the geography of the hole.
+
+---
+
+## 15. THE DESCENT
+
+The broad tonal and mechanical progression is:
+
+| Region         | Mechanical emphasis                                    | Major discovery                    | Tone                             |
+| -------------- | ------------------------------------------------------ | ---------------------------------- | -------------------------------- |
+| Backyard       | Preparation, collection and customization              | The hole itself                    | Entirely ordinary                |
+| Topsoil        | Loose dirt, simple support and fossils                 | Dinosaur remains beneath the lawn  | Surprising but plausible         |
+| Buried rooms   | Fragile objects and domestic interiors                 | A skeleton drinking coffee         | Someone lived here               |
+| Machinery      | Pipes, pressure, plates, power and heavy material      | A machine with a skull face        | Someone built systems here       |
+| Caverns        | Organic growth and creature objectives                 | An unexplained cow                 | The underground is alive         |
+| Mole territory | Lateral tunnels, residents and services                | The Mole Motel                     | Society exists below             |
+| Carnival       | Reversed forces, event objects and absurd consumables  | Balloons and a clown-mouth doorway | Physics becomes theatrical       |
+| Space          | Tractor beams, alien material and impossible geography | Alien living room, UFO and rocket  | Down no longer means underground |
+
+The progression is not a binding list of eight levels. It is the direction of escalation.
+
+The further down the player travels:
+
+- ordinary rock becomes stranger;
+- objects become less explainable;
+- built spaces become more elaborate;
+- resources emit more light;
+- the world becomes more inhabited;
+- and physical rules gain more unusual inversions.
+
+Deep ore should increasingly read as light against dark material rather than merely as a
+brightly colored patch.
+
+---
+
+## 16. TONE
+
+The humor is escalating absurdism played completely straight.
+
+The mole really operates a motel.
+
+The skeleton really has a coffee table.
+
+The clown’s mouth really is a doorway.
+
+The alien really watches surface television in an armchair.
+
+Nobody stops to deliver a lore explanation for why these things are beneath the backyard.
+
+The player remains visually ordinary while the world becomes impossible.
+
+DOWNSHAFT is colorful, warm, strange and funny.
+
+It is never grimdark and never horror.
+
+---
+
+## 17. WHAT THE PLAYER IS TOLD
+
+The HUD shows only information the player owns or can act upon:
+
+- depth;
+- remaining picks or actions;
+- distance to the next known camp;
+- visible inventory slots;
+- selected item;
+- money;
+- and access to the menu.
+
+Distance to a camp should be expressed as physical distance, such as:
+
+`NEXT CAMP: 30 m`
+
+It should not say how many abstract screens remain.
+
+The menu control should be deliberately designed. It should not remain a generic hamburger
+symbol unless it is literally represented as a hamburger.
+
+The game does not provide:
+
+- a minimap that solves navigation;
+- an ore radar;
+- a generic stability meter;
+- arrows toward valuable objects;
+- or unexplained strategic summaries.
+
+The board itself is the primary readout.
+
+Materials announce their behavior through:
+
+- shape;
+- color;
+- texture;
+- animation;
+- connected structure;
+- sound;
+- and response to interaction.
+
+Every relevant object must remain legible on a portrait phone screen.
+
+---
+
+## 18. THE PREVIEW
+
+The preview is a promise.
+
+Before a consequential action is committed, the game should show as precisely as possible:
+
+- which cells will be removed;
+- which masses will become unsupported;
+- which direction they will move;
+- whether the player will ride or be struck;
+- what object will be pushed, pulled or lifted;
+- and what limited item will be consumed.
+
+Difficulty comes from evaluating consequences, not from fighting an opaque simulation.
+
+The preview does not need to reveal every secondary reaction several turns into the future,
+but it must accurately represent the immediate committed result.
+
+Breaking that promise damages the entire game.
+
+---
+
+## 19. FEEL
+
+The tap is the product.
+
+A mechanic is not finished when the state transition works.
+
+It ships with:
+
+- anticipation;
+- impact;
+- displacement;
+- particles;
+- screen shake;
+- sound;
+- readable timing;
+- and a satisfying settled state.
+
+There is no hypothetical later polish pass.
+
+A collapse must feel heavy. A crystal must feel sharp. Dirt must feel loose. A balloon must
+feel buoyant. A fossil breaking must feel awful.
+
+Feedback is part of the rule because feedback is how the player understands the rule.
+
+---
+
+## 20. ART
+
+The game uses authored pixel art represented as data.
+
+The absence of ordinary runtime image assets is not an excuse for placeholder art. Tiles,
+objects and characters are still deliberately drawn by an artist or designer, then converted
+into a code-readable representation.
+
+Keeping the art data-driven supports:
+
+- palette changes;
+- material-specific particles;
+- destructible objects;
+- procedural damage;
+- dynamic exposed faces;
+- lighting;
+- animation;
+- equipment variants;
+- and interaction between visuals and simulation.
+
+Pixel art should be authored in a proper editor and exported through a separate tool.
+
+The importer or exporter is not part of the game’s runtime build process. It converts authored
+art into the project’s indexed sprite or tile representation.
+
+Nothing is 3-D.
+
+The entire visual language is based on readable 2-D pixel art.
+
+---
+
+## 21. TECHNOLOGY
+
+The current prototype is a single `index.html` file written in JavaScript.
+
+That prototype exists to discover the game quickly and keep phone testing immediate.
+
+The intended production implementation is Rust compiled to WebAssembly.
+
+Rust is not being chosen because the current simulation requires more performance. It is being
+chosen because the finished game will contain a large persistent state space, interacting
+materials, inventory, equipment, save migrations, procedural content and many structural
+rules. Strong types, explicit state transitions and compiler-enforced invariants are valuable
+for that system.
+
+The production architecture should keep:
+
+- world state;
+- structural simulation;
+- materials;
+- items;
+- inventory;
+- procedural generation;
+- save validation;
+- and deterministic rules
+
+inside Rust.
+
+Browser integration remains responsible for:
+
+- the canvas;
+- input;
+- audio;
+- storage;
+- page lifecycle;
+- and platform-specific behavior.
+
+The JavaScript prototype should not be allowed to become a constraint on the production
+architecture.
+
+The production port begins after the central design is proven. It is not a reason to defer
+fixing prototype problems, and it should not be a blind line-for-line translation.
+
+---
+
+## 22. PHONE-NATIVE
+
+Phone-native or it does not count.
+
+The designer tests in a phone browser during the day. That is the actual development and
+testing environment, not a secondary port target.
+
+The game is designed around:
+
+- portrait orientation;
+- one-thumb interaction;
+- large readable targets;
+- short interruption-safe play;
+- clear visual previews;
+- and immediate loading from a URL.
+
+Desktop support is welcome, but the game must never depend on a mouse, keyboard shortcuts,
+large monitor, hover state or dense text interface.
+
+---
+
+## 23. CURRENT PROTOTYPE
+
+The current live prototype is:
+
+<https://junovhs.github.io/grapeghost/>
+
+It currently contains:
+
+- a 10 × 16 tile shaft;
+- seeded persistent screens;
+- structural support calculated from walls and anchors;
+- collapsing unsupported masses;
+- player riding and burial;
+- loose materials;
+- pipes;
+- roots;
+- living materials;
+- several depth bands;
+- finds;
+- a lift;
+- an early shop;
+- and a reset system.
+
+The current build also contains assumptions that are no longer the intended final design:
+
+- frequent landings;
+- a bag-capacity readout;
+- the complete descent as the session atom;
+- and JavaScript as the final implementation.
+
+Those systems are prototype evidence, not sacred architecture.
+
+Only the central verb is sacred.
+
+---
+
+## 24. DESIGN LAWS
+
+### The collapse system carries the game
+
+The structural puzzle must remain deep enough that content enriches it rather than conceals
+its weakness.
+
+### Every addition returns to the board or the world
+
+A resource, item, resident, room or progression system must do at least one of two things:
+
+1. change how the player reads, manipulates, survives, preserves or profits from a structural
+   board; or
+2. make the persistent world worth caring about.
+
+### New tools create new verbs
+
+Progression should expand possibility rather than increase a damage statistic.
+
+### The world remembers
+
+Terrain, objects, rooms, camps and important consequences persist.
+
+### Home remains home
+
+Underground camps support expeditions. They do not replace the backyard.
+
+### Interiors are built; shafts are dug
+
+Authored rooms use constructed walls, furniture, lighting and clean boundaries. Excavation
+spaces remain rough, geological and structurally legible.
+
+### Deep resources emit light
+
+Near the surface, ore is color inside earth. At great depth, the world darkens and valuable
+material increasingly glows.
+
+### The ordinary player enters an extraordinary world
+
+The player remains a recognizable person in practical clothes. The absurdity belongs to the
+world.
+
+### No separate generic combat game
+
+Conflict must interact with force, structure, terrain, movement or preservation.
+
+### Decoration is allowed to be decoration
+
+Not every object requires a mechanic. Atmosphere and visual storytelling are valuable, but
+they should not be confused with systemic depth.
+
+---
+
+## 25. PRODUCTION PRIORITIES
+
+In order:
+
+1. Make structural collapse, support and preview consistently satisfying.
+2. Establish the persistent board and world model.
+3. Build the visible, usable physical inventory.
+4. Add multi-cell fragile objects and extraction.
+5. Add push, anchor, lift, tether and directional force.
+6. Add sparse camps and long expedition structure.
+7. Add surface trophies and home customization.
+8. Add lateral branches and authored resident rooms.
+9. Add creatures governed by board turns and physics.
+10. Add resources with real physical and long-term identities.
+11. Add equipment, clothing, crafting and progression around those rules.
+12. Expand depth bands, residents, visual variety and decoration.
+
+Additional ore colors are not a substitute for additional interaction.
+
+Additional content is not a substitute for a deeper verb.
+
+---
+
+## 26. DECISION ALIGNMENT
+
+The project was founded on DOWNSHAFT under **DEC-09**, but several recorded decisions now need
+to be amended or superseded in Ishoo.
+
+| Decision   | Current direction                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| **DEC-07** | Still valid: development and testing are phone-native                                       |
+| **DEC-09** | Still valid: DOWNSHAFT is the project                                                       |
+| **DEC-10** | Revise: the atom is one compact board or meaningful persistent action, not one full descent |
+| **DEC-11** | Revise: the HUD includes a persistent actionable inventory and distance to sparse camps     |
+| **DEC-12** | Still valid: borrowed placeholders are recorded and never ship                              |
+| **DEC-13** | Supersede: JavaScript is the prototype; Rust/Wasm is the intended production implementation |
+| **DEC-14** | Clarify: art remains authored pixel data, independent of implementation language            |
+| **DEC-15** | Still valid: tone escalates into absurdity with depth                                       |
+| **DEC-16** | Still valid: feel ships with the mechanic                                                   |
+
+The Ishoo decisions should be updated so the tracker and this document do not disagree.
+
+---
+
+## 27. OPEN QUESTIONS
+
+The largest unresolved questions are:
+
+| Question                                                               | Why it matters                                        |
+| ---------------------------------------------------------------------- | ----------------------------------------------------- |
+| What is the complete v1 physics vocabulary?                            | Determines the real puzzle depth                      |
+| What makes structural play remain interesting for hundreds of hours?   | Decides whether the game exists beyond its premise    |
+| What is the progression spine from the backyard to the deepest region? | Connects tools, resources, camps and world escalation |
+| How are boards authored, generated and recombined?                     | Determines replayability and content cost             |
+| How far apart are camps?                                               | Determines expedition pressure and world scale        |
+| How does the player transport large finds?                             | Central to fossils, creatures and machinery           |
+| What persists when a board is left unresolved?                         | Defines the world-state model                         |
+| How much information does the preview guarantee?                       | Defines fairness and technical scope                  |
+| What belongs in the first complete vertical slice?                     | Prevents the RPG breadth from burying the core        |
+| What is the production Rust/Wasm architecture?                         | Determines the final implementation and save model    |
+| What lives in each depth region?                                       | Defines the content and tonal spine                   |
+| What is the pixel-art export pipeline?                                 | Makes final art production sustainable                |
+
+These should be represented in Ishoo rather than accumulating contradictory answers in
+multiple markdown files.
+
+---
+
+## 28. RELATED DOCUMENTS
+
+[`game-systems-plan.md`](game-systems-plan.md)
+
+The current systems inventory, world structure, content classes and production priorities.
+
+[`north-star-catalogue.md`](north-star-catalogue.md)
+
+A literal catalogue of every object shown in `north-star.png`, including what exists in the
+prototype and what the image suggests.
+
+This document preserves the source image’s observations. It is not the authoritative systems
+specification.
+
+[`philosophy.md`](philosophy.md)
+
+The designer’s project-independent preferences: what he values in games and why. It should be
+consulted before proposing systems, but it is not specific to DOWNSHAFT.
+
+[`north-star.png`](north-star.png)
+
+The visual and tonal reference of record.
