@@ -1038,19 +1038,59 @@ function finishSim(s){
   // scaled to the drop.
   const drop = s.pr0 >= 0 ? pr - s.pr0 : 0;
   if(drop > 0 && !s.buried && !s.out){
-    dig.sq = Math.max(.62, .86 - drop*.06);
-    puff(pc*TILE, HUD+pr*TILE, 5+Math.min(8, drop*2));
+    // He rode it and he is fine. Deep squash, dust kicked out from under the boots, a ring
+    // to punctuate the arrival -- and he stays upright and yellow, which is the whole
+    // difference from the burial beat when the sound is off.
+    dig.sq = Math.max(.55, .84 - drop*.06);
+    puff(pc*TILE, HUD+pr*TILE, 6+Math.min(10, drop*2));
+    ring(pc, pr, '#9fe8bb');
     shake = Math.max(shake, Math.min(6, 1.6+drop*.9));
-    hitstop = Math.max(hitstop, .04);
+    hitstop = Math.max(hitstop, .05);
     tone(110-Math.min(50,drop*6), .16, 'sine', .13, 55);
+    buzz(drop>4 ? [10,20,14] : 10);
   }
-  if(s.buried){ endLeg('buried'); return; }
+  if(s.buried){ startDoom(); return; }
   if(s.out){ fellThrough(); return; }
   mode = 'play';
   if(s.frames.length) noise(.12,.14,700);
   // Out of picks, or every remaining swing would bury you: either way the screen is
   // finished with you. You keep the haul -- only a burial costs it.
   if(picks<=0 || !safeSwingExists()) endLeg('stuck');
+}
+
+/* THE BURIAL MOMENT (FIX-03)
+
+   Burial used to cut straight from the collapse to a panel. The designer played it and
+   could not tell what had gone wrong -- and did not read the panel, because people do not
+   read, even signs directly in front of them. The consequence has to HAPPEN, on screen,
+   before anything explains it. Mario's death animation is not padding; it is the
+   explanation.
+
+   So: the rock lands on him, his hat pops off and arcs away, dust goes up, the screen
+   kicks, everything holds still for a beat, and only then does the panel appear. The whole
+   sequence is DOOM_TIME long -- long enough to read, short enough not to resent on the
+   fourth retry of a board. */
+const DOOM_TIME = 1.15;
+let doomT = -1;
+
+function startDoom(){
+  mode = 'doom'; doomT = 0;
+  dig.sq = .35;                                  // flattened under the mass
+  dig.swing = -1; dig.hop = 0;
+  hatPop(pc*TILE, HUD + pr*TILE);
+  puff(pc*TILE, HUD + pr*TILE, 14);
+  debris(pc*TILE, HUD + pr*TILE, MAT[scr.g[idx(pc,pr)]] ? MAT[scr.g[idx(pc,pr)]].pal : ['#8d80a4'], 10);
+  shake = 7; hitstop = .12;
+  buzz([40,50,40,50,140]);
+  noise(.5,.3,300); tone(90,.5,'sawtooth',.13,40);
+}
+
+// The hat is the one part of him that gets out. It reads instantly and from any distance,
+// which is the whole job: you know what happened without a word of text.
+function hatPop(x,y){
+  const d = Math.random()<.5 ? -1 : 1;
+  parts.push({x:x+6, y:y+2, vx:d*1.5, vy:-3.1, g:.16, s:3, c:'#e8c23a', life:1.5, fd:.7});
+  parts.push({x:x+9, y:y+3, vx:d*1.7, vy:-2.8, g:.16, s:2, c:'#c2582f', life:1.4, fd:.7});
 }
 
 /* applyBiomeQuirk is deleted.
@@ -1771,6 +1811,9 @@ function render(){
   }
 
   if(mode!=='panel' && scr){
+    // During the burial beat he is drawn in the doomed palette, flattened, under the rock
+    // that landed on him -- so the frame itself says what happened.
+    if(mode==='doom') digDoomed = true;
     const dx = dig.x*TILE+1, dy = HUD + dig.y*TILE+1;
     const gx = dx+8, gy = dy+8;
     // Lamp glow rides the character and pulses with the flicker in lightPass, so the
@@ -1971,6 +2014,13 @@ function update(dt){
   if(dig.hop>0) dig.hop = Math.max(0, dig.hop - dt*6);
   if(dig.swing>=0){ dig.swing += dt/.22; if(dig.swing>1) dig.swing = -1; }
 
+  // The burial beat. Everything else still animates -- dust settles, the hat arcs away,
+  // the shake decays -- and only when it has all played out does the panel arrive.
+  if(mode==='doom'){
+    doomT += dt;
+    if(doomT >= DOOM_TIME){ doomT = -1; endLeg('buried'); }
+  }
+
   // Impact freeze. A collapse hits harder when the first frame of it holds still.
   if(hitstop>0){ hitstop -= dt; if(hitstop>0) return; }
 
@@ -1992,6 +2042,8 @@ function update(dt){
     dig.y = p.pr + (av.cur.pr - p.pr)*av.t;
     if(av.cur.pr !== p.pr) dig.sq = 1.15;               // stretched out in the air
     else dig.sq += (1-dig.sq)*Math.min(1, dt*14);
+  } else if(mode==='doom'){
+    dig.x = pc; dig.y = pr; dig.sq = .35;               // stays flattened for the beat
   } else {
     const k = Math.min(1, dt*16);
     if(Math.abs(pc-dig.x)>.02 || Math.abs(pr-dig.y)>.02){
