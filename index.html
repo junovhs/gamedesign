@@ -359,6 +359,49 @@ function computeSupport(G){
   return sup;
 }
 
+/* ===== THE PLAYER AND GRAVITY (LAB-04) — the authoritative rules =====
+
+This is the mechanic that turns a collapse from a spectacle into a decision. Everything
+below is decided inside the settle loop, never after it, so the preview that LAB-03 built
+on top of resolve() states all of it before the tap costs anything.
+
+  RIDE     You are standing ON a mass (the cell under you moves) and there is space below.
+           You go down with it and you are fine. Riding is the cheapest way down and it is
+           the reward for reading the board correctly.
+
+  BURY     A falling cell arrives in the cell you occupy. That ends the attempt.
+           Burial is fully avoidable: the preview says THIS BURIES YOU before you commit,
+           every time, with no exception. Because it is avoidable, it is allowed to be
+           final -- and it has to be, because it is the only real stake a board has. A
+           cheap, recoverable burial would make the preview a formality instead of the
+           thing you play the game with. Restart is one thumb and instant (LAB-02), so the
+           cost of being wrong is a few seconds, not a run.
+
+  EDGE     Riding and burial are one column apart, and the column decides. A mass falls
+           straight down: it never spreads sideways as it goes. So for any column of a
+           falling mass, standing in that column under it buries you and standing in that
+           column on top of it rides you down, and the columns either side of the mass are
+           untouched. Deterministic, and identical every time it is asked.
+
+  LANDING  Costs nothing, at any height. Falling further is not more dangerous. This is a
+           ruling, not an oversight: the ride is the correct move, and taxing the correct
+           move by distance would push the player toward short cautious drops for reasons
+           that have nothing to do with reading the structure. Fall damage would also be a
+           second resource competing with picks, which DEC-19 parks.
+
+  SIDEWAYS Does not arise. Nothing in M0 moves a mass laterally -- Q-03 ruled push, pull,
+           the sledgehammer and the magnet all LATER -- so there is no carried-or-crushed
+           case to rule. When a lateral force is added, it inherits BURY: a cell arriving
+           where you stand is a burial regardless of the direction it came from.
+
+  LOOSE vs RIGID  The difference is in what makes them fall, not in what happens to you
+           when they do. Loose material (dirt) is held only by the cell directly beneath
+           it and has no lateral support at all, so it falls in situations where rock
+           holds; rock hangs off the side walls and off anchors through orthogonal
+           contact. Once either is falling, ride and bury are the same rule for both. They
+           are told apart on impact instead: rock throws few, tight, fast chunks and kicks
+           the screen; dirt throws many, wide, slow ones and barely kicks at all. */
+
 // One pass = one row of falling, and each pass is an animation frame. The cascade is
 // watchable and, more to the point, predictable enough to plan around.
 function settle(G, F, pc0, pr0){
@@ -681,6 +724,53 @@ const BOARDS = [
     '#........#',
     '#........#',
     '##########',
+    '##########'].join('\n')},
+
+  // Board 2. You are standing ON the ledge, and the ledge hangs from a copper strut bolted
+  // to the ceiling. Cut the strut -- it is copper, so the swing takes the strut and stops
+  // there instead of eating the ceiling -- and the floor under your feet leaves. You go
+  // with it, seven rows, and you are fine. The drop is deliberately long: landing costs
+  // nothing at any height, and the board makes that point by letting you fall a long way
+  // and walk away.
+  {name:'RIDE IT DOWN', teaches:'Stand on the mass and you ride it.', picks:3, art:[
+    '##########',
+    '#.c......#',
+    '#.c......#',
+    '#.c@.....#',
+    '#.======.#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#========#',
+    '#........#',
+    '##########',
+    '##########'].join('\n')},
+
+  // Board 3. The same collapse, seen from underneath. Cut the shelf and the copper above
+  // it comes down into the square you are standing in. One column either way and it misses
+  // you completely -- so this board is not about whether to cut, it is about where to
+  // stand first. The preview says THIS BURIES YOU before you commit, every time, which is
+  // exactly why burial is allowed to be final.
+  {name:'OR UNDER IT', teaches:'Stand under it and it lands on you.', picks:3, art:[
+    '##########',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#..ccc...#',
+    '#=======.#',
+    '#...@....#',
+    '#========#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '##########',
     '##########'].join('\n')}
 ];
 
@@ -768,6 +858,42 @@ function spark(x,y,c){ for(let i=0;i<5;i++) parts.push({
   x:x+4+Math.random()*8, y:y+4+Math.random()*8,
   vx:(Math.random()-.5)*3, vy:(Math.random()-.5)*3, g:.01,
   s:1, c:i&1?'#fffbe8':c, life:.22+Math.random()*.22, fd:3.4}); }
+/* LAB-04: rock and dirt have to be tellable apart on impact with the sound off, so they
+   differ in the shape of the hit, not the colour of it.
+
+     rock   few, tight, fast, heavy  -- 3 chunks, narrow spread, hard kick
+     dirt   many, wide, slow, soft   -- 9 grains, wide spread, almost no kick
+
+   These numbers are the difference; landImpact is the only place that decides them, so
+   the two materials cannot drift toward looking alike. */
+const IMPACT = {
+  // few, tight, heavy: chunks that arc up off the impact and drop back
+  rock: {n:3, vx:[0.30, 1.10], vy:[0.35, 0.95], g:.17,  size:2, life:[.45,.35],
+         shake:2.5, snd:{d:.05, v:.09, lp:500}},
+  // many, wide, light: grains that skitter outward and hang low
+  dirt: {n:9, vx:[1.10, 2.10], vy:[0.00, 0.18], g:.008, size:1, life:[.70,.45],
+         shake:0.7, snd:{d:.09, v:.05, lp:220}}
+};
+function landImpact(x, y, mat){
+  const loose = !!(MAT[mat] && MAT[mat].loose);
+  const k = loose ? IMPACT.dirt : IMPACT.rock;
+  const pal = (MAT[mat] && MAT[mat].pal) || ['#8d80a4','#6d6284','#8d80a4'];
+  for(let i=0;i<k.n;i++){
+    const d = Math.random()<.5 ? -1 : 1;
+    parts.push({
+      x:x+Math.random()*TILE, y:y+TILE-2-Math.random()*3,
+      vx: d*(k.vx[0] + Math.random()*k.vx[1]),
+      vy: -(k.vy[0] + Math.random()*k.vy[1]),
+      g: k.g,
+      s: k.size===1 ? 1 : 1+((Math.random()*2)|0),
+      c: pal[(Math.random()*3)|0],
+      life: k.life[0] + Math.random()*k.life[1],
+      fd: loose ? 1.9 : 1.2
+    });
+  }
+  return k;
+}
+
 // A mass landing shoves the dust sideways, which is what sells the weight of it.
 function puff(x,y,n){ for(let i=0;i<(n||8);i++){ const d=Math.random()<.5?-1:1; parts.push({
   x:x+Math.random()*TILE, y:y+TILE-2-Math.random()*3,
@@ -1844,16 +1970,20 @@ function update(dt){
         const f = anim.frames[anim.i];
         if(prev && f.pr !== prev.pr) shake = Math.max(shake, 2);
         if(prev){
-          let landed = 0;
+          let landed = 0, lastImpact = null;
           for(let c=0;c<COLS;c++) for(let r=0;r<ROWS;r++){
             if(prev.g[idx(c,r)] && !f.g[idx(c,r)]) dust(c*TILE, HUD+r*TILE, 2);
             // A tile that was falling and has now stopped just hit something.
             if(r>0 && r<ROWS-1 && f.g[idx(c,r)] && !prev.g[idx(c,r)]
                && prev.g[idx(c,r-1)]===f.g[idx(c,r)] && f.g[idx(c,r+1)] && landed<5){
-              puff(c*TILE, HUD+r*TILE, 3); landed++;
+              // The material that just stopped decides how the hit reads (LAB-04).
+              lastImpact = landImpact(c*TILE, HUD+r*TILE, f.g[idx(c,r)]); landed++;
             }
           }
-          if(landed){ shake = Math.max(shake, 2.5); noise(.05,.09,500); }
+          if(landed && lastImpact){
+            shake = Math.max(shake, lastImpact.shake);
+            noise(lastImpact.snd.d, lastImpact.snd.v, lastImpact.snd.lp);
+          }
         }
       } else {
         finishSim(anim.sim);
