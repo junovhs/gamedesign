@@ -167,8 +167,9 @@
       #call {
         position: fixed;
         z-index: 4;
-        left: 50%;
-        top: 24%;
+        left: 27%;
+        top: 34%;
+        max-width: 42vw;
         min-width: 90px;
         padding: 13px 17px;
         border-radius: 50%;
@@ -296,20 +297,236 @@
           bottom: calc(max(9px, env(safe-area-inset-bottom)) + 90px);
         }
       }
+      /* ---- the hunt clock: time, never proximity (DEC-03) ---- */
+      #hunt {
+        position: fixed;
+        z-index: 3;
+        left: 50%;
+        top: max(56px, calc(env(safe-area-inset-top) + 52px));
+        transform: translateX(-50%) translateY(-14px);
+        width: min(320px, 68vw);
+        padding: 8px 11px 9px;
+        border: 1px solid var(--edge);
+        border-radius: 13px;
+        background: rgba(18, 27, 28, 0.58);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        pointer-events: none;
+        opacity: 0;
+        transition: 0.34s ease;
+      }
+      body[data-hunt="true"] #hunt {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      #huntTop {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 10px;
+        font-size: 8px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      #huntClock {
+        font:
+          700 15px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.02em;
+        color: var(--ink);
+      }
+      #huntClock.urgent {
+        color: #ffb27a;
+        animation: tick 0.7s infinite;
+      }
+      @keyframes tick {
+        50% {
+          opacity: 0.45;
+        }
+      }
+      #huntBar {
+        margin-top: 7px;
+        height: 4px;
+        border-radius: 99px;
+        background: rgba(255, 255, 255, 0.16);
+        overflow: hidden;
+      }
+      #huntFill {
+        height: 100%;
+        width: 100%;
+        border-radius: 99px;
+        background: var(--accent);
+        transform-origin: left;
+      }
+      #huntPips {
+        display: flex;
+        gap: 4px;
+        margin-top: 7px;
+      }
+      #huntPips i {
+        flex: 1;
+        height: 4px;
+        border-radius: 99px;
+        background: rgba(255, 255, 255, 0.15);
+      }
+      #huntPips i.got {
+        background: #ffe6a4;
+        box-shadow: 0 0 9px rgba(255, 224, 150, 0.7);
+      }
+      #huntPips i.big {
+        background: #ffd267;
+      }
+
+      /* ---- the report card ---- */
+      #report {
+        position: fixed;
+        inset: 0;
+        z-index: 9;
+        display: none;
+        place-items: center;
+        padding: 18px;
+        background: rgba(24, 44, 42, 0.36);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+      }
+      #report.show {
+        display: grid;
+      }
+      #reportCard {
+        width: min(360px, 90vw);
+        max-height: 92vh;
+        overflow: auto;
+        padding: 19px 20px 17px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 22px;
+        background: rgba(27, 48, 44, 0.86);
+        box-shadow: 0 24px 70px rgba(12, 30, 27, 0.4);
+        animation: cardIn 0.36s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+      }
+      @keyframes cardIn {
+        from {
+          opacity: 0;
+          transform: translateY(16px) scale(0.94);
+        }
+      }
+      #reportCard .rc-eyebrow {
+        display: block;
+        color: var(--muted);
+        font-size: 8px;
+        letter-spacing: 0.19em;
+        text-transform: uppercase;
+      }
+      #rcHead {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        margin-top: 6px;
+      }
+      #rcSite {
+        flex: 1;
+        font:
+          700 clamp(21px, 5.6vw, 29px) / 0.95 Georgia,
+          serif;
+        letter-spacing: -0.03em;
+      }
+      #rcGrade {
+        flex: none;
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        color: var(--accent);
+        font:
+          700 25px/1 Georgia,
+          serif;
+        box-shadow: 0 0 22px rgba(243, 197, 91, 0.24) inset;
+      }
+      #rcRows {
+        margin: 15px 0 4px;
+        padding: 0;
+        list-style: none;
+      }
+      #rcRows li {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 7px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.11);
+        font-size: 10px;
+        letter-spacing: 0.05em;
+      }
+      #rcRows li span {
+        color: var(--muted);
+        text-transform: uppercase;
+        font-size: 8px;
+        letter-spacing: 0.14em;
+        padding-top: 1px;
+      }
+      #rcRows li b {
+        text-align: right;
+        font-weight: 700;
+      }
+      #rcRows li.tally {
+        border-top: 1px solid rgba(255, 255, 255, 0.28);
+        margin-top: 5px;
+      }
+      #rcFinds {
+        margin: 11px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      #rcFinds li {
+        padding: 3px 0;
+        color: #ffeec2;
+        font: italic 11px/1.5 Georgia, serif;
+        letter-spacing: 0.02em;
+      }
+      #rcFinds li.big {
+        color: var(--accent);
+        font-weight: 700;
+      }
+      #rcFinds li::before {
+        content: "· ";
+        opacity: 0.55;
+      }
+      #rcNote {
+        display: block;
+        margin: 13px 0 15px;
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1.65;
+        letter-spacing: 0.05em;
+      }
+      #rcGo {
+        width: 100%;
+        min-height: 50px;
+        border: 0;
+        border-radius: 14px;
+        color: #263f39;
+        background: #efd080;
+        font:
+          700 11px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
     </style>
   </head>
   <body>
-    <div id="loading">Growing a tiny world…</div>
+    <div id="loading">Growing a meadow…</div>
     <div id="error">This study needs hardware WebGL.<br />Open it in Safari or Chrome.</div>
     <div id="vignette"></div>
     <header>
       <div class="eyebrow"><i class="dot"></i><span>Mossbell meadow</span><span id="fps"></span></div>
       <div id="readout">
         <b id="styleName">The Little Digger</b>
-        <span id="styleNote">one hundred seconds · every dig is a clue</span>
+        <span id="styleNote">wander · the bees know where to dig</span>
       </div>
     </header>
-    <div id="hint">left thumb moves · right thumb digs</div>
+    <div id="hint">left thumb walks · drag to look · right thumb digs</div>
     <img
       id="groundTexture"
       hidden
@@ -324,8 +541,26 @@
     <div id="start">
       <div id="startCard">
         <b>The Little<br />Digger</b>
-        <span>WANDER WITH YOUR LEFT THUMB<br />DIG WITH YOUR RIGHT</span>
+        <span>LEFT THUMB WALKS · DRAG TO LOOK AROUND<br />WALK INTO A SWARM OF BEES<br />THEN DIG WITH YOUR RIGHT THUMB</span>
         <button id="play">Enter the meadow</button>
+      </div>
+    </div>
+    <div id="hunt" aria-live="polite">
+      <div id="huntTop"><span id="huntName">the swarm</span><b id="huntClock">1:40</b></div>
+      <div id="huntBar"><i id="huntFill"></i></div>
+      <div id="huntPips"></div>
+    </div>
+    <div id="report" role="dialog" aria-modal="true">
+      <div id="reportCard">
+        <span class="rc-eyebrow">the swarm has settled</span>
+        <div id="rcHead">
+          <b id="rcSite">Mossbell Hollow</b>
+          <div id="rcGrade">B</div>
+        </div>
+        <ul id="rcRows"></ul>
+        <ul id="rcFinds"></ul>
+        <span id="rcNote"></span>
+        <button id="rcGo">Back to the meadow</button>
       </div>
     </div>
 
@@ -20027,877 +20262,1080 @@ void main() {
             return new i(t.width, t.height, t.depth, t.segments, t.radius);
           }
         };
-        var Ys = document.createElement("canvas");
-        Ys.id = "scene";
-        Ys.setAttribute("aria-label", "Orbitable painted Storybook world sample");
-        document.body.prepend(Ys);
-        var en;
+        /* ==========================================================
+           THE LITTLE DIGGER — Mossbell Meadow
+
+           An open painted meadow you wander on four legs. Swarms of
+           bees mark a place worth digging; walk into one and the
+           camera lifts, a clock starts, and the dig is the only thing
+           that tells you how close you are (DEC-03). When the clock
+           runs out you get a report card.
+           ========================================================== */
+
+        // ---------------------------------------------------------- renderer
+        var cvs = document.createElement("canvas");
+        cvs.id = "scene";
+        cvs.setAttribute("aria-label", "Mossbell Meadow");
+        document.body.prepend(cvs);
+        var gl;
         try {
-          en = new Bo({
-            canvas: Ys,
-            antialias: !0,
-            powerPreference: "high-performance",
-          });
-        } catch (i) {
-          throw ((document.querySelector("#loading").style.display = "none"), (document.querySelector("#error").style.display = "grid"), i);
+          gl = new Bo({ canvas: cvs, antialias: !0, powerPreference: "high-performance" });
+        } catch (err) {
+          throw ((document.querySelector("#loading").style.display = "none"), (document.querySelector("#error").style.display = "grid"), err);
         }
-        en.setPixelRatio(Math.min(devicePixelRatio || 1, 1.45));
-        en.setSize(innerWidth, innerHeight, !1);
-        en.outputColorSpace = Ee;
-        en.toneMapping = Zr;
-        en.toneMappingExposure = 1.08;
-        en.shadowMap.enabled = !0;
-        en.shadowMap.type = kr;
-        var hl = document.querySelector("#groundTexture"),
-          bi = new we(hl);
-        bi.colorSpace = Ee;
-        bi.anisotropy = Math.min(8, en.capabilities.getMaxAnisotropy());
-        bi.minFilter = xn;
-        bi.magFilter = We;
-        hl.addEventListener("load", () => {
-          bi.needsUpdate = !0;
+        gl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.4));
+        gl.setSize(innerWidth, innerHeight, !1);
+        gl.outputColorSpace = Ee;
+        gl.toneMapping = Zr;
+        gl.toneMappingExposure = 1.07;
+        gl.shadowMap.enabled = !0;
+        gl.shadowMap.type = kr;
+
+        // the designer's hand-painted ground, tiled across the whole meadow. the tile
+        // is tighter than the diorama's 18.4 because this camera sits much lower,
+        // which keeps the painted grain at the apparent scale it was dialled in at.
+        var SPAN = 196,
+          HALF = SPAN / 2,
+          EDGE = 64, // how far out you may walk
+          TILE = SPAN / 10.6;
+        var groundImg = document.querySelector("#groundTexture"),
+          groundTex = new we(groundImg);
+        groundTex.colorSpace = Ee;
+        groundTex.wrapS = groundTex.wrapT = 1000; // RepeatWrapping
+        groundTex.repeat.set(TILE, TILE);
+        groundTex.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
+        groundTex.minFilter = xn;
+        groundTex.magFilter = We;
+        groundImg.addEventListener("load", () => {
+          groundTex.needsUpdate = !0;
         });
-        hl.complete && (bi.needsUpdate = !0);
-        var Bn = new Ts();
-        Bn.background = new Ot(11061448);
-        Bn.fog = new Es(11061448, 55, 115);
-        var ss = new Te(34, innerWidth / innerHeight, 0.1, 100);
-        ss.position.set(17, 13.3, 20);
-        var Ye = new Vo(ss, Ys);
-        Ye.target.set(0, 2.2, 0);
-        Ye.enableDamping = !0;
-        Ye.dampingFactor = 0.075;
-        Ye.enablePan = !1;
-        Ye.minDistance = 14;
-        Ye.maxDistance = 90;
-        Ye.minPolarAngle = 0.18;
-        Ye.maxPolarAngle = Math.PI * 0.59;
-        Ye.rotateSpeed = 0.62;
-        Ye.zoomSpeed = 0.75;
-        var ng = new Ns(15267822, 6511491, 2.15);
-        Bn.add(ng);
-        var dn = new Yi(16772555, 4.2);
-        dn.position.set(-10, 18, 11);
-        dn.castShadow = !0;
-        dn.shadow.mapSize.set(1536, 1536);
-        dn.shadow.camera.left = -18;
-        dn.shadow.camera.right = 18;
-        dn.shadow.camera.top = 16;
-        dn.shadow.camera.bottom = -13;
-        dn.shadow.camera.near = 2;
-        dn.shadow.camera.far = 45;
-        dn.shadow.bias = -35e-5;
-        Bn.add(dn);
-        var lh = new Yi(9812440, 0.62);
-        lh.position.set(12, 8, -14);
-        Bn.add(lh);
-        var de = new Ne();
-        de.rotation.y = 0;
-        Bn.add(de);
-        var ul = [],
-          Fn = { highlights: [], splashes: [], mist: [], ribbons: [] },
-          Digger = null,
-          cloudDeck = new Ne(),
-          holes = [],
-          buried = [
-            { x: -6.1, z: -3.8, name: "a blue button" },
-            { x: 5.6, z: 4.5, name: "a brass bell" },
-            { x: 0.2, z: -4.7, name: "a moon coin" },
-          ],
-          game = {
-            started: !1,
-            x: 2.55,
-            z: 1.75,
-            vx: 0,
-            vz: 0,
-            facing: 0.64,
-            dig: 0,
-            digTotal: 0.86,
-            t: 100,
-            finds: Number(localStorage.getItem("little-digger-3d-finds") || 0),
-          },
-          moveInput = { x: 0, y: 0, pointer: null },
-          vn = {
-            voxel: {
-              name: "Soft voxel",
-              note: "deep rounded cells \xB7 modeled cast \xB7 colored shade",
-              accent: "#f2c85b",
-              sky: 11258569,
-              fog: 11258569,
-              grass: [6719823, 7706967, 8890463, 10073966],
-              soil: [10907471, 8672618, 6705263],
-              bark: 8409918,
-              leaf: [4815184, 6132313, 7579234],
-              flower: 15779164,
-              rough: 0.82,
-              flat: !1,
-            },
-            carved: {
-              name: "Carved volume",
-              note: "closed faceted land \xB7 graphic planes \xB7 modeled cast",
-              accent: "#ef9b70",
-              sky: 13157811,
-              fog: 13157811,
-              grass: [7439187, 8557404, 9544552, 11057015],
-              soil: [10906964, 8345959, 6115437],
-              bark: 8804931,
-              leaf: [5404243, 6654299, 8035432],
-              flower: 15313017,
-              rough: 0.92,
-              flat: !0,
-            },
-            storybook: {
-              name: "Living Storybook",
-              note: "8 tiny foliage types \xB7 three-bunny waterfall",
-              accent: "#8ad5be",
-              sky: 10471634,
-              fog: 10471634,
-              grass: [6524773, 7512174, 8695929, 10534790],
-              soil: [11105625, 8610164, 5920879],
-              bark: 8739140,
-              leaf: [4684890, 6198888, 7974264],
-              flower: 15775592,
-              rough: 0.67,
-              flat: !1,
-            },
-          },
-          ne = "storybook",
-          ch = (i, t, e) => Math.max(t, Math.min(e, i)),
-          Bt = (i, t) => {
-            let e = Math.sin(i * 127.1 + t * 311.7) * 43758.5453;
-            return e - Math.floor(e);
-          },
-          qe = (i, t) => {
-            let e = Math.pow(Math.max(Math.abs(i) / 8.6, Math.abs(t) / 6.55), 3.8);
-            return 0.72 + Math.sin(i * 0.48) * 0.21 + Math.cos(t * 0.57) * 0.16 + Math.sin((i - t) * 0.31) * 0.12 - Math.max(0, e - 0.5) * 0.48;
+        groundImg.complete && (groundTex.needsUpdate = !0);
+
+        // ---------------------------------------------------------- palette
+        var SKY = 10471634,
+          FOG = 10471634,
+          GRASS = [6524773, 7512174, 8695929, 10534790],
+          SOIL = [11105625, 8610164, 5920879],
+          STONE = [0xc3b69c, 0xb0a48e, 0xb5aaa3],
+          WOOD = 0x9c7550,
+          WOOD_DARK = 0x7a5739,
+          MOSS = 0x8fa863,
+          ROUGH = 0.78;
+
+        // ---------------------------------------------------------- scene
+        var scene = new Ts();
+        scene.background = new Ot(SKY);
+        scene.fog = new Es(FOG, 38, 116);
+        var camera = new Te(40, innerWidth / innerHeight, 0.2, 300);
+        var hemi = new Ns(15267822, 6511491, 1.62);
+        scene.add(hemi);
+        var sun = new Yi(16772555, 4.35);
+        sun.castShadow = !0;
+        sun.shadow.mapSize.set(1024, 1024);
+        sun.shadow.camera.left = -18;
+        sun.shadow.camera.right = 18;
+        sun.shadow.camera.top = 18;
+        sun.shadow.camera.bottom = -18;
+        sun.shadow.camera.near = 2;
+        sun.shadow.camera.far = 70;
+        sun.shadow.bias = -4e-4;
+        scene.add(sun);
+        scene.add(sun.target);
+        var fill = new Yi(9812440, 0.58);
+        fill.position.set(14, 9, -16);
+        scene.add(fill);
+        var world = new Ne();
+        scene.add(world);
+        var skyDeck = new Ne();
+        scene.add(skyDeck);
+
+        // ---------------------------------------------------------- little maths
+        var clamp = (v, a, b) => Math.max(a, Math.min(b, v)),
+          lerp = (a, b, t) => a + (b - a) * t,
+          hash = (a, b) => {
+            let v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+            return v - Math.floor(v);
           };
-        function On(i, t = 0.82, e = !1, n = 0) {
-          return new Pn({
-            color: i,
-            roughness: t,
-            metalness: n,
-            flatShading: e,
+
+        // the shape of the land. gentle rolling meadow, then hills at the rim so
+        // there is never a visible edge to the world.
+        function groundH(x, z) {
+          let h = Math.sin(x * 0.052) * 1.15 + Math.cos(z * 0.047) * 1.05 + Math.sin((x + z) * 0.03) * 1.4 + Math.sin((x - z * 0.6) * 0.086) * 0.42 + Math.sin(x * 0.19 + z * 0.13) * 0.17;
+          let r = Math.hypot(x, z),
+            rim = Math.max(0, r - EDGE - 6) / 40;
+          return h + rim * rim * 12 + Math.sin(x * 0.2) * rim * 2.2 + Math.cos(z * 0.17) * rim * 1.8;
+        }
+
+        // ---------------------------------------------------------- makers
+        function mat(color, rough = ROUGH, flat = !1, metal = 0) {
+          return new Pn({ color: color, roughness: rough, metalness: metal, flatShading: flat });
+        }
+        function mesh(geom, material, parent = world) {
+          let m = new Ae(geom, material);
+          return ((m.castShadow = !0), (m.receiveShadow = !0), parent.add(m), m);
+        }
+        // a soft rounded blob — the whole storybook language is built from these
+        function blob(radius, color, pos, scale = [1, 1, 1], parent = world, detail = 2) {
+          let m = mesh(new Ds(radius, detail), mat(color), parent);
+          return (m.position.set(...pos), m.scale.set(...scale), m);
+        }
+        function box(size, radius, color, pos, rot = [0, 0, 0], parent = world) {
+          let m = mesh(new Ho(size[0], size[1], size[2], 3, radius), mat(color), parent);
+          return (m.position.set(...pos), m.rotation.set(...rot), m);
+        }
+        // a tapered limb between two points
+        function limb(from, to, rTop, rBot, color, parent = world, seg = 9) {
+          let a = new L(...from),
+            b = new L(...to),
+            d = b.clone().sub(a),
+            m = mesh(new Cn(rTop, rBot, d.length(), seg, 1, !1), mat(color), parent);
+          return (m.position.copy(a.clone().add(b).multiplyScalar(0.5)), m.quaternion.setFromUnitVectors(new L(0, 1, 0), d.normalize()), m);
+        }
+        // one draw call for a crowd of identical things
+        function batch(geom, material, list, cast = !0) {
+          if (!list.length) return null;
+          let im = new As(geom, material, list.length),
+            d = new ve();
+          list.forEach((t, i) => {
+            (d.position.set(t.p[0], t.p[1], t.p[2]), d.rotation.set(t.r[0], t.r[1], t.r[2]), d.scale.set(t.s[0], t.s[1], t.s[2]), d.updateMatrix(), im.setMatrixAt(i, d.matrix));
           });
+          ((im.castShadow = cast), (im.receiveShadow = !0), (im.frustumCulled = !1), (im.instanceMatrix.needsUpdate = !0), world.add(im));
+          return im;
         }
-        function Le(i, t, e = de) {
-          let n = new Ae(i, t);
-          return ((n.castShadow = !0), (n.receiveShadow = !0), e.add(n), n);
-        }
-        function ae(i, t, e, n = [1, 1, 1], s = de, r = 2, o = !1) {
-          let a = Le(new Ds(i, r), On(t, vn[ne].rough, o), s);
-          return (a.position.set(...e), a.scale.set(...n), a);
-        }
-        function ii(i, t, e, n, s = [0, 0, 0], r = de) {
-          let o = new Ho(i[0], i[1], i[2], 3, t),
-            a = Le(o, On(e, vn[ne].rough), r);
-          return (a.position.set(...n), a.rotation.set(...s), a);
-        }
-        function Nn(i, t, e, n, s, r = de, o = 9, a = !1) {
-          let c = new L(...i),
-            l = new L(...t),
-            h = l.clone().sub(c),
-            u = new Cn(n, e, h.length(), o, 1, !1),
-            f = Le(u, On(s, vn[ne].rough, a), r);
-          return (f.position.copy(c.add(l).multiplyScalar(0.5)), f.quaternion.setFromUnitVectors(new L(0, 1, 0), h.normalize()), f);
-        }
-        function ig(i, t) {
-          return new Pn({
-            vertexColors: !0,
-            roughness: vn[ne].rough,
-            metalness: 0,
-            flatShading: t,
-          });
-        }
-        function sg(i) {
-          i.traverse((t) => {
-            (t.geometry && t.geometry.dispose(), t.material && (Array.isArray(t.material) ? t.material : [t.material]).forEach((n) => n.dispose()));
-          });
-        }
-        function rg(i) {
-          let t = vn[ne],
-            e = 30,
-            n = 23,
-            s = 18.4,
-            r = 14.2,
-            o = -3.05,
-            a = [],
-            c = [],
-            l = [],
-            h = [],
-            u = t.grass,
-            f = t.soil,
-            p = new Ot();
-          for (let v = 0; v <= n; v++)
-            for (let w = 0; w <= e; w++) {
-              let A = (w / e - 0.5) * s,
-                C = (v / n - 0.5) * r,
-                D = qe(A, C);
-              (a.push(A, D, C), l.push(w / e, 1 - v / n), p.setHex(u[Math.min(3, Math.floor(Bt(w, v) * 4))]), c.push(p.r, p.g, p.b));
+
+        // ---------------------------------------------------------- the ground
+        var blockers = []; // {x,z,r} things you cannot walk through
+        function buildGround() {
+          let seg = 84,
+            pos = [],
+            col = [],
+            uv = [],
+            idx = [],
+            c = new Ot(),
+            white = new Ot(0xffffff),
+            fogC = new Ot(FOG);
+          for (let j = 0; j <= seg; j++)
+            for (let i = 0; i <= seg; i++) {
+              let u = i / seg,
+                v = j / seg,
+                x = (u - 0.5) * SPAN,
+                z = (v - 0.5) * SPAN,
+                y = groundH(x, z);
+              pos.push(x, y, z);
+              uv.push(u, 1 - v);
+              // painted patchwork: a whisper of the four grass tones, kept close to
+              // white so the designer's painted texture is what you actually see
+              let p = 0.5 + 0.5 * Math.sin(x * 0.062 + Math.cos(z * 0.045) * 1.8),
+                q = 0.5 + 0.5 * Math.sin(z * 0.05 - Math.cos(x * 0.038) * 1.3),
+                k = clamp(p * 2.1 + q * 1.1 - 0.6, 0, 2.999),
+                lo = GRASS[Math.floor(k)],
+                hi = GRASS[Math.min(3, Math.floor(k) + 1)],
+                f = k - Math.floor(k);
+              c.setHex(lo).lerp(new Ot(hi), f).lerp(white, 0.66);
+              // hollows a touch cooler, ridges a touch sunnier
+              let shade = clamp(0.95 + y * 0.03, 0.88, 1.06);
+              c.multiplyScalar(shade);
+              // aerial perspective so the far ground sits back behind the air
+              let far = clamp((Math.hypot(x, z) - 34) / 58, 0, 1);
+              c.lerp(fogC, far * far * 0.88);
+              col.push(c.r, c.g, c.b);
             }
-          for (let v = 0; v < n; v++)
-            for (let w = 0; w < e; w++) {
-              let A = v * (e + 1) + w,
-                C = A + e + 1;
-              h.push(A, C, A + 1, C, C + 1, A + 1);
+          for (let j = 0; j < seg; j++)
+            for (let i = 0; i < seg; i++) {
+              let a = j * (seg + 1) + i,
+                b = a + seg + 1;
+              idx.push(a, b, a + 1, b, b + 1, a + 1);
             }
-          let _ = h.length,
-            y = (v, w) => {
-              for (let A = 0; A < v; A++) {
-                let [C, D, S] = w(A),
-                  [M, I, F] = w(A + 1),
-                  k = a.length / 3;
-                (a.push(C, S, D, C, o, D, M, o, I, M, F, I),
-                  l.push(0, 0, 0, 0, 0, 0, 0, 0),
-                  [S, o, o, F].forEach((H) => {
-                    let q = ch((H - o) / 3.8, 0, 1),
-                      W = q > 0.62 ? f[0] : q > 0.31 ? f[1] : f[2];
-                    (p.setHex(W), c.push(p.r, p.g, p.b));
-                  }),
-                  h.push(k, k + 2, k + 1, k, k + 3, k + 2));
-              }
-            };
-          (y(e, (v) => {
-            let w = (v / e - 0.5) * s;
-            return [w, -r / 2, qe(w, -r / 2)];
-          }),
-            y(e, (v) => {
-              let w = (0.5 - v / e) * s;
-              return [w, r / 2, qe(w, r / 2)];
-            }),
-            y(n, (v) => {
-              let w = (v / n - 0.5) * r;
-              return [s / 2, w, qe(s / 2, w)];
-            }),
-            y(n, (v) => {
-              let w = (0.5 - v / n) * r;
-              return [-s / 2, w, qe(-s / 2, w)];
-            }));
-          let m = a.length / 3;
-          (a.push(-s / 2, o, -r / 2, -s / 2, o, r / 2, s / 2, o, r / 2, s / 2, o, -r / 2), l.push(0, 0, 0, 0, 0, 0, 0, 0), p.setHex(f[2]));
-          for (let v = 0; v < 4; v++) c.push(p.r, p.g, p.b);
-          h.push(m, m + 2, m + 1, m, m + 3, m + 2);
-          let d = new Pe();
-          (d.setAttribute("position", new Kt(a, 3)),
-            d.setAttribute("color", new Kt(c, 3)),
-            d.setAttribute("uv", new Kt(l, 2)),
-            d.setIndex(h),
-            d.addGroup(0, _, 0),
-            d.addGroup(_, h.length - _, 1),
-            d.computeVertexNormals());
-          let b = new Pn({
-              map: bi,
-              color: 16777215,
-              roughness: 0.93,
-              metalness: 0,
-            }),
-            T = Le(d, [b, ig(u[1], !i)], de);
-          if (((T.castShadow = !0), (T.receiveShadow = !0), i)) {
-            let v = ii([18.7, 0.28, 14.5], 0.13, t.soil[1], [0, -3, 0], [], de);
-            v.receiveShadow = !0;
-          }
+          let g = new Pe();
+          (g.setAttribute("position", new Kt(pos, 3)), g.setAttribute("color", new Kt(col, 3)), g.setAttribute("uv", new Kt(uv, 2)), g.setIndex(idx), g.computeVertexNormals());
+          let m = mesh(g, new Pn({ map: groundTex, vertexColors: !0, roughness: 0.93, metalness: 0 }), world);
+          ((m.castShadow = !1), (m.receiveShadow = !0));
         }
-        function og() {
-          let i = vn[ne],
-            t = new Ne();
-          (t.position.set(2.55, 0.76, 1.75), (t.rotation.y = 0.64), de.add(t));
-          Digger = t;
-          let e = ne === "storybook" ? 16046483 : 15453049,
-            n = 16772541,
-            s = 12088930,
-            r = 2503480,
-            o = 14257277;
-          (ae(0.82, e, [0, 0.88, 0], [0.84, 1.08, 0.76], t, ne === "carved" ? 1 : 2, ne === "carved"),
-            ae(0.62, n, [0.05, 1.72, 0.22], [0.96, 0.92, 0.92], t, ne === "carved" ? 1 : 2, ne === "carved"),
-            ae(0.34, n, [0.08, 1.58, 0.7], [1.08, 0.66, 0.78], t, 2, !1),
-            ae(0.078, r, [-0.19, 1.86, 0.72], [1, 1.08, 0.7], t, 2),
-            ae(0.078, r, [0.28, 1.86, 0.72], [1, 1.08, 0.7], t, 2),
-            ae(0.065, r, [0.05, 1.58, 1.01], [1.12, 0.82, 1], t, 2),
-            ae(0.08, o, [0.05, 1.5, 0.99], [1.2, 0.72, 0.58], t, 2));
-          let a = ae(0.36, s, [-0.2, 2.45, 0.18], [0.42, 1.22, 0.3], t, ne === "carved" ? 1 : 2, ne === "carved");
-          ((a.rotation.z = -0.1), (a.rotation.x = -0.08));
-          let c = ae(0.36, s, [0.3, 2.48, 0.2], [0.42, 1.28, 0.3], t, ne === "carved" ? 1 : 2, ne === "carved");
-          ((c.rotation.z = 0.1),
-            (c.rotation.x = -0.06),
-            ae(0.22, o, [-0.2, 2.46, 0.32], [0.34, 1.1, 0.2], t, 2),
-            ae(0.22, o, [0.3, 2.5, 0.34], [0.34, 1.14, 0.2], t, 2),
-            ae(0.28, s, [-0.32, 0.25, 0.25], [0.78, 0.55, 1.05], t, 2),
-            ae(0.28, s, [0.32, 0.25, 0.25], [0.78, 0.55, 1.05], t, 2),
-            ae(0.23, e, [-0.48, 0.98, 0.38], [0.62, 1, 0.58], t, 2),
-            ae(0.23, e, [0.49, 0.96, 0.38], [0.62, 1, 0.58], t, 2),
-            ae(0.34, n, [-0.58, 0.84, -0.42], [1, 0.92, 1], t, 2));
-          let l = Le(new pi(0.5, 0.085, 7, 28, 5.2), On(13131599, 0.72), t);
-          ((l.rotation.x = Math.PI / 2), l.position.set(0, 1.27, 0.03));
-          let h = ii([0.26, 0.38, 0.12], 0.08, 13131599, [0.43, 1.14, 0.38], [0, 0, -0.55], t);
-          Nn([-0.55, 0.7, 0.66], [0.5, 1.72, 0.72], 0.048, 0.048, 7884860, t, 10);
-          let u = Le(new Ps(0.22, 0.45, 5), On(9545377, 0.44, !1, 0.32), t);
-          (u.position.set(-0.64, 0.6, 0.7), (u.rotation.z = -0.94));
-        }
-        function makeClouds() {
-          Bn.add(cloudDeck);
-          [
-            [-7.5, 8.2, -5.5, 1.25],
-            [3.5, 9.6, -7.5, 1.55],
-            [8.5, 7.6, 0.5, 1.05],
-            [-5.5, 10.8, 3.2, 1.35],
-          ].forEach((c, index) => {
-            let group = new Ne();
-            group.position.set(c[0], c[1], c[2]);
-            cloudDeck.add(group);
-            [
-              [-1.1, 0, 0, 1.1, 0.55, 0.72],
-              [0, 0.22, 0, 1.35, 0.72, 0.82],
-              [1.15, 0.02, 0, 1, 0.5, 0.66],
-              [0.45, -0.12, 0.18, 1.35, 0.45, 0.72],
-            ].forEach((p, part) => {
-              let puff = ae(1, part % 2 ? 16382176 : 15790816, [p[0] * c[3], p[1] * c[3], p[2]], [p[3] * c[3], p[4] * c[3], p[5] * c[3]], group, 1, !1);
-              puff.castShadow = !1;
-              puff.receiveShadow = !1;
-              puff.material.transparent = !0;
-              puff.material.opacity = 0.72 - index * 0.035;
-            });
-          });
-        }
-        function ag() {
-          let i = vn[ne],
-            t = ne === "carved",
-            e = new Ne();
-          (e.position.set(-3.65, 0.52, -0.7), de.add(e));
-          let n = i.bark;
-          (Nn([0, 0, 0], [-0.25, 2, 0.05], 0.62, 0.5, n, e, t ? 7 : 11, t),
-            Nn([-0.25, 2, 0.05], [0.15, 4.05, -0.1], 0.5, 0.37, n, e, t ? 7 : 11, t),
-            Nn([0.15, 4.05, -0.1], [0.92, 5.85, 0.08], 0.37, 0.22, n, e, t ? 7 : 11, t),
-            Nn([-0.12, 2.55, 0], [-1.65, 4.2, 0.08], 0.28, 0.12, n, e, t ? 7 : 10, t),
-            Nn([0.3, 4.25, 0], [1.85, 5.05, -0.05], 0.24, 0.1, n, e, t ? 7 : 10, t),
-            Nn([0.62, 5.08, 0], [-0.2, 6.2, 0.03], 0.17, 0.07, n, e, t ? 7 : 9, t),
-            [
-              [-1.65, 4.65, 0.08, 1.35, 0.95, 1.1],
-              [1.75, 5.4, -0.05, 1.45, 1.08, 1.15],
-              [0.02, 6.45, 0.03, 1.65, 1.12, 1.35],
-              [0.92, 6.3, 0.2, 1.3, 1.05, 1.18],
-              [-0.85, 6.2, -0.15, 1.23, 0.95, 1.08],
-            ].forEach((r, o) => {
-              ae(1, i.leaf[o % i.leaf.length], [r[0], r[1], r[2]], [r[3], r[4], r[5]], e, t ? 1 : 2, t).rotation.set(Bt(o, 2), Bt(o, 4) * 2, Bt(o, 7));
-            }),
-            [
-              [-0.9, 0.1, 0.4],
-              [0.78, 0.08, 0.55],
-              [-0.35, 0.07, -0.75],
-            ].forEach((r, o) => Nn([-0.03, 0.2, 0], [r[0], r[1], r[2]], 0.22, 0.06, n, e, 7, t)));
-        }
-        function lg() {
-          let i = vn[ne],
-            t = ne === "carved",
-            e = new Ne();
-          (e.position.set(3.95, qe(3.95, -2.2) + 0.02, -2.2), de.add(e));
-          let n = Le(new Cn(1.25, 0.78, 0.32, ne === "carved" ? 11 : 28), On(4602698, 0.98, t), e);
-          n.position.y = -0.12;
-          for (let a = 0; a < 13; a++) {
-            let c = (a / 13) * Math.PI * 2,
-              l = 1.35 + Bt(a, 4) * 0.15,
-              h = ae(0.34, i.soil[a % 2], [Math.cos(c) * l, 0.08 + Bt(a, 2) * 0.1, Math.sin(c) * l], [1.2, 0.58, 0.9], e, t ? 1 : 2, t);
-            h.rotation.y = c;
-          }
-          let s = ii([1.05, 0.54, 0.68], 0.1, 10116412, [0, 0.18, 0], [0, 0.25, -0.08], e),
-            r = Le(new Cn(0.34, 0.34, 1.05, 16, 1, !1, 0, Math.PI), On(12088642, 0.75), e);
-          ((r.rotation.z = Math.PI / 2), (r.rotation.y = 0.25), r.position.set(0, 0.54, 0));
-          let o = ii([0.14, 0.68, 0.7], 0.035, 14857551, [0, 0.35, 0.01], [0, 0.25, -0.08], e);
-          ((o.material.metalness = 0.55), (o.material.roughness = 0.33));
-          for (let a = 0; a < 5; a++) {
-            let c = Le(new Cn(0.15, 0.15, 0.055, 18), On(15911258, 0.28, !1, 0.72), e);
-            ((c.rotation.z = Math.PI / 2), c.position.set(-0.38 + a * 0.19, 0.78 + Bt(a, 3) * 0.14, -0.03 + a * 0.06));
-          }
-        }
-        function cg(i) {
-          let t = [],
-            e = [],
-            n = (r) => {
-              i.forEach((o) => {
-                let a = t.length / 3;
-                for (let c = 0; c < 6; c += 2) {
-                  let l = o[c],
-                    h = o[c + 1];
-                  r === 0 ? t.push(l, h, 0) : t.push(0, h, l);
+
+        // ---------------------------------------------------------- foliage
+        // eight tiny modelled plant types, instanced. this is the meadow's texture.
+        function crossGeom(tris) {
+          let pos = [],
+            idx = [],
+            plane = (axis) => {
+              tris.forEach((t) => {
+                let base = pos.length / 3;
+                for (let k = 0; k < 6; k += 2) {
+                  let a = t[k],
+                    b = t[k + 1];
+                  axis === 0 ? pos.push(a, b, 0) : pos.push(0, b, a);
                 }
-                e.push(a, a + 1, a + 2);
+                idx.push(base, base + 1, base + 2);
               });
             };
-          (n(0), n(1));
-          let s = new Pe();
-          return (s.setAttribute("position", new Kt(t, 3)), s.setIndex(e), s.computeVertexNormals(), s);
+          (plane(0), plane(1));
+          let g = new Pe();
+          return (g.setAttribute("position", new Kt(pos, 3)), g.setIndex(idx), g.computeVertexNormals(), g);
         }
-        function hg() {
-          let i = (s, r, o, a, c = 0) => [s - a / 2, r, s + c, r + o, s + a / 2, r],
-            t = (s, r, o, a) => [
-              [s - o, r, s, r + a, s + o, r],
-              [s - o, r, s + o, r, s, r - a],
+        var foliage = [];
+        function buildFoliage() {
+          let blade = (x, y, h, w, tip = 0) => [x - w / 2, y, x + tip, y + h, x + w / 2, y],
+            leaf = (x, y, w, h) => [
+              [x - w, y, x, y + h, x + w, y],
+              [x - w, y, x + w, y, x, y - h],
             ],
-            e = [
-              {
-                name: "fine-grass",
-                color: 8957282,
-                tris: [i(-0.055, 0, 0.24, 0.022, -0.025), i(0, 0, 0.31, 0.022, 0.008), i(0.055, 0, 0.21, 0.022, 0.025)],
-              },
+            types = [
+              { name: "fine-grass", color: 8957282, n: 650, tris: [blade(-0.055, 0, 0.24, 0.022, -0.025), blade(0, 0, 0.31, 0.022, 0.008), blade(0.055, 0, 0.21, 0.022, 0.025)] },
               {
                 name: "fan-grass",
                 color: 9812074,
-                tris: [i(-0.08, 0, 0.22, 0.025, -0.05), i(-0.04, 0, 0.27, 0.023, -0.02), i(0, 0, 0.3, 0.023, 0), i(0.04, 0, 0.26, 0.023, 0.025), i(0.08, 0, 0.2, 0.025, 0.05)],
+                n: 600,
+                tris: [blade(-0.08, 0, 0.22, 0.025, -0.05), blade(-0.04, 0, 0.27, 0.023, -0.02), blade(0, 0, 0.3, 0.023, 0), blade(0.04, 0, 0.26, 0.023, 0.025), blade(0.08, 0, 0.2, 0.025, 0.05)],
               },
-              {
-                name: "twin-sprout",
-                color: 8365406,
-                tris: [i(0, 0, 0.28, 0.018, 0), ...t(-0.055, 0.18, 0.065, 0.045), ...t(0.055, 0.23, 0.07, 0.048)],
-              },
-              {
-                name: "clover",
-                color: 9548651,
-                tris: [i(0, 0, 0.25, 0.018, 0), ...t(-0.055, 0.245, 0.052, 0.045), ...t(0.055, 0.245, 0.052, 0.045), ...t(0, 0.285, 0.052, 0.045)],
-              },
+              { name: "twin-sprout", color: 8365406, n: 450, tris: [blade(0, 0, 0.28, 0.018, 0), ...leaf(-0.055, 0.18, 0.065, 0.045), ...leaf(0.055, 0.23, 0.07, 0.048)] },
+              { name: "clover", color: 9548651, n: 410, tris: [blade(0, 0, 0.25, 0.018, 0), ...leaf(-0.055, 0.245, 0.052, 0.045), ...leaf(0.055, 0.245, 0.052, 0.045), ...leaf(0, 0.285, 0.052, 0.045)] },
               {
                 name: "fernlet",
                 color: 7904861,
+                n: 320,
                 tris: [
-                  i(0, 0, 0.34, 0.017, 0),
+                  blade(0, 0, 0.34, 0.017, 0),
                   [-0.01, 0.1, -0.105, 0.15, -0.01, 0.17],
                   [0.01, 0.14, 0.11, 0.19, 0.01, 0.21],
                   [-0.01, 0.19, -0.085, 0.24, -0.01, 0.26],
                   [0.01, 0.23, 0.08, 0.28, 0.01, 0.3],
                 ],
               },
-              {
-                name: "broad-sprout",
-                color: 10533747,
-                tris: [i(0, 0, 0.24, 0.018, 0), [-0.01, 0.1, -0.13, 0.19, -0.015, 0.24], [0.01, 0.13, 0.14, 0.23, 0.015, 0.27]],
-              },
-              {
-                name: "tiny-bloom",
-                color: 14210443,
-                tris: [i(0, 0, 0.23, 0.016, 0), ...t(-0.035, 0.26, 0.042, 0.032), ...t(0.035, 0.26, 0.042, 0.032), ...t(0, 0.295, 0.038, 0.032)],
-              },
-              {
-                name: "seed-bell",
-                color: 13213585,
-                tris: [i(0, 0, 0.3, 0.016, 0), ...t(-0.035, 0.19, 0.032, 0.025), ...t(0.04, 0.23, 0.032, 0.025), [-0.06, 0.3, 0.06, 0.3, 0, 0.22]],
-              },
+              { name: "broad-sprout", color: 10533747, n: 320, tris: [blade(0, 0, 0.24, 0.018, 0), [-0.01, 0.1, -0.13, 0.19, -0.015, 0.24], [0.01, 0.13, 0.14, 0.23, 0.015, 0.27]] },
+              { name: "tiny-bloom", color: 14210443, n: 360, tris: [blade(0, 0, 0.23, 0.016, 0), ...leaf(-0.035, 0.26, 0.042, 0.032), ...leaf(0.035, 0.26, 0.042, 0.032), ...leaf(0, 0.295, 0.038, 0.032)] },
+              { name: "seed-bell", color: 13213585, n: 320, tris: [blade(0, 0, 0.3, 0.016, 0), ...leaf(-0.035, 0.19, 0.032, 0.025), ...leaf(0.04, 0.23, 0.032, 0.025), [-0.06, 0.3, 0.06, 0.3, 0, 0.22]] },
             ],
-            n = new ve();
-          (e.forEach((s, r) => {
-            let a = new As(cg(s.tris), new Pn({ color: s.color, roughness: 0.96, side: Be }), 14);
-            ((a.name = `foliage-${s.name}`), (a.castShadow = !1), (a.receiveShadow = !0), de.add(a));
-            let c = 0;
-            for (let l = 0; l < 14; l++) {
-              let h = r * 31 + l,
-                u = -8.15 + Bt(h, 2) * 16.3,
-                f = -5.9 + Bt(h, 7) * 11.8;
-              if (Math.hypot(u - 3.95, f + 2.2) < 1.9 || Math.hypot(u + 3.65, f + 0.7) < 1.8 || Math.hypot(u + 4.7, f - 2.7) < 2) continue;
-              let p = 0.76 + Bt(h, 11) * 0.36;
-              (n.position.set(u, qe(u, f) + 0.012, f), n.rotation.set(0, Bt(h, 13) * Math.PI, (Bt(h, 17) - 0.5) * 0.12), n.scale.set(p, p, p), n.updateMatrix(), a.setMatrixAt(c++, n.matrix));
+            d = new ve();
+          types.forEach((t, ti) => {
+            let im = new As(crossGeom(t.tris), new Pn({ color: t.color, roughness: 0.96, side: Be }), t.n),
+              used = 0;
+            for (let i = 0; i < t.n * 3 && used < t.n; i++) {
+              let s = ti * 977 + i,
+                ang = hash(s, 3) * Math.PI * 2,
+                // flowers drift in patches, grass spreads everywhere
+                rad = ti >= 6 ? 4 + Math.sqrt(hash(s, 11)) * (EDGE + 4) : Math.sqrt(hash(s, 11)) * (EDGE + 12),
+                x = Math.cos(ang) * rad,
+                z = Math.sin(ang) * rad;
+              if (ti >= 6) {
+                // clump the blooms so they read as drifts, not confetti
+                let cx = Math.round(x / 9) * 9,
+                  cz = Math.round(z / 9) * 9;
+                if (hash(cx, cz) < 0.55) continue;
+                ((x = cx + (hash(s, 21) - 0.5) * 7), (z = cz + (hash(s, 23) - 0.5) * 7));
+              }
+              let sc = 0.8 + hash(s, 13) * 0.5;
+              (d.position.set(x, groundH(x, z) + 0.012, z), d.rotation.set(0, hash(s, 17) * Math.PI * 2, (hash(s, 19) - 0.5) * 0.12), d.scale.set(sc, sc, sc), d.updateMatrix(), im.setMatrixAt(used++, d.matrix));
             }
-            ((a.count = c), (a.instanceMatrix.needsUpdate = !0));
-          }),
-            (de.userData.foliageTypes = e.map((s) => s.name)));
+            ((im.count = used), (im.name = "foliage-" + t.name), (im.castShadow = !1), (im.receiveShadow = !0), (im.frustumCulled = !1), (im.instanceMatrix.needsUpdate = !0), world.add(im), foliage.push({ mesh: im, full: used }));
+          });
+          world.userData.foliageTypes = types.map((t) => t.name);
         }
-        function ug() {
+
+        // ---------------------------------------------------------- scattered interest
+        // boulders, cairns, standing stones, fallen logs, stumps, fences, reeds,
+        // mushroom rings. no trees and no waterfall in this meadow.
+        function buildProps() {
+          let rocks = [[], [], []],
+            logs = [],
+            mossy = [],
+            branches = [],
+            stumps = [],
+            stumpTops = [],
+            posts = [],
+            rails = [],
+            reeds = [],
+            stems = [],
+            caps = [],
+            place = (i, salt, min, max) => {
+              let a = hash(i, salt) * Math.PI * 2,
+                r = min + Math.sqrt(hash(i, salt + 1)) * (max - min);
+              return [Math.cos(a) * r, Math.sin(a) * r];
+            };
+
+          // boulders — painted stones sitting low in the grass, not a quarry
+          for (let i = 0; i < 30; i++) {
+            let [x, z] = place(i, 2, 6, EDGE + 6),
+              s = 0.26 + hash(i, 5) * 0.6,
+              yf = 0.4 + hash(i, 10) * 0.26,
+              y = groundH(x, z) + s * yf * 0.62,
+              t = i % 3;
+            rocks[t].push({ p: [x, y, z], r: [hash(i, 7) * 3, hash(i, 8) * 3, hash(i, 9) * 3], s: [s, s * yf, s * (0.84 + hash(i, 11) * 0.3)] });
+            if (s > 0.75) blockers.push({ x: x, z: z, r: s * 0.8 });
+            if (s > 0.6)
+              for (let k = 0; k < 3; k++) {
+                let a = hash(i * 7 + k, 12) * Math.PI * 2,
+                  d = s * (1.1 + hash(i + k, 13) * 0.7),
+                  cx = x + Math.cos(a) * d,
+                  cz = z + Math.sin(a) * d,
+                  cs = s * (0.16 + hash(i + k, 14) * 0.2);
+                rocks[(t + k) % 3].push({ p: [cx, groundH(cx, cz) + cs * 0.4, cz], r: [hash(k, 3) * 3, hash(k, 4) * 3, hash(k, 5) * 3], s: [cs, cs * 0.7, cs] });
+              }
+          }
+          // cairns — stacked flat stones, someone was here before you
+          for (let i = 0; i < 7; i++) {
+            let [x, z] = place(i, 30, 14, EDGE - 4),
+              base = groundH(x, z);
+            blockers.push({ x: x, z: z, r: 0.6 });
+            for (let k = 0; k < 4; k++) {
+              let s = 0.62 - k * 0.12;
+              rocks[(i + k) % 3].push({ p: [x + (hash(i + k, 31) - 0.5) * 0.14, base + 0.11 + k * 0.28, z + (hash(i + k, 32) - 0.5) * 0.14], r: [0, hash(i + k, 33) * 3, (hash(i + k, 34) - 0.5) * 0.2], s: [s, s * 0.36, s * 0.82] });
+            }
+          }
+          // standing stones — a leaning pair and a lintel, big enough to steer by
+          for (let i = 0; i < 3; i++) {
+            let [x, z] = place(i, 60, 24, EDGE - 12),
+              base = groundH(x, z),
+              rot = hash(i, 61) * Math.PI,
+              g = new Ne();
+            (g.position.set(x, base, z), (g.rotation.y = rot), world.add(g));
+            [-1, 1].forEach((sd) => {
+              box([0.72, 2.7, 0.6], 0.2, STONE[i % 3], [sd * 1.05, 1.32, 0], [0, 0, sd * 0.045], g);
+              blockers.push({ x: x + Math.cos(rot) * sd * 1.05, z: z - Math.sin(rot) * sd * 1.05, r: 0.6 });
+            });
+            box([3.1, 0.52, 0.7], 0.18, STONE[(i + 1) % 3], [0, 2.9, 0], [0, 0, 0.02], g);
+          }
+          // fallen logs, mossy on top
+          for (let i = 0; i < 7; i++) {
+            let [x, z] = place(i, 90, 12, EDGE - 2),
+              len = 2.6 + hash(i, 91) * 2.4,
+              rad = 0.3 + hash(i, 92) * 0.16,
+              ang = hash(i, 93) * Math.PI * 2,
+              y = groundH(x, z) + rad * 0.8;
+            (logs.push({ p: [x, y, z], r: [0, ang, Math.PI / 2], s: [rad, len, rad] }),
+              mossy.push({ p: [x, y + rad * 0.78, z], r: [0, ang, Math.PI / 2], s: [rad * 0.6, len * 0.92, rad * 0.6] }),
+              blockers.push({ x: x, z: z, r: Math.max(rad, len * 0.3) }));
+            for (let k = 0; k < 2; k++) {
+              let off = (k ? 0.3 : -0.34) * len,
+                bx = x - Math.cos(ang) * off,
+                bz = z + Math.sin(ang) * off;
+              branches.push({ p: [bx, y + 0.22, bz], r: [(hash(i + k, 94) - 0.5) * 1.2, ang + (k ? 1.1 : -1.2), 0.8], s: [0.075, 0.6 + hash(i + k, 95) * 0.45, 0.075] });
+            }
+          }
+          // stumps
+          for (let i = 0; i < 9; i++) {
+            let [x, z] = place(i, 120, 8, EDGE + 2),
+              rad = 0.3 + hash(i, 121) * 0.18,
+              hgt = 0.4 + hash(i, 122) * 0.36,
+              base = groundH(x, z);
+            (stumps.push({ p: [x, base + hgt / 2, z], r: [0, hash(i, 123) * 3, 0], s: [rad, hgt, rad] }),
+              stumpTops.push({ p: [x, base + hgt + 0.012, z], r: [-Math.PI / 2, 0, hash(i, 124) * 3], s: [rad * 0.92, rad * 0.92, 1] }),
+              blockers.push({ x: x, z: z, r: rad + 0.14 }));
+          }
+          // short runs of old fence, leaning where the ground moved
+          for (let i = 0; i < 4; i++) {
+            let [x, z] = place(i, 150, 18, EDGE - 8),
+              ang = hash(i, 151) * Math.PI * 2,
+              dx = Math.sin(ang),
+              dz = Math.cos(ang),
+              n = 4;
+            for (let k = 0; k < n; k++) {
+              let px = x + dx * (k - 1.5) * 2.1,
+                pz = z + dz * (k - 1.5) * 2.1,
+                base = groundH(px, pz);
+              (posts.push({ p: [px, base + 0.6, pz], r: [(hash(i + k, 152) - 0.5) * 0.13, ang, (hash(i + k, 153) - 0.5) * 0.11], s: [1, 1, 1] }), blockers.push({ x: px, z: pz, r: 0.2 }));
+              if (k < n - 1)
+                for (let h = 0; h < 2; h++) {
+                  let mx = px + dx * 1.05,
+                    mz = pz + dz * 1.05;
+                  rails.push({ p: [mx, groundH(mx, mz) + 0.52 + h * 0.4, mz], r: [0, ang - Math.PI / 2, 0], s: [1, 1, 1] });
+                }
+            }
+          }
+          // reed blades where the land dips
+          for (let i = 0; i < 70; i++) {
+            let [x, z] = place(i, 180, 6, EDGE - 2),
+              y = groundH(x, z);
+            if (y > -0.6) continue;
+            for (let k = 0; k < 6; k++) {
+              let rx = x + (hash(i + k, 181) - 0.5) * 1.6,
+                rz = z + (hash(i + k, 182) - 0.5) * 1.6,
+                h = 0.6 + hash(i + k, 183) * 0.65;
+              reeds.push({ p: [rx, groundH(rx, rz) + h / 2, rz], r: [(hash(i + k, 184) - 0.5) * 0.3, hash(i + k, 185) * 3, (hash(i + k, 186) - 0.5) * 0.3], s: [1, h / 0.8, 1] });
+            }
+          }
+          // mushroom rings, because a meadow should reward looking down
+          for (let i = 0; i < 5; i++) {
+            let [x, z] = place(i, 210, 12, EDGE - 6),
+              rad = 0.9 + hash(i, 211) * 0.7;
+            for (let k = 0; k < 8; k++) {
+              let a = (k / 8) * Math.PI * 2 + hash(i, 212) * 3,
+                mx = x + Math.cos(a) * rad,
+                mz = z + Math.sin(a) * rad,
+                s = 0.7 + hash(i + k, 213) * 0.5,
+                base = groundH(mx, mz);
+              (stems.push({ p: [mx, base + 0.075 * s, mz], r: [0, 0, 0], s: [s, s, s] }), caps.push({ p: [mx, base + 0.15 * s, mz], r: [0, hash(i + k, 214) * 3, 0], s: [s, s * 0.62, s] }));
+            }
+          }
+
+          let rockGeom = new Ds(1, 2);
+          rocks.forEach((list, i) => batch(rockGeom, mat(STONE[i], 0.9, !0), list));
+          (batch(new Cn(1, 0.9, 1, 10), mat(WOOD, 0.92), logs),
+            batch(new Cn(1, 0.95, 0.92, 7, 1, !1, 0, Math.PI), mat(MOSS, 0.96), mossy, !1),
+            batch(new Cn(1, 0.7, 1, 6), mat(WOOD_DARK, 0.9), branches),
+            batch(new Cn(1, 1.12, 1, 10), mat(WOOD, 0.92), stumps),
+            batch(new Is(1, 12), mat(WOOD_DARK, 0.95), stumpTops, !1),
+            batch(new Ho(0.19, 1.2, 0.19, 2, 0.055), mat(WOOD_DARK, 0.9), posts),
+            batch(new Ho(2.1, 0.11, 0.1, 2, 0.04), mat(WOOD, 0.9), rails),
+            batch(new Ps(0.055, 0.8, 3), mat(MOSS, 0.95), reeds, !1),
+            batch(new Cn(0.045, 0.05, 0.15, 6), mat(0xe7dcb6, 0.9), stems, !1),
+            batch(new Ds(0.13, 1), mat(0xd48a94, 0.86), caps, !1));
+        }
+
+        // ---------------------------------------------------------- sky
+        var clouds = [];
+        function buildClouds() {
+          for (let i = 0; i < 8; i++) {
+            let g = new Ne(),
+              s = 2.8 + hash(i, 41) * 3.6;
+            (g.position.set((hash(i, 42) - 0.5) * 150, 20 + hash(i, 43) * 15, (hash(i, 44) - 0.5) * 150), skyDeck.add(g));
+            [
+              [-1.1, 0, 0, 1.1, 0.55, 0.72],
+              [0, 0.22, 0, 1.35, 0.72, 0.82],
+              [1.15, 0.02, 0, 1, 0.5, 0.66],
+              [0.45, -0.12, 0.18, 1.35, 0.45, 0.72],
+            ].forEach((p, k) => {
+              let puff = blob(1, k % 2 ? 16382176 : 15790816, [p[0] * s, p[1] * s, p[2] * s], [p[3] * s, p[4] * s, p[5] * s], g, 1);
+              ((puff.castShadow = !1), (puff.receiveShadow = !1), (puff.material.transparent = !0), (puff.material.opacity = 0.74 - hash(i, 45) * 0.14), (puff.material.fog = !1));
+            });
+            clouds.push({ group: g, drift: 0.12 + hash(i, 46) * 0.2 });
+          }
+        }
+
+        // ---------------------------------------------------------- the digger
+        // a small four-legged creature. body, neck, head, four jointed legs.
+        var digger = null,
+          rig = null,
+          head = null,
+          legs = [];
+        function buildDigger() {
+          let FUR = 0xf4e2bd, // warm cream
+            SADDLE = 0xd9a765, // clear ochre back, so the two tones read from behind
+            PAW = 0xc08f5e,
+            EYE = 0x231d19,
+            NOSE = 0xcc7f6d,
+            EAR_IN = 0xd99a8c,
+            SCARF = 0x6fae9c;
+          digger = new Ne();
+          world.add(digger);
+          rig = new Ne();
+          digger.add(rig);
+
+          box([0.86, 0.6, 1.16], 0.25, FUR, [0, 0.58, 0.02], [0, 0, 0], rig); // barrel
+          box([0.84, 0.26, 0.98], 0.2, SADDLE, [0, 0.76, -0.06], [0, 0, 0], rig); // saddle
+          blob(0.33, FUR, [0, 0.58, -0.52], [1.04, 0.98, 0.86], rig); // rump
+          blob(0.3, SADDLE, [0, 0.72, -0.44], [0.92, 0.7, 0.8], rig); // ochre over the haunches
+          blob(0.3, FUR, [0, 0.54, 0.5], [1.06, 1, 0.94], rig); // chest
+          limb([0, 0.7, 0.42], [0, 1.02, 0.66], 0.22, 0.24, FUR, rig, 10); // neck
+          // a short upright tail with a darker tuft
+          blob(0.12, FUR, [0, 0.82, -0.72], [0.95, 1.15, 0.85], rig);
+          blob(0.085, SADDLE, [0, 0.96, -0.76], [1, 1, 0.9], rig);
+
+          head = new Ne();
+          head.position.set(0, 1.0, 0.62);
+          rig.add(head);
+          box([0.56, 0.5, 0.56], 0.21, FUR, [0, 0.2, 0.16], [0, 0, 0], head); // skull
+          box([0.5, 0.18, 0.5], 0.16, SADDLE, [0, 0.35, 0.13], [0.12, 0, 0], head); // crown patch
+          box([0.34, 0.27, 0.3], 0.12, FUR, [0, 0.08, 0.46], [0, 0, 0], head); // muzzle
+          blob(0.07, NOSE, [0, 0.15, 0.62], [1.35, 0.85, 0.75], head);
+          [-1, 1].forEach((sd) => {
+            (blob(0.075, EYE, [sd * 0.19, 0.26, 0.4], [1, 1.12, 0.8], head),
+              blob(0.032, 0xffffff, [sd * 0.21, 0.3, 0.43], [1, 1, 0.6], head),
+              // short leaf ears, swept back — not a rabbit
+              box([0.19, 0.32, 0.11], 0.055, FUR, [sd * 0.23, 0.45, 0.04], [-0.38, 0, sd * 0.3], head),
+              box([0.1, 0.19, 0.05], 0.03, EAR_IN, [sd * 0.19, 0.45, 0.1], [-0.38, 0, sd * 0.3], head),
+              // cheek tuft
+              blob(0.1, FUR, [sd * 0.27, 0.14, 0.24], [0.7, 0.9, 1], head));
+          });
+
+          // a little kerchief where the neck meets the body
+          let scarf = mesh(new pi(0.27, 0.07, 6, 22, 4.7), mat(SCARF, 0.86), rig);
+          ((scarf.rotation.x = Math.PI / 2 - 0.2), (scarf.rotation.z = 0.42), scarf.position.set(0, 0.9, 0.53));
+          blob(0.07, SCARF, [0.09, 0.83, 0.71], [1, 1.3, 1], rig);
+
+          // four legs, each a hip group with a bending shin
           [
-            [-4.7, 6.5, 2.7],
-            [4.1, 2.3, 0.15],
-            [-3.7, 2.5, -2.4],
-            [0.7, 1.8, -3.7],
-            [5.7, 2.1, 3.1],
-          ].forEach((t, e) => {
-            let n = new Ne();
-            (de.add(n), ae(0.11, e % 2 ? 4012597 : 7031091, [0, 0, 0], [1.25, 0.72, 0.72], n, 1));
-            let s = Le(new pi(0.075, 0.027, 5, 12), On(15317069, 0.7), n);
-            s.rotation.y = Math.PI / 2;
-            let r = new ln({
-                color: 16120799,
-                transparent: !0,
-                opacity: 0.68,
-                side: Be,
-                depthWrite: !1,
-              }),
-              o = [];
-            ([-1, 1].forEach((a) => {
-              let c = Le(new In(0.24, 0.14), r.clone(), n);
-              (c.position.set(0, a * 0.11, 0.02), (c.rotation.x = a * 0.5), o.push(c));
-            }),
-              ul.push({
-                bug: n,
-                wings: o,
-                home: t,
-                phase: e * 1.37,
-                speed: 0.55 + e * 0.08,
-                radius: 0.5 + e * 0.09,
-              }),
-              n.traverse((a) => {
-                a.isMesh && (a.castShadow = !1);
-              }));
+            [-0.29, 0.42, 0],
+            [0.29, 0.42, Math.PI],
+            [-0.31, -0.4, Math.PI],
+            [0.31, -0.4, 0],
+          ].forEach((h, i) => {
+            let g = new Ne();
+            (g.position.set(h[0], 0.48, h[1]), rig.add(g), limb([0, 0, 0], [0, -0.25, 0.01], 0.135, 0.115, FUR, g, 8));
+            let shin = new Ne();
+            (shin.position.set(0, -0.25, 0.01), g.add(shin), limb([0, 0, 0], [0, -0.21, 0.03], 0.105, 0.095, PAW, shin, 8), box([0.19, 0.1, 0.25], 0.05, PAW, [0, -0.24, 0.08], [0, 0, 0], shin));
+            legs.push({ hip: g, shin: shin, phase: h[2], front: i < 2 });
           });
+
         }
-        function dg() {
-          let i = new Ne(),
-            t = 10.2,
-            e = qe(-4.7, 2.7);
-          (i.position.set(-4.7, e, 2.7), (i.rotation.y = 0.36), de.add(i));
-          for (let h = 0; h < 7; h++) {
-            let layer = ii([3.72 - h * 0.025, 1.66, 0.9], 0.31, h % 2 ? 8477769 : 9002825, [(Bt(h, 3) - 0.5) * 0.14, 0.78 + h * 1.5, -0.44], [0, 0, (Bt(h, 8) - 0.5) * 0.018], i);
-            layer.material.roughness = 0.98;
-          }
-          let mossCap = ii([3.92, 0.28, 1.02], 0.13, 9216849, [0, t + 0.08, -0.3], [0, 0, -0.015], i);
-          mossCap.receiveShadow = !0;
-          let r = new Pn({
-            color: 6479856,
-            emissive: 1806257,
-            emissiveIntensity: 0.72,
-            roughness: 0.18,
-            transparent: !0,
-            opacity: 0.78,
-            side: Be,
-            depthWrite: !1,
+
+        // ---------------------------------------------------------- swarms
+        // a swarm of bees is the only thing that says "worth digging here". it is
+        // a thing in the world, never a marker drawn over the picture.
+        var sites = [],
+          SITE_R = 6.6,
+          FIRST = ["Mossbell", "Thistledown", "Bramble", "Honeycomb", "Old Fen", "Sundrop", "Clovergate", "Pebbleford", "Larkspur", "Windlow"],
+          SECOND = ["Hollow", "Rise", "Bank", "Ring", "Dell", "Flats", "Bend", "Verge"];
+        var beeWing, beeBody, beeHead, beeBodyMat, beeHeadMat, beeWingMat;
+        function beeAssets() {
+          let g = new Pe(),
+            p = [];
+          [1, -1].forEach((sd) => {
+            p.push(0, 0, 0, sd * 0.27, 0.03, 0.1, sd * 0.25, -0.01, -0.11);
           });
-          for (let h = 0; h < 3; h++) {
-            let u = Le(new In(1.62 - h * 0.18, t, 6, 24), r.clone(), i);
-            (u.position.set((h - 1) * 0.15, t * 0.5 + 0.22, 0.6 + h * 0.02), (u.material.opacity = 0.7 + h * 0.09), (u.castShadow = !1), Fn.ribbons.push({ mesh: u, phase: h * 1.9 }));
+          (g.setAttribute("position", new Kt(p, 3)), g.computeVertexNormals());
+          ((beeWing = g),
+            (beeBody = new Ds(0.12, 1)),
+            (beeHead = new Ds(0.085, 1)),
+            (beeBodyMat = new Pn({ color: 0xf7c64f, emissive: 0x7d5210, emissiveIntensity: 0.55, roughness: 0.6 })),
+            (beeHeadMat = new Pn({ color: 0x3b2f24, roughness: 0.72 })),
+            (beeWingMat = new ln({ color: 0xfff6dc, transparent: !0, opacity: 0.6, side: Be, depthWrite: !1 })));
+        }
+        function makeSite(index, awayFrom) {
+          let x = 0,
+            z = 0,
+            tries = 0;
+          do {
+            let a = hash(index * 13 + tries, 73) * Math.PI * 2,
+              r = 19 + Math.sqrt(hash(index * 13 + tries, 74)) * (EDGE - 25);
+            ((x = Math.cos(a) * r), (z = Math.sin(a) * r), tries++);
+          } while (awayFrom && Math.hypot(x - awayFrom.x, z - awayFrom.z) < 24 && tries < 40);
+          let group = new Ne();
+          world.add(group);
+          let site = {
+            x: x,
+            z: z,
+            r: SITE_R,
+            name: FIRST[Math.floor(hash(index, 71) * FIRST.length)] + " " + SECOND[Math.floor(hash(index, 72) * SECOND.length)],
+            group: group,
+            bees: [],
+          };
+          for (let i = 0; i < 7; i++) {
+            let g = new Ne();
+            group.add(g);
+            let body = mesh(beeBody, beeBodyMat, g);
+            body.scale.set(1, 0.88, 1.55);
+            body.castShadow = !1;
+            let hd = mesh(beeHead, beeHeadMat, g);
+            hd.position.z = 0.17;
+            hd.castShadow = !1;
+            let wing = mesh(beeWing, beeWingMat, g);
+            ((wing.position.y = 0.1), (wing.castShadow = !1), (wing.receiveShadow = !1));
+            site.bees.push({
+              g: g,
+              wing: wing,
+              phase: hash(index + i, 75) * 6.283,
+              speed: 0.5 + hash(index + i, 76) * 0.55,
+              rad: 1.5 + hash(index + i, 77) * (SITE_R * 0.7),
+              high: 0.8 + hash(index + i, 78) * 1.6,
+              bob: 0.9 + hash(index + i, 79) * 1.4,
+            });
           }
-          let o = Le(new In(1.55, 2.05), r.clone(), i);
-          ((o.rotation.x = -Math.PI / 2), o.position.set(0, t + 0.32, -0.08), (o.material.opacity = 0.72), (o.castShadow = !1));
-          let a = ii([1.72, 0.12, 0.1], 0.045, 16056319, [0, t + 0.23, 0.64], [0, 0, 0], i);
-          ((a.material.transparent = !0), (a.material.opacity = 0.82), (a.castShadow = !1));
-          let c = Le(new Is(1.72, 48), r.clone(), i);
-          ((c.rotation.x = -Math.PI / 2), c.scale.set(1.25, 0.78, 1), c.position.set(0, 0.09, 0.98), (c.material.opacity = 0.64), (c.castShadow = !1));
-          let l = Le(
-            new pi(1.02, 0.085, 7, 38, Math.PI * 1.35),
-            new ln({
-              color: 16252914,
-              transparent: !0,
-              opacity: 0.75,
-              depthWrite: !1,
-            }),
-            i,
-          );
-          ((l.rotation.x = Math.PI / 2), (l.rotation.z = -0.4), l.scale.set(1.25, 0.7, 1), l.position.set(0, 0.15, 0.78), (l.castShadow = !1));
-          for (let h = 0; h < 12; h++) {
-            let u = ae(0.1, 15335423, [0, 0, 0], [0.42, 1.7, 0.3], i, 1);
-            ((u.material = new ln({
-              color: 15269887,
-              transparent: !0,
-              opacity: 0.75,
-              depthWrite: !1,
-            })),
-              (u.castShadow = !1),
-              Fn.highlights.push({
-                mesh: u,
-                phase: h / 12,
-                speed: 0.32 + Bt(h, 2) * 0.35,
-                x: (Bt(h, 8) - 0.5) * 0.92,
-                top: t + 0.05,
-                travel: t - 0.35,
-              }));
-          }
-          for (let h = 0; h < 18; h++) {
-            let u = ae(0.045 + Bt(h, 5) * 0.035, 16777215, [0, 0, 0], [1, 1, 1], i, 1);
-            ((u.material = new ln({
-              color: h % 3 ? 15990783 : 12381941,
-              transparent: !0,
-              opacity: 0,
-              depthWrite: !1,
-            })),
-              (u.castShadow = !1),
-              Fn.splashes.push({
-                mesh: u,
-                phase: Bt(h, 4),
-                speed: 0.56 + Bt(h, 9) * 0.64,
-                angle: Bt(h, 11) * Math.PI * 2,
-                radius: 0.3 + Bt(h, 7) * 0.7,
-              }));
-          }
-          for (let h = 0; h < 9; h++) {
-            let u = ae(0.15 + Bt(h, 4) * 0.1, 16777215, [0, 0, 0], [1.6, 0.58, 1], i, 1);
-            ((u.material = new ln({
-              color: 15400959,
-              transparent: !0,
-              opacity: 0,
-              depthWrite: !1,
-            })),
-              (u.castShadow = !1),
-              Fn.mist.push({
-                mesh: u,
-                phase: Bt(h, 6),
-                speed: 0.16 + Bt(h, 3) * 0.18,
-                x: (Bt(h, 8) - 0.5) * 1.4,
-              }));
+          sites.push(site);
+          return site;
+        }
+        function dropSite(site) {
+          let i = sites.indexOf(site);
+          (i >= 0 && sites.splice(i, 1), site.group.traverse((o) => o.geometry && o.geometry !== beeWing && o.geometry !== beeBody && o.geometry !== beeHead && o.geometry.dispose()), world.remove(site.group));
+        }
+
+        // ---------------------------------------------------------- state
+        var SMALL = ["a copper coin", "a bent nail", "a blue button", "a sweet root", "an old key", "a snail shell", "a glass bead", "a chipped cup", "a bird whistle", "a smooth pebble", "a clay marble"],
+          NOTABLE = ["a silver locket", "a brass telescope", "a jar of honey", "a painted egg", "a little bronze bell", "a ring of old iron keys", "a moon coin"];
+        var HUNT_TIME = 100,
+          BURIED = 6;
+        // private browsing can make storage throw on read as well as write
+        function readBanked() {
+          try {
+            return Number(localStorage.getItem("little-digger-meadow") || 0) || 0;
+          } catch (e) {
+            return 0;
           }
         }
-        function fg() {
-          let i = vn[ne],
-            t = ne === "carved";
-          ([
-            [-7, -3, 0.72, 0.55],
-            [-6, 4.2, 0.54, 0.42],
-            [7.1, 3.7, 0.82, 0.62],
-            [-7.7, 2, 0.45, 0.4],
-            [0.4, -4.9, 0.62, 0.46],
-          ].forEach((r, o) => {
-            ae(1, o % 2 ? 12102289 : 10918792, [r[0], qe(r[0], r[1]) + r[3] * 0.55, r[1]], [r[2], r[3], r[2] * 0.78], de, 3, !1).rotation.set(Bt(o, 3), Bt(o, 8) * 3, Bt(o, 1));
-          }),
-            hg(),
-            Nn([-6.05, qe(-6.05, -4) + 0.02, -4], [-6.05, qe(-6.05, -4) + 2.05, -4], 0.1, 0.08, i.bark, de, 8, t));
-          let n = ii([2, 0.63, 0.16], 0.09, 12026194, [-5.28, qe(-6.05, -4) + 1.64, -4], [0, 0.16, -0.08], de),
-            s = ii([0.48, 0.11, 0.04], 0.025, 16768899, [-5.06, qe(-6.05, -4) + 1.65, -3.9], [0, 0.16, 0.55], de);
-          s.castShadow = !1;
+        function writeBanked(n) {
+          try {
+            localStorage.setItem("little-digger-meadow", n);
+          } catch (e) {}
         }
-        function say(text, duration = 1.45) {
+        var game = {
+          started: !1,
+          paused: !1,
+          x: 0,
+          z: 6,
+          vx: 0,
+          vz: 0,
+          facing: 0,
+          gait: 0,
+          dig: 0,
+          digTotal: 1,
+          pecks: 0,
+          cooldown: 0,
+          siteSeed: 1,
+          banked: readBanked(),
+        };
+        var hunt = null,
+          holes = [],
+          dirt = [],
+          moveInput = { x: 0, y: 0, pointer: null },
+          look = { pointer: null, lx: 0, ly: 0 },
+          camYaw = 0.4,
+          pitchBias = 0,
+          huntCam = 0,
+          intro = 0;
+
+        // the whole hot-and-cold scale, in metres from the hole to the nearest
+        // buried thing. this one function is the difficulty dial (DEC-03).
+        function gradeOf(d) {
+          return d > 8.4 ? 0 : d > 5.2 ? 1 : d > 3.2 ? 2 : d > 1.7 ? 3 : 4;
+        }
+        function digSpeed() {
+          return 1 + Math.min(3, Math.floor(game.banked / 5)) * 0.26;
+        }
+        function peckCount() {
+          return 3 + Math.min(2, Math.floor(game.banked / 10));
+        }
+
+        function say(text, seconds = 1.5) {
           let call = document.querySelector("#call");
-          call.textContent = text;
-          call.classList.add("show");
-          clearTimeout(say.timer);
-          say.timer = setTimeout(() => call.classList.remove("show"), duration * 1000);
+          ((call.textContent = text), call.classList.add("show"), clearTimeout(say.timer));
+          say.timer = setTimeout(() => call.classList.remove("show"), seconds * 1000);
+        }
+
+        // ---------------------------------------------------------- holes and dirt
+        var holeDark = null,
+          holeRim = null;
+        function holeAssets() {
+          ((holeDark = new Is(0.42, 22)), (holeRim = new pi(0.45, 0.075, 6, 24)));
         }
         function makeHole(x, z) {
-          let group = new Ne();
-          group.position.set(x, qe(x, z) + 0.035, z);
-          de.add(group);
-          let dark = Le(new Is(0.42, 28), new Pn({ color: 4338728, roughness: 1, side: Be }), group);
-          dark.rotation.x = -Math.PI / 2;
-          dark.castShadow = !1;
-          let rim = Le(new pi(0.45, 0.075, 6, 30), new Pn({ color: 10183757, roughness: 0.96 }), group);
-          rim.rotation.x = Math.PI / 2;
-          rim.castShadow = !1;
-          holes.push(group);
-          if (holes.length > 18) {
+          let g = new Ne();
+          (g.position.set(x, groundH(x, z) + 0.035, z), world.add(g));
+          let dark = mesh(holeDark, new Pn({ color: 0x422c22, roughness: 1, side: Be }), g);
+          ((dark.rotation.x = -Math.PI / 2), (dark.castShadow = !1));
+          let rim = mesh(holeRim, mat(SOIL[0], 0.96), g);
+          ((rim.rotation.x = Math.PI / 2), (rim.castShadow = !1));
+          holes.push(g);
+          if (holes.length > 26) {
             let old = holes.shift();
-            sg(old);
-            de.remove(old);
+            (old.traverse((o) => o.material && o.material.dispose()), world.remove(old));
           }
         }
-        function finishDig() {
-          let x = game.x + Math.sin(game.facing) * 0.88,
-            z = game.z + Math.cos(game.facing) * 0.88;
-          makeHole(x, z);
-          let nearest = Infinity,
-            index = -1;
-          buried.forEach((target, i) => {
-            let distance = Math.hypot(target.x - x, target.z - z);
-            if (distance < nearest) {
-              nearest = distance;
-              index = i;
-            }
-          });
-          if (nearest < 0.72 && index >= 0) {
-            let found = buried.splice(index, 1)[0];
-            game.finds++;
-            localStorage.setItem("little-digger-3d-finds", game.finds);
-            say(found.name + "!", 2.1);
-          } else {
-            let grade = nearest < 1.7 ? 3 : nearest < 3.2 ? 2 : nearest < 5.2 ? 1 : 0;
-            say(["prrp.", "prrp?", "prrp!", "BRRRP!"][grade]);
+        function dirtAssets() {
+          let geom = new Ds(0.075, 0);
+          for (let i = 0; i < 30; i++) {
+            let m = mesh(geom, new Pn({ color: SOIL[i % 3], roughness: 0.95 }), world);
+            ((m.castShadow = !1), (m.receiveShadow = !1), (m.visible = !1));
+            dirt.push({ mesh: m, life: 0, vx: 0, vy: 0, vz: 0 });
           }
+        }
+        function spawnDirt(x, y, z, n, color) {
+          // the pool is shared, so always restate the colour or gold dirt leaks on
+          let made = 0;
+          for (let i = 0; i < dirt.length && made < n; i++) {
+            let d = dirt[i];
+            if (d.life > 0) continue;
+            ((d.life = 0.55 + Math.random() * 0.4),
+              d.mesh.position.set(x, y, z),
+              (d.mesh.visible = !0),
+              d.mesh.scale.setScalar(0.6 + Math.random() * 0.8),
+              d.mesh.material.color.setHex(color || SOIL[i % 3]),
+              (d.vx = (Math.random() - 0.5) * 2.6),
+              (d.vy = 1.8 + Math.random() * 2.4),
+              (d.vz = (Math.random() - 0.5) * 2.6),
+              made++);
+          }
+        }
+
+        // ---------------------------------------------------------- digging
+        function digSpot() {
+          return [game.x + Math.sin(game.facing) * 0.92, game.z + Math.cos(game.facing) * 0.92];
+        }
+        function cry(grade, big) {
+          say(big ? "KWEHHH!!!!" : ["kweh.", "kweh?", "kweh!", "KWEH!!", "KWEHHH!!!"][grade], big ? 2.1 : 1.35);
         }
         function beginDig() {
-          if (!game.started || game.dig > 0) return;
-          game.dig = game.digTotal;
-          document.querySelector("#dig").classList.add("pressed");
+          if (!game.started || game.paused || game.dig > 0) return;
+          ((game.digTotal = 1.1 / digSpeed()), (game.dig = game.digTotal), (game.pecks = 0), document.querySelector("#dig").classList.add("pressed"));
         }
-        function updateGame(dt, elapsed) {
-          if (!Digger) return;
-          if (game.started) {
-            game.t -= dt;
-            if (game.t <= 0) {
-              game.t = 100;
-              say(game.finds ? "keepsakes tucked away" : "the meadow waits", 2);
+        function peck() {
+          let [x, z] = digSpot();
+          spawnDirt(x, groundH(x, z) + 0.18, z, 5);
+        }
+        function finishDig() {
+          document.querySelector("#dig").classList.remove("pressed");
+          let [x, z] = digSpot();
+          (makeHole(x, z), spawnDirt(x, groundH(x, z) + 0.24, z, 12));
+          if (!hunt) {
+            // nothing is buried outside a swarm, so there is no distance to report
+            say("just earth here", 1.4);
+            return;
+          }
+          hunt.holes++;
+          let nearest = Infinity,
+            hit = -1;
+          hunt.buried.forEach((b, i) => {
+            let d = Math.hypot(b.x - x, b.z - z);
+            if (d < nearest) ((nearest = d), (hit = d < 1.35 ? i : -1));
+          });
+          if (hit < 0) {
+            (cry(gradeOf(nearest)), refreshPips());
+            return;
+          }
+          let found = hunt.buried.splice(hit, 1)[0];
+          (hunt.found.push(found), spawnDirt(x, groundH(x, z) + 0.4, z, 14, found.kind === "notable" ? 0xf4d264 : 0xe6c894), cry(4, !0), say(found.name + "!", 2.2), refreshPips());
+        }
+
+        // ---------------------------------------------------------- the hunt
+        function refreshPips() {
+          let pips = document.querySelector("#huntPips").children;
+          for (let i = 0; i < pips.length; i++) {
+            let f = hunt && hunt.found[i];
+            pips[i].className = f ? (f.kind === "notable" ? "got big" : "got") : "";
+          }
+        }
+        function startHunt(site) {
+          hunt = { site: site, t: HUNT_TIME, buried: [], found: [], holes: 0 };
+          for (let i = 0; i < BURIED; i++) {
+            let a = Math.random() * Math.PI * 2,
+              r = Math.sqrt(Math.random()) * (site.r - 1.2),
+              kind = i === 0 ? "notable" : "small";
+            hunt.buried.push({
+              x: site.x + Math.cos(a) * r,
+              z: site.z + Math.sin(a) * r,
+              kind: kind,
+              name: kind === "notable" ? NOTABLE[(Math.random() * NOTABLE.length) | 0] : SMALL[(Math.random() * SMALL.length) | 0],
+            });
+          }
+          let pips = document.querySelector("#huntPips");
+          pips.innerHTML = "";
+          for (let i = 0; i < BURIED; i++) pips.appendChild(document.createElement("i"));
+          ((document.querySelector("#huntName").textContent = site.name), (document.body.dataset.hunt = "true"), (document.querySelector("#styleNote").textContent = "dig fast · every dig is a clue"));
+          ((intro = 1), say("the swarm lifts — dig!", 2));
+        }
+        function endHunt() {
+          if (!hunt || game.paused) return;
+          let found = hunt.found.length,
+            best = hunt.found.find((f) => f.kind === "notable"),
+            letter = ["–", "E", "D", "C", "B", "A", "S"][found] || "S",
+            left = Math.max(0, Math.ceil(hunt.t));
+          ((game.banked += found), writeBanked(game.banked));
+          let rows = [
+            ["things dug up", found + " of " + BURIED],
+            ["holes sunk", String(hunt.holes)],
+            ["clock", left > 0 ? "left the swarm with " + left + "s" : "ran the clock out"],
+          ];
+          document.querySelector("#rcSite").textContent = hunt.site.name;
+          document.querySelector("#rcGrade").textContent = letter;
+          document.querySelector("#rcRows").innerHTML =
+            rows.map((r) => "<li><span>" + r[0] + "</span><b>" + r[1] + "</b></li>").join("") + '<li class="tally"><span>keepsakes in all</span><b>' + game.banked + "</b></li>";
+          document.querySelector("#rcFinds").innerHTML = hunt.found.map((f) => '<li class="' + (f.kind === "notable" ? "big" : "") + '">' + f.name + "</li>").join("");
+          document.querySelector("#rcNote").textContent =
+            found === 0
+              ? "Nothing at all. The swarm knew something was down there — you just did not hear it in time."
+              : found >= BURIED
+                ? "Every last one. The bees will talk about this meadow for weeks."
+                : best
+                  ? "A good haul, and " + best.name + " on top of it. Listen harder to the quiet digs."
+                  : "Small things, but they add up. The loud calls were closer than you thought.";
+          // abandon any dig still in the ground, or it resolves after the card is
+          // dismissed and grades against a hunt that no longer exists
+          ((game.dig = 0), (game.pecks = 0), document.querySelector("#dig").classList.remove("pressed"));
+          ((game.paused = !0), document.querySelector("#report").classList.add("show"), (document.body.dataset.hunt = "false"));
+        }
+        function dismissReport() {
+          if (!document.querySelector("#report").classList.contains("show")) return;
+          (document.querySelector("#report").classList.remove("show"), (document.querySelector("#styleNote").textContent = "wander · the bees know where to dig"));
+          let old = hunt && hunt.site;
+          ((hunt = null), (game.paused = !1), (game.cooldown = 3));
+          (old && dropSite(old), makeSite(++game.siteSeed, { x: game.x, z: game.z }), say("off you go", 1.6));
+        }
+
+        // ---------------------------------------------------------- controls
+        var keys = {};
+        addEventListener("keydown", (e) => {
+          ((keys[e.code] = !0), (e.code === "KeyE" || e.code === "Space") && (e.preventDefault(), beginDig()));
+        });
+        addEventListener("keyup", (e) => {
+          keys[e.code] = !1;
+        });
+        // losing focus mid-keypress used to leave the creature walking on its own
+        var releaseAll = () => {
+          ((keys = {}), (moveInput.x = moveInput.y = 0), (moveInput.pointer = null), (look.pointer = null), (knob.style.transform = "translate(-50%, -50%)"));
+        };
+        (addEventListener("blur", releaseAll), addEventListener("visibilitychange", () => document.hidden && releaseAll()));
+        var stick = document.querySelector("#stick"),
+          knob = document.querySelector("#knob"),
+          moveStick = (e) => {
+            let b = stick.getBoundingClientRect(),
+              dx = e.clientX - (b.left + b.width / 2),
+              dy = e.clientY - (b.top + b.height / 2),
+              rad = b.width * 0.34,
+              len = Math.hypot(dx, dy);
+            (len > rad && ((dx = (dx / len) * rad), (dy = (dy / len) * rad)), (moveInput.x = dx / rad), (moveInput.y = dy / rad));
+            knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+          };
+        stick.addEventListener("pointerdown", (e) => {
+          ((moveInput.pointer = e.pointerId), stick.setPointerCapture(e.pointerId), moveStick(e), e.preventDefault());
+        });
+        stick.addEventListener("pointermove", (e) => {
+          moveInput.pointer === e.pointerId && moveStick(e);
+        });
+        var dropStick = (e) => {
+          moveInput.pointer === e.pointerId && ((moveInput.pointer = null), (moveInput.x = moveInput.y = 0), (knob.style.transform = "translate(-50%, -50%)"));
+        };
+        (stick.addEventListener("pointerup", dropStick), stick.addEventListener("pointercancel", dropStick));
+
+        document.querySelector("#dig").addEventListener("pointerdown", (e) => {
+          (e.preventDefault(), beginDig());
+        });
+
+        // drag anywhere on the picture to look around
+        cvs.addEventListener("pointerdown", (e) => {
+          look.pointer === null && ((look.pointer = e.pointerId), (look.lx = e.clientX), (look.ly = e.clientY), cvs.setPointerCapture(e.pointerId));
+        });
+        cvs.addEventListener("pointermove", (e) => {
+          if (look.pointer !== e.pointerId) return;
+          ((camYaw -= (e.clientX - look.lx) * 0.006), (pitchBias = clamp(pitchBias + (e.clientY - look.ly) * 0.005, -0.19, 0.42)), (look.lx = e.clientX), (look.ly = e.clientY));
+        });
+        var dropLook = (e) => {
+          look.pointer === e.pointerId && (look.pointer = null);
+        };
+        (cvs.addEventListener("pointerup", dropLook), cvs.addEventListener("pointercancel", dropLook));
+
+        document.querySelector("#play").addEventListener("click", () => {
+          ((game.started = !0), (document.querySelector("#start").style.display = "none"), say("find the bees", 2.4));
+        });
+        document.querySelector("#rcGo").addEventListener("click", dismissReport);
+
+        // ---------------------------------------------------------- the frame
+        var camPos = new L(),
+          camAim = new L(),
+          lastSec = -1;
+        // dt drives motion and is capped so a hitch cannot teleport anyone; wall is
+        // the real elapsed time and is what the hunt clock is allowed to spend.
+        function update(dt, t, wall) {
+          let live = game.started && !game.paused;
+
+          // ---- walking
+          let sf = 0,
+            sx = 0;
+          if (live) {
+            ((sf = -moveInput.y), (sx = moveInput.x));
+            ((keys.KeyA || keys.ArrowLeft) && (sx -= 1), (keys.KeyD || keys.ArrowRight) && (sx += 1), (keys.KeyW || keys.ArrowUp) && (sf += 1), (keys.KeyS || keys.ArrowDown) && (sf -= 1));
+            let len = Math.hypot(sx, sf);
+            len > 1 && ((sx /= len), (sf /= len));
+          }
+          let push = Math.hypot(sx, sf) > 0.08 && game.dig <= 0,
+            wx = sf * Math.sin(camYaw) + sx * Math.cos(camYaw),
+            wz = sf * Math.cos(camYaw) - sx * Math.sin(camYaw),
+            k = Math.min(1, dt * 9);
+          if (push) {
+            ((game.vx += (wx * 4.4 - game.vx) * k), (game.vz += (wz * 4.4 - game.vz) * k), (game.x += game.vx * dt), (game.z += game.vz * dt));
+            let want = Math.atan2(game.vx, game.vz),
+              diff = ((want - game.facing + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+            game.facing += diff * Math.min(1, dt * 9);
+          } else ((game.vx *= Math.pow(0.002, dt)), (game.vz *= Math.pow(0.002, dt)));
+
+          // ---- you cannot walk through stone or wood
+          for (let i = 0; i < blockers.length; i++) {
+            let b = blockers[i],
+              dx = game.x - b.x,
+              dz = game.z - b.z,
+              rr = b.r + 0.5;
+            if (dx * dx + dz * dz < rr * rr) {
+              let d = Math.max(0.001, Math.hypot(dx, dz));
+              ((game.x = b.x + (dx / d) * rr), (game.z = b.z + (dz / d) * rr));
             }
-            let dx = moveInput.x,
-              dz = moveInput.y;
-            if (keys.KeyA || keys.ArrowLeft) dx -= 1;
-            if (keys.KeyD || keys.ArrowRight) dx += 1;
-            if (keys.KeyW || keys.ArrowUp) dz -= 1;
-            if (keys.KeyS || keys.ArrowDown) dz += 1;
-            let length = Math.hypot(dx, dz);
-            if (length > 1) {
-              dx /= length;
-              dz /= length;
-            }
-            if (game.dig <= 0 && length > 0.08) {
-              game.vx += (dx * 4.2 - game.vx) * Math.min(1, dt * 9);
-              game.vz += (dz * 4.2 - game.vz) * Math.min(1, dt * 9);
-              game.x = ch(game.x + game.vx * dt, -7.8, 7.8);
-              game.z = ch(game.z + game.vz * dt, -5.8, 5.8);
-              game.facing = Math.atan2(game.vx, game.vz);
+          }
+          // ---- the rim hills turn you back
+          let far = Math.hypot(game.x, game.z);
+          if (far > EDGE) {
+            ((game.x *= EDGE / far), (game.z *= EDGE / far));
+          }
+
+          // ---- the creature
+          let speed = Math.hypot(game.vx, game.vz),
+            amp = Math.min(1, speed / 3.4),
+            digging = game.dig > 0,
+            digPh = digging ? 1 - game.dig / game.digTotal : 0,
+            pn = peckCount();
+          game.gait += speed * dt * 1.95;
+          digger.position.set(game.x, groundH(game.x, game.z) + 0.02, game.z);
+          digger.rotation.y = game.facing;
+          rig.position.y = (digging ? 0 : Math.abs(Math.sin(game.gait)) * 0.055 * amp) + Math.sin(t * 1.6) * 0.012 * (1 - amp);
+          rig.rotation.x = lerp(rig.rotation.x, digging ? 0.26 : 0, Math.min(1, dt * 9));
+          rig.rotation.z = lerp(rig.rotation.z, digging ? 0 : Math.sin(game.gait) * 0.035 * amp, Math.min(1, dt * 9));
+          head.rotation.x = lerp(head.rotation.x, digging ? 0.52 + Math.sin(digPh * Math.PI * 2 * pn) * 0.3 : -0.05, Math.min(1, dt * 12));
+          head.rotation.y = lerp(head.rotation.y, digging ? 0 : Math.sin(t * 0.7) * 0.16 * (1 - amp), Math.min(1, dt * 4));
+          legs.forEach((leg) => {
+            if (digging && leg.front) {
+              ((leg.hip.rotation.x = -0.5 + Math.sin(digPh * Math.PI * 2 * pn + leg.phase) * 0.8), (leg.shin.rotation.x = 0.5));
             } else {
-              game.vx *= Math.pow(0.002, dt);
-              game.vz *= Math.pow(0.002, dt);
+              ((leg.hip.rotation.x = Math.sin(game.gait + leg.phase) * 0.52 * amp), (leg.shin.rotation.x = Math.max(0, Math.cos(game.gait + leg.phase)) * 0.46 * amp));
             }
-            if (game.dig > 0) {
-              let before = game.dig;
-              game.dig = Math.max(0, game.dig - dt);
-              if (before > 0 && game.dig === 0) {
-                document.querySelector("#dig").classList.remove("pressed");
-                finishDig();
+          });
+
+          // ---- the dig itself: peck, peck, peck, then the call
+          if (digging && live) {
+            let before = game.dig;
+            game.dig = Math.max(0, game.dig - dt);
+            let done = Math.floor((1 - game.dig / game.digTotal) * pn);
+            while (game.pecks < done && game.pecks < pn) (game.pecks++, peck());
+            before > 0 && game.dig === 0 && finishDig();
+          }
+
+          // ---- the hunt
+          game.cooldown = Math.max(0, game.cooldown - wall);
+          if (live) {
+            if (hunt) {
+              hunt.t -= wall;
+              (hunt.t <= 0 || Math.hypot(game.x - hunt.site.x, game.z - hunt.site.z) > hunt.site.r + 9) && endHunt();
+            } else if (game.cooldown <= 0) {
+              for (let i = 0; i < sites.length; i++) {
+                let s = sites[i];
+                if (Math.hypot(game.x - s.x, game.z - s.z) < s.r * 0.55) {
+                  startHunt(s);
+                  break;
+                }
               }
             }
           }
-          let speed = Math.hypot(game.vx, game.vz),
-            digPhase = game.dig > 0 ? 1 - game.dig / game.digTotal : 0;
-          Digger.position.set(game.x, qe(game.x, game.z) + 0.03, game.z);
-          Digger.rotation.y = game.facing;
-          Digger.rotation.x = game.dig > 0 ? Math.sin(digPhase * Math.PI) * 0.34 : 0;
-          let bounce = speed > 0.1 ? Math.abs(Math.sin(elapsed * 8)) * 0.08 : 0;
-          Digger.position.y += bounce;
-          Digger.scale.set(1, game.dig > 0 ? 0.9 + Math.sin(digPhase * Math.PI) * 0.08 : 1, 1);
+          huntCam = lerp(huntCam, hunt ? 1 : 0, Math.min(1, dt * (hunt ? 2.2 : 2.8)));
+          intro = Math.max(0, intro - dt * 1.1);
 
+          // ---- camera: over the shoulder out here, lifted and looking down in a hunt
           let portrait = innerHeight > innerWidth,
-            follow = portrait ? new L(13.5, 17.5, 23.5) : new L(9.5, 9, 12.5),
-            desired = new L(game.x, qe(game.x, game.z), game.z).add(follow),
-            target = new L(game.x + (portrait ? -1.7 : 0), qe(game.x, game.z) + (portrait ? 1.7 : 1.25), game.z + (portrait ? -0.7 : 0));
-          ss.position.lerp(desired, 1 - Math.pow(0.001, dt));
-          Ye.target.lerp(target, 1 - Math.pow(0.001, dt));
-          cloudDeck.position.x = game.x * 0.18;
-          cloudDeck.children.forEach((cloud, index) => {
-            cloud.position.x += Math.sin(elapsed * 0.06 + index) * 0.0015;
+            pitch = clamp(0.125 + (portrait ? 0.2 : 0) + huntCam * (portrait ? 0.5 : 0.66) + intro * 0.22 + pitchBias, 0.02, 1.22),
+            dist = (portrait ? 10.3 : 7.2) + huntCam * (portrait ? 8.2 : 8.4) + intro * 4.6,
+            dirX = Math.sin(camYaw),
+            dirZ = Math.cos(camYaw),
+            fy = groundH(game.x, game.z) + 1.18 + huntCam * 0.6,
+            flat = Math.cos(pitch) * dist;
+          (camAim.set(game.x + dirX * huntCam * 0.4, fy, game.z + dirZ * huntCam * 0.4), camPos.set(game.x - dirX * flat, fy + Math.sin(pitch) * dist, game.z - dirZ * flat));
+          camera.position.lerp(camPos, 1 - Math.pow(0.0016, dt));
+          camera.lookAt(camAim);
+
+          // ---- the sun walks with you so the shadow map stays tight
+          (sun.position.set(game.x - 12, 22, game.z + 14), sun.target.position.set(game.x, groundH(game.x, game.z), game.z), sun.target.updateMatrixWorld());
+
+          // ---- the swarms
+          sites.forEach((s) => {
+            let active = hunt && hunt.site === s;
+            s.spread = lerp(s.spread === void 0 ? 1 : s.spread, active ? 1.5 : 1, Math.min(1, dt * 2));
+            s.bees.forEach((b, i) => {
+              let a = t * b.speed + b.phase,
+                R = b.rad * s.spread,
+                bx = s.x + Math.cos(a) * R,
+                bz = s.z + Math.sin(a) * R * 0.85;
+              (b.g.position.set(bx, groundH(bx, bz) + b.high * s.spread + Math.sin(a * b.bob * 2.1) * 0.28, bz), (b.g.rotation.y = -a + 0.3), (b.wing.rotation.x = Math.sin(t * 26 + i) * 0.75));
+            });
           });
-        }
-        var keys = {};
-        addEventListener("keydown", (event) => {
-          keys[event.code] = !0;
-          if (event.code === "KeyE" || event.code === "Space") {
-            event.preventDefault();
-            beginDig();
-          }
-        });
-        addEventListener("keyup", (event) => {
-          keys[event.code] = !1;
-        });
-        let stick = document.querySelector("#stick"),
-          knob = document.querySelector("#knob"),
-          updateStick = (event) => {
-            let box = stick.getBoundingClientRect(),
-              dx = event.clientX - (box.left + box.width / 2),
-              dy = event.clientY - (box.top + box.height / 2),
-              radius = box.width * 0.34,
-              length = Math.hypot(dx, dy);
-            if (length > radius) {
-              dx = (dx / length) * radius;
-              dy = (dy / length) * radius;
+
+          // ---- sky follows, clouds drift
+          skyDeck.position.set(game.x, 0, game.z);
+          clouds.forEach((c) => {
+            c.group.position.x += c.drift * dt;
+            c.group.position.x > 82 && (c.group.position.x = -82);
+          });
+
+          // ---- flying dirt
+          dirt.forEach((d) => {
+            if (d.life <= 0) return;
+            d.life -= dt;
+            if (d.life <= 0) {
+              d.mesh.visible = !1;
+              return;
             }
-            moveInput.x = dx / radius;
-            moveInput.y = dy / radius;
-            knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-          };
-        stick.addEventListener("pointerdown", (event) => {
-          moveInput.pointer = event.pointerId;
-          stick.setPointerCapture(event.pointerId);
-          updateStick(event);
-          event.preventDefault();
-        });
-        stick.addEventListener("pointermove", (event) => {
-          if (moveInput.pointer === event.pointerId) updateStick(event);
-        });
-        let releaseStick = (event) => {
-          if (moveInput.pointer !== event.pointerId) return;
-          moveInput.pointer = null;
-          moveInput.x = moveInput.y = 0;
-          knob.style.transform = "translate(-50%, -50%)";
-        };
-        stick.addEventListener("pointerup", releaseStick);
-        stick.addEventListener("pointercancel", releaseStick);
-        document.querySelector("#dig").addEventListener("pointerdown", (event) => {
-          event.preventDefault();
-          beginDig();
-        });
-        document.querySelector("#play").addEventListener("click", () => {
-          game.started = !0;
-          document.querySelector("#start").style.display = "none";
-          say("listen to each dig", 1.8);
-        });
-        function pg() {
-          (sg(de), de.clear(), (ul.length = 0), Object.values(Fn).forEach((t) => (t.length = 0)));
-          let i = vn[ne];
-          (Bn.background.setHex(i.sky),
-            Bn.fog.color.setHex(i.fog),
-            document.documentElement.style.setProperty("--accent", i.accent),
-            (document.body.dataset.style = ne),
-            (document.querySelector("meta[name=theme-color]").content = "#" + i.sky.toString(16).padStart(6, "0")),
-            rg(!0),
-            ag(),
-            og(),
-            lg(),
-            dg(),
-            ug(),
-            fg(),
-            makeClouds());
+            ((d.vy -= 9.6 * dt), (d.mesh.position.x += d.vx * dt), (d.mesh.position.y += d.vy * dt), (d.mesh.position.z += d.vz * dt), (d.mesh.rotation.x += dt * 7), (d.mesh.rotation.y += dt * 5));
+          });
+
+          // ---- the clock (time, never proximity)
+          if (hunt) {
+            let s = Math.max(0, Math.ceil(hunt.t));
+            if (s !== lastSec) {
+              lastSec = s;
+              let el = document.querySelector("#huntClock");
+              ((el.textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0")), el.classList.toggle("urgent", s <= 20));
+            }
+            document.querySelector("#huntFill").style.transform = "scaleX(" + Math.max(0, hunt.t / HUNT_TIME).toFixed(3) + ")";
+          } else lastSec = -1;
         }
-        var ll = 0,
-          cl = performance.now(),
-          previousFrame = performance.now();
-        function hh() {
-          let i = innerWidth,
-            t = innerHeight;
-          (en.setPixelRatio(Math.min(devicePixelRatio || 1, 1.45)), en.setSize(i, t, !1), (ss.aspect = i / t), ss.updateProjectionMatrix());
+
+        function resize() {
+          let w = innerWidth,
+            h = innerHeight;
+          (gl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.4)), gl.setSize(w, h, !1), (camera.aspect = w / h), (camera.fov = h > w ? 48 : 40), camera.updateProjectionMatrix());
         }
-        addEventListener("resize", () => {
-          hh();
-        });
-        function uh(i) {
-          let t = i * 0.001,
-            dt = Math.min(0.033, Math.max(0.001, (i - previousFrame) * 0.001));
-          previousFrame = i;
-          updateGame(dt, t);
-          (ul.forEach((e, n) => {
-            let s = t * e.speed + e.phase;
-            (e.bug.position.set(e.home[0] + Math.cos(s) * e.radius, e.home[1] + Math.sin(s * 2.1) * 0.22, e.home[2] + Math.sin(s) * e.radius * 0.72), (e.bug.rotation.y = -s + 0.25));
-            let r = Math.sin(t * 18 + n) * 0.72;
-            ((e.wings[0].rotation.x = -0.55 - r), (e.wings[1].rotation.x = 0.55 + r));
-          }),
-            Fn.ribbons.forEach((e, n) => {
-              ((e.mesh.position.x = (n - 1) * 0.12 + Math.sin(t * 2.3 + e.phase) * 0.035), (e.mesh.material.emissiveIntensity = 0.45 + Math.sin(t * 3.1 + e.phase) * 0.13));
-            }),
-            Fn.highlights.forEach((e) => {
-              let n = (t * e.speed + e.phase) % 1;
-              (e.mesh.position.set(e.x + Math.sin(t * 4 + e.phase * 8) * 0.07, e.top - n * e.travel, 0.64), (e.mesh.material.opacity = Math.sin(n * Math.PI) * 0.72));
-            }),
-            Fn.splashes.forEach((e) => {
-              let n = (t * e.speed + e.phase) % 1,
-                s = e.angle;
-              (e.mesh.position.set(Math.cos(s) * e.radius * n, 0.14 + Math.sin(n * Math.PI) * (0.38 + e.radius * 0.32), 0.68 + Math.sin(s) * e.radius * n + 0.28 * n),
-                (e.mesh.material.opacity = Math.sin(n * Math.PI) * 0.86));
-              let r = 0.45 + Math.sin(n * Math.PI) * 0.8;
-              e.mesh.scale.setScalar(r);
-            }),
-            Fn.mist.forEach((e) => {
-              let n = (t * e.speed + e.phase) % 1;
-              (e.mesh.position.set(e.x + Math.sin(t + e.phase * 9) * 0.12, 0.18 + n * 0.58, 0.82 + n * 0.32), (e.mesh.material.opacity = Math.sin(n * Math.PI) * 0.25));
-              let s = 0.55 + n * 1.5;
-              e.mesh.scale.set(1.6 * s, 0.58 * s, s);
-            }),
-            Ye.update(),
-            en.render(Bn, ss),
-            ll++,
-            i - cl > 1200 && ((document.querySelector("#fps").textContent = Math.round((ll * 1e3) / (i - cl)) + " fps"), (ll = 0), (cl = i)),
-            requestAnimationFrame(uh));
+        addEventListener("resize", resize);
+
+        // phone hardware varies wildly and we cannot know it in advance, so the
+        // meadow thins its own grass until the frame rate is comfortable (DEC-07).
+        var quality = 1,
+          qualityLooks = 0;
+        function watchFrameRate(fps) {
+          if (!game.started || qualityLooks >= 5) return;
+          qualityLooks++;
+          // the first window after starting contains the build hitch — ignore it
+          if (qualityLooks === 1 || fps >= 42 || quality <= 0.3) return;
+          quality *= 0.6;
+          foliage.forEach((f) => (f.mesh.count = Math.max(10, Math.round(f.full * quality))));
+          quality < 0.45 && gl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.1));
         }
+
+        var frames = 0,
+          fpsAt = performance.now(),
+          last = performance.now();
+        function frame(now) {
+          let wall = Math.max(0.001, (now - last) * 0.001),
+            dt = Math.min(0.033, wall);
+          last = now;
+          (update(dt, now * 0.001, wall), gl.render(scene, camera), frames++);
+          if (now - fpsAt > 1200) {
+            let fps = Math.round((frames * 1e3) / (now - fpsAt));
+            ((document.querySelector("#fps").textContent = fps + " fps"), watchFrameRate(fps), (frames = 0), (fpsAt = now));
+          }
+          requestAnimationFrame(frame);
+        }
+
+        // ---------------------------------------------------------- grow the world
         try {
-          (pg(),
-            hh(),
-            updateGame(0.016, 0),
-            (document.body.dataset.ready = "true"),
-            (Ye.enabled = !1),
-            (window.__littleDigger = {
-              get state() {
-                return {
-                  style: ne,
-                  objects: de.children.length,
-                  started: game.started,
-                  player: { x: game.x, z: game.z, digging: game.dig > 0 },
-                  targets: buried.length,
-                  finds: game.finds,
-                  proximityUI: !1,
-                  water: "Q-13 layered ribbons, highlights, foam, splashes, and mist",
-                  ready: document.body.dataset.ready === "true",
-                };
-              },
-            }),
-            requestAnimationFrame(uh));
-        } catch (i) {
-          (console.error(i), (document.querySelector("#loading").style.display = "none"), (document.querySelector("#error").style.display = "grid"));
+          (beeAssets(), holeAssets(), buildGround(), buildFoliage(), buildProps(), buildDigger(), dirtAssets(), buildClouds());
+          for (let i = 1; i <= 4; i++) makeSite(i, null);
+          ((game.siteSeed = 4), (document.body.dataset.hunt = "false"));
+          (resize(), update(0.016, 0, 0.016), (document.body.dataset.ready = "true"));
+          window.__littleDigger = {
+            get state() {
+              return {
+                world: "open meadow",
+                objects: world.children.length,
+                foliageTypes: world.userData.foliageTypes,
+                legs: legs.length,
+                sites: sites.length,
+                started: game.started,
+                hunting: !!hunt,
+                huntTime: hunt ? Math.round(hunt.t) : null,
+                huntName: hunt ? hunt.site.name : null,
+                found: hunt ? hunt.found.length : 0,
+                holes: holes.length,
+                banked: game.banked,
+                quality: quality,
+                report: document.querySelector("#report").classList.contains("show"),
+                player: { x: Number(game.x.toFixed(2)), z: Number(game.z.toFixed(2)), digging: game.dig > 0 },
+                nearestSite: sites.length ? Number(Math.min(...sites.map((s) => Math.hypot(game.x - s.x, game.z - s.z))).toFixed(2)) : null,
+                proximityUI: !1,
+                trees: 0,
+                waterfalls: 0,
+                ready: document.body.dataset.ready === "true",
+              };
+            },
+            walkTo(x, z) {
+              ((game.x = x), (game.z = z));
+            },
+            dig: beginDig,
+            endHunt: endHunt,
+          };
+          requestAnimationFrame(frame);
+        } catch (err) {
+          (console.error(err), (document.querySelector("#loading").style.display = "none"), (document.querySelector("#error").style.display = "grid"));
         }
       })();
       /*! Bundled license information:
