@@ -25,8 +25,10 @@
   .st{font-size:11px;color:#c0b4d8;margin:3px 0;letter-spacing:1px;display:flex;justify-content:space-between}
   .st b{color:#e8b830}
   .row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}
+  /* 13px of padding, not 12: at font-size 11 that is what puts the box over the 44px
+     thumb minimum. Measured at a real 390x844 viewport, where 12px lands on 43. */
   button.b{pointer-events:auto;cursor:pointer;font-family:inherit;font-weight:bold;font-size:11px;
-    letter-spacing:2px;padding:12px 10px;background:#5ed986;color:#0b2a16;border:3px solid #08060c;
+    letter-spacing:2px;padding:13px 10px;background:#5ed986;color:#0b2a16;border:3px solid #08060c;
     box-shadow:4px 4px 0 #08060c;flex:1;min-width:100px;text-transform:uppercase;transition:transform .05s,box-shadow .05s}
   button.b:active{transform:translate(4px,4px);box-shadow:0 0 0 #08060c}
   button.b.a{background:#f09a52;color:#361a06}
@@ -36,7 +38,7 @@
   .it .t{flex:1}
   .it .n{font-size:11px;letter-spacing:1px;color:#e8b830;margin-bottom:3px}
   .it .d{font-size:10px;line-height:1.5;color:#9c90b4}
-  .it button.b{flex:0 0 auto;min-width:70px;padding:9px 6px}
+  .it button.b{flex:0 0 auto;min-width:70px;padding:13px 8px}
   .it.off{opacity:.45}
   .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px}
   .fc{background:#161020;border:3px solid #08060c;padding:5px;text-align:center}
@@ -55,11 +57,21 @@
   #menu:active{background:#5ed986}
   #menu:active i{background:#0b2a16}
   #menu[hidden]{display:none}
+  /* Restart sits opposite the menu, same 46px thumb target. Top-left is the one corner
+     nothing else uses, and a retry has to be reachable without crossing the board with
+     your hand. */
+  #restart{position:absolute;top:0;left:0;width:46px;height:46px;padding:0;margin:0;
+    pointer-events:auto;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    background:#392c4c;border:0;border-right:2px solid #08060c;border-bottom:2px solid #08060c;
+    font-family:inherit;font-size:24px;line-height:1;color:#c0b4d8}
+  #restart:active{background:#e8b830;color:#3a2a06}
+  #restart[hidden]{display:none}
 </style>
 </head>
 <body>
 <div id="wrap"><div id="stage"><canvas id="cv"></canvas><div id="ui"></div>
-<button id="menu" aria-label="Menu" hidden><i></i><i></i><i></i></button></div></div>
+<button id="menu" aria-label="Menu" hidden><i></i><i></i><i></i></button>
+<button id="restart" aria-label="Restart this board" hidden>&#8635;</button></div></div>
 <script>
 "use strict";
 /* ==================================================================
@@ -75,12 +87,16 @@ const TILE = 16, COLS = 10, ROWS = 16, HUD = 28;
 // CSS pixels. Nothing on the canvas may be drawn under it, so the readouts reserve this
 // much width; PIPROW is the pick-pip wrap, kept short enough to clear the bag meter.
 const MENUW = 36, PIPROW = 8;
+// The laboratory's restart button takes the mirror corner, so the HUD gives up the
+// same width on the left whenever a handcrafted board is loaded.
+const RESTARTW = 36;
 const W = COLS*TILE, H = HUD + ROWS*TILE;      // 160 x 284
 const idx = (c,r) => r*COLS + c;
 
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d',{alpha:false});
 const uiEl = document.getElementById('ui'), stage = document.getElementById('stage');
 const menuEl = document.getElementById('menu');
+const restartEl = document.getElementById('restart');
 
 let SCALE = 2;
 function fit(){
@@ -311,7 +327,7 @@ function getScreen(d, entryCol){
   return genScreen(d, want, SV.reroll[k]||0);
 }
 function storeScreen(d, st){
-  if(!st) return;
+  if(!st || lab) return;                 // a lab board is a question, not a place you dug
   SV.screens[String(d)] = {g:Array.from(st.g), f:Array.from(st.f), ec:st.ec};
 }
 
@@ -615,9 +631,99 @@ function resolve(b0, action){
   return {board:b, events:events, ok:true};
 }
 
+/* ================= THE LABORATORY (LAB-02) =================
+
+Handcrafted boards, authored as text. DEC-19 builds the twelve M0 boards by hand because a
+generator hides whether the design itself is good -- a bad result reads as a bad seed. So
+the boards have to be writable by a person, and adding one has to cost one text block and
+one nothing else.
+
+A board is ROWS lines of exactly COLS characters, plus a name, a one-line statement of what
+it teaches, and a pick budget. Legend below; unknown characters are a parse error rather
+than a silent empty cell, because a typo that quietly becomes air would be a board that
+lies about what was authored.
+
+Later mechanics add legend entries and nothing else: LAB-06 a beam in the world, LAB-07 a
+balloon, LAB-08 water, LAB-09 the fossil, LAB-10 the worm, LAB-11 the TNT. */
+
+const LEGEND = {
+  '.':0,             // air
+  '#':2,             // stone     -- structural, hangs off the walls
+  ',':1,             // dirt      -- loose, holds nothing up
+  '=':10,            // tile      -- structural, reads as built rather than dug
+  '~':5,             // slate
+  'c':3, 'i':4, 'v':6, 'g':8,   // copper, iron, silver, gold
+  'p':11,            // pipe
+  'r':12,            // root
+  '|':14             // beam, pre-placed by the author
+};
+const PLAYER_CH = '@';
+
+// The twelve M0 boards live here (LAB-12 authors them). One entry is one board: no ids to
+// keep in sync, no second list to update, no unlock order -- DEC-19 keeps the level select
+// a flat list for the whole milestone.
+const BOARDS = [
+  // Board 1 of the twelve. One pillar holds one mass: walk two steps, cut the pillar,
+  // watch the copper drop exactly where the preview said. LAB-12 authors the other eleven.
+  {name:'FIRST CUT', teaches:'Cutting support drops the mass.', picks:3, art:[
+    '##########',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#..cccc..#',
+    '#..#.....#',
+    '#@.#.....#',
+    '#========#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '#........#',
+    '##########',
+    '##########'].join('\n')}
+];
+
+// Text in, board out. Every failure names the line and the character, because an authoring
+// format you cannot debug is an authoring format nobody uses.
+function parseBoard(def){
+  const lines = def.art.split('\n').filter(l => l.length);
+  if(lines.length !== ROWS) throw new Error(def.name+': got '+lines.length+' rows, need '+ROWS);
+  const g = new Uint8Array(COLS*ROWS), f = new Uint8Array(COLS*ROWS);
+  let pcx = -1, pcy = -1;
+  for(let r=0;r<ROWS;r++){
+    if(lines[r].length !== COLS) throw new Error(def.name+' row '+r+': got '+lines[r].length+' cols, need '+COLS);
+    for(let c=0;c<COLS;c++){
+      const ch = lines[r][c];
+      if(ch === PLAYER_CH){
+        if(pcx >= 0) throw new Error(def.name+': two player starts');
+        pcx = c; pcy = r; continue;                       // the player stands in air
+      }
+      if(!(ch in LEGEND)) throw new Error(def.name+' at '+c+','+r+': unknown character "'+ch+'"');
+      g[idx(c,r)] = LEGEND[ch];
+    }
+  }
+  if(pcx < 0) throw new Error(def.name+': no player start ("'+PLAYER_CH+'")');
+  // The board must stand up on its own. Settle it with no player in it (row -1 takes the
+  // player out of the simulation) and demand that nothing moved. Otherwise the board that
+  // loads is not the board that was drawn, and every later reading of it -- by the author,
+  // by a playtester, by the next agent -- is a reading of something nobody ever saw.
+  const probe = makeBoard(g, f, 0, -1, 0, {});
+  const settled = resolve(probe, {t:ACT.SETTLE}).board.cell;
+  for(let i=0;i<g.length;i++) if(g[i] !== settled[i])
+    throw new Error(def.name+': not stable as drawn -- cell '+(i%COLS)+','+((i/COLS)|0)+
+                    ' moves before the player acts. Anchor it to a wall or a support.');
+  return {g:g, f:f, ec:pcx, start:{c:pcx, r:pcy}, picks:def.picks, name:def.name, teaches:def.teaches};
+}
+
+// Parsed once at load so an authoring mistake is a loud failure at boot rather than a
+// broken level select three taps in.
+const BOARDS_PARSED = BOARDS.map(parseBoard);
+
 /* ---------------- run state ---------------- */
 let mode = 'boot';           // boot | play | anim | panel
 let scr = null;              // {g,f,ec}
+let lab = null;              // {i, def} while a handcrafted board is loaded, else null
 let depth = 0, pc = 0, pr = 0;
 let picks = 0, haul = 0, beamsLeft = 0;
 let pending = null;          // previewed, not yet committed
@@ -769,7 +875,7 @@ function commitBreak(){
   // The bigger the thing you just cut loose, the longer the world holds its breath.
   hitstop = Math.min(.10, .035 + p.sim.frames.length*.012);
   if(p.sim.frames.length>2) noise(.3,.22,600);
-  applyBiomeQuirk();
+  if(!lab) applyBiomeQuirk();      // authored boards are exactly what was authored
   startAnim(p.sim);
 }
 
@@ -855,6 +961,81 @@ function placeBeam(c,r){
   return true;
 }
 
+/* ---------------- the laboratory: load, restart, choose ---------------- */
+// Load board i exactly as authored. Everything derived is rebuilt from the parse, so this
+// doubles as restart -- there is no second code path that could drift from it.
+function loadLab(i){
+  const def = BOARDS_PARSED[i];
+  lab = {i:i, def:def};
+  depth = 0; haul = 0;
+  scr = {g:Uint8Array.from(def.g), f:Uint8Array.from(def.f), ec:def.ec};
+  pc = def.start.c; pr = def.start.r;
+  picks = def.picks; beamsLeft = 0;
+  pending = null; anim = null; mode = 'play';
+  // Drop the player onto whatever is under the authored start, through the same resolve
+  // every other action uses, so an authored board and a played board agree from frame one.
+  const s = pendingFrom(resolve(liveBoard(), {t:ACT.SETTLE}), pc, pr).sim;
+  if(s.frames.length) scr.g = s.frames[s.frames.length-1].g;
+  pc = s.pc; pr = s.pr;
+  dig.x = pc; dig.y = pr; dig.sq = .7; dig.swing = -1; dig.hop = 0;
+  slide = 1; hudBag = 0;
+  parts.length = 0; floats.length = 0; pips.length = 0; rings.length = 0; flashes.length = 0;
+  if(!motes.length) for(let k=0;k<14;k++) motes.push(newMote(true));
+  clearUI(); restartEl.hidden = false;
+  toast(def.name);
+}
+
+// One thumb, no confirmation. A puzzle you cannot cheaply retry is a puzzle nobody
+// experiments with, and experimenting is the entire thing M0 is trying to measure.
+function restartLab(){
+  if(!lab) return;
+  tone(440,.05,'square',.08); buzz(10);
+  loadLab(lab.i);
+}
+
+function leaveLab(){ lab = null; restartEl.hidden = true; surface(); }
+
+// Reached from the surface and from pause. A flat list: no stars, no scores, no unlock
+// order -- DEC-19 keeps it that way for the whole milestone.
+function labPanel(back){
+  mode = 'panel'; restartEl.hidden = true;
+  const rows = BOARDS_PARSED.map((b,i) => `<div class="it"><div class="t">
+      <div class="n">${i+1}. ${b.name}</div><div class="d">${b.teaches}</div></div>
+      <button class="b" data-lab="${i}">${b.picks} PICKS</button></div>`).join('');
+  ui(`<div class="panel"><div class="card">
+    <h1>THE<br>LABORATORY</h1>
+    <h2>${BOARDS_PARSED.length} BOARD${BOARDS_PARSED.length===1?'':'S'}</h2>
+    <p class="s">Handcrafted problems. Each one is asking a single question. Restart costs
+    nothing, so try the thing you think will not work.</p>
+    ${rows}
+    <div class="row"><button class="b g" id="back">BACK</button></div>
+  </div></div>`);
+  uiEl.querySelectorAll('[data-lab]').forEach(n => {
+    n.onclick = () => { ac(); tone(700,.04,'square',.08); loadLab(+n.getAttribute('data-lab')); };
+  });
+  on('#back', back || surface);
+}
+
+// A lab board that has run out of road. No banking, no burial cost, no world state: the
+// only two things worth offering are the same board again or a different one.
+function labEnd(title, why){
+  mode = 'panel'; restartEl.hidden = true;
+  if(title === 'BURIED'){ noise(.5,.3,300); tone(90,.5,'sawtooth',.13,40); buzz([40,50,40,50,140]); }
+  else { tone(392,.12,'triangle',.11); buzz(20); }
+  ui(`<div class="panel"><div class="card">
+    <h1>${title}</h1>
+    <h2 class="${title==='BURIED'?'bad':''}">${lab.def.name}</h2>
+    <p class="s">${why}</p>
+    <p class="s">${lab.def.teaches}</p>
+    <div class="row">
+      <button class="b" id="again">TRY IT AGAIN</button>
+      <button class="b g" id="levels">THE BOARDS</button>
+    </div>
+  </div></div>`);
+  on('#again',  ()=>{ clearUI(); loadLab(lab.i); });
+  on('#levels', ()=>labPanel(surface));
+}
+
 /* ---------------- descending, banking, dying ---------------- */
 function enterScreen(d, entryCol){
   if(scr) storeScreen(depth, scr);
@@ -909,6 +1090,7 @@ function reshapeScreen(){
 }
 
 function fellThrough(){
+  if(lab){ labEnd('THROUGH THE FLOOR', 'You went out the bottom of the board.'); return; }
   const bonus = Math.max(0, picks)*3;                // leftover picks are the mastery score
   if(bonus>0){ haul = Math.min(CAP(), haul+bonus); fl(pc*TILE, HUD+(ROWS-2)*TILE, '+'+bonus, '#5ed986'); }
   tone(140,.2,'sine',.13,70);
@@ -919,6 +1101,12 @@ function fellThrough(){
 // worse trip, not a punishment -- that keeps efficiency and danger as separate pressures
 // and keeps a three-minute session from ever ending in nothing.
 function endLeg(reason){
+  if(lab){
+    labEnd(reason==='buried' ? 'BURIED' : 'OUT OF PICKS',
+           reason==='buried' ? 'The mass came down on top of you instead of under you.'
+                             : 'No swing left that does not bury you.');
+    return;
+  }
   mode = 'panel';
   const buried = reason==='buried';
   const amount = haul; haul = 0;
@@ -969,8 +1157,8 @@ function landingPanel(){
 
 /* ---------------- menus ---------------- */
 // The menu button is visible exactly when there is no panel already covering the screen.
-function clearUI(){ uiEl.innerHTML=''; menuEl.hidden = false; }
-function ui(h){ uiEl.innerHTML=''; menuEl.hidden = true;
+function clearUI(){ uiEl.innerHTML=''; menuEl.hidden = false; restartEl.hidden = !lab; }
+function ui(h){ uiEl.innerHTML=''; menuEl.hidden = true; restartEl.hidden = true;
   const d=document.createElement('div'); d.innerHTML=h.trim(); uiEl.appendChild(d.firstChild); }
 function on(sel,fn){ const n=uiEl.querySelector(sel); if(n) n.onclick=()=>{ ac(); tone(700,.04,'square',.08); fn(); }; }
 
@@ -1044,7 +1232,7 @@ function surface(){
   save();
   const lm = liftMax();
   ui(`<div class="panel"><div class="card">
-    <h1>THE LITTLE<br>DIGGER</h1>
+    <h1>DOWNSHAFT</h1>
     <h2>YOUR BACKYARD</h2>
     <p class="s">The hole is where you left it.</p>
     <div class="st"><span>PURSE</span><b>${SV.bank}</b></div>
@@ -1060,8 +1248,10 @@ function surface(){
       <button class="b g" id="finds">THE HOLE</button>
       <button class="b g" id="how">HOW</button>
     </div>
+    <div class="row"><button class="b a" id="lab">THE LABORATORY</button></div>
     <div class="row"><button class="b g" id="wipe">START THE WHOLE HOLE OVER</button></div>
   </div></div>`);
+  on('#lab',  ()=>labPanel(surface));
   on('#dig',  ()=>{ clearUI(); enterScreen(1, COLS>>1); });
   on('#lift', ()=>{ clearUI(); enterScreen(lm, COLS>>1); });
   on('#shop', ()=>shop(surface));
@@ -1095,6 +1285,28 @@ let pausedFrom = 'play';
 function pausePanel(){
   if(mode!=='panel') pausedFrom = mode;
   mode='panel';
+  if(lab){
+    ui(`<div class="panel"><div class="card">
+      <h1>${lab.def.name}</h1><h2>BOARD ${lab.i+1} OF ${BOARDS_PARSED.length}</h2>
+      <p class="s">${lab.def.teaches}</p>
+      <div class="st"><span>PICKS LEFT</span><b>${picks}</b></div>
+      <div class="row"><button class="b" id="res">BACK TO THE BOARD</button></div>
+      <div class="row">
+        <button class="b a" id="again">RESTART IT</button>
+        <button class="b g" id="levels">THE BOARDS</button>
+      </div>
+      <div class="row">
+        <button class="b g" id="mute">SOUND ${MUTED?'OFF':'ON'}</button>
+        <button class="b g" id="out">LEAVE THE LAB</button>
+      </div>
+    </div></div>`);
+    on('#res',    ()=>{ clearUI(); mode=pausedFrom; });
+    on('#again',  ()=>{ clearUI(); loadLab(lab.i); });
+    on('#levels', ()=>labPanel(surface));
+    on('#mute',   ()=>{ MUTED=!MUTED; pausePanel(); });
+    on('#out',    leaveLab);
+    return;
+  }
   // Only offered when the screen really is finished with you, so it stays an escape
   // hatch rather than a free re-roll to fish for a richer screen.
   const wedged = pausedFrom==='play' && scr && !safeSwingExists();
@@ -1444,11 +1656,12 @@ function render(){
 
 function drawHUD(){
   px(0,0,W,HUD,'#120e1a'); px(0,HUD-1,W,1,'#08060c');
-  textSh('DEPTH', 3, 3, '#665a80');
+  const L = lab ? RESTARTW + 2 : 3;              // clear of whichever buttons are showing
+  textSh(lab ? 'BOARD' : 'DEPTH', L, 3, '#665a80');
   // The depth number kicks a pixel when it changes -- the one number the whole run is about.
-  textSh(String(depth), 3, 11 - (popDepth>.5?1:0), popDepth>0?'#fff3c0':'#e8b830', 2);
+  textSh(String(lab ? lab.i+1 : depth), L, 11 - (popDepth>.5?1:0), popDepth>0?'#fff3c0':'#e8b830', 2);
 
-  const px0 = 40;                                // picks as pips: a count you read at a glance
+  const px0 = L + 37;                            // picks as pips: a count you read at a glance
   for(let i=0;i<Math.max(0,picks);i++){
     const x = px0 + (i%PIPROW)*5, y = 4 + ((i/PIPROW)|0)*7;
     px(x,y,3,5,'#5ed986'); px(x+1,y+5,1,1,'#3a8a55');
@@ -1460,7 +1673,8 @@ function drawHUD(){
   }
   ctx.globalAlpha = 1;
   if(picks<=0 && mode!=='panel' && scr) textSh('NO PICKS', px0, 5, '#e0604f');
-  if(depth>0 && depth%3!==0) textSh((3-(depth%3))+' TO LAND', px0, 19, '#665a80');
+  if(!lab && depth>0 && depth%3!==0) textSh((3-(depth%3))+' TO LAND', px0, 19, '#665a80');
+  if(lab){ textSh(lab.def.name.slice(0,12), px0, 19, '#665a80'); return; }
 
   const bw = 40, bx = W-MENUW-bw-3, cap = Math.max(1,CAP());
   textSh('BAG', bx, 3, '#665a80');
@@ -1521,6 +1735,7 @@ cv.addEventListener('pointerdown', e=>{ e.preventDefault(); ac();
 // simulation being in a good mood.
 menuEl.addEventListener('click', e=>{ e.preventDefault(); ac();
   if(mode!=='panel') pausePanel(); }, {passive:false});
+restartEl.addEventListener('click', e=>{ e.preventDefault(); ac(); restartLab(); }, {passive:false});
 
 /* ---------------- update ---------------- */
 function update(dt){

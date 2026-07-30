@@ -55,5 +55,11 @@ build, nothing 3-D. Authored pixel art will eventually reach the game through th
 **Before designing anything**, read the ACCEPTED ADRs via `ishoo_decision` (`op:list`). DEC-19
 (prove the board first) and DEC-15 (deeper is funnier) decide most arguments before they start.
 
-**Verify on a phone-shaped viewport.** Headless Chrome at 844x390 and 390x844 catches layout
-and control-placement problems before the designer wastes a break on them.
+**Verify on a phone-shaped viewport — but measure it, do not trust `--window-size`.** Chrome
+on this machine refuses to make a window narrower than about 504 CSS px, so
+`--headless --window-size=390,844 --screenshot` silently renders a 504px-wide page into a
+390px image: everything looks clipped and nothing is. Drive the page over CDP with
+`Emulation.setDeviceMetricsOverride` instead and assert `innerWidth` is what you asked for
+before you believe a single measurement. Check 390x844 and 844x390, and measure real
+`getBoundingClientRect()` values rather than reading pixels off a screenshot. Thumb targets
+are 44 CSS px on their shortest side.
