@@ -124,9 +124,7 @@ Full text: `ishoo decision list`, `ishoo decision show DEC-09`.
 | **DEC-15** | The tone is escalating absurdism, ordered by depth |
 | **DEC-16** | The tap is the product: feel ships with the mechanic, not after it |
 
-DEC-01 to DEC-06 and DEC-08 are superseded. They describe *The Little Digger*, a top-down
-creature hunt this project no longer builds; the reasoning chain is kept in Ishoo and the
-material is archived at the git tag `archive/little-digger`.
+DEC-01 to DEC-06 and DEC-08 are superseded; the reasoning chain is kept in Ishoo.
 
 ## 9. WHAT IS OPEN
 
@@ -148,6 +146,10 @@ vampires as residents. All of it is welcome and none of it is committed — it g
 Q-03 and Q-17.
 
 ## 10. ALSO IN THIS FOLDER
+
+[`north-star-catalogue.md`](north-star-catalogue.md) — every object in `north-star.png`, item
+by item, with the role it would play in the game, what already exists in the build, and the
+seven mechanics the picture is asking for. Read it before proposing content.
 
 [`philosophy.md`](philosophy.md) — the designer's own preferences: what he likes in games and
 why, from Stardew to Grindstone to Plants vs. Zombies. Not about DOWNSHAFT specifically, and

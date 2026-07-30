@@ -5,10 +5,9 @@ This repository is managed by Ishoo and mapped by SEMMAP. Before handling the fi
 ## DOWNSHAFT — house rules
 
 **The game is DOWNSHAFT (DEC-09).** A guy in his backyard with a pickaxe, digging down, and it
-gets stranger the deeper he goes. If you find a doc, comment or issue that talks about a
-creature that smells buried treasure, a hunt, or its voice, that is *The Little Digger* — a
-superseded direction archived at the git tag `archive/little-digger`. Do not build from it.
-Read [`docs/design.md`](docs/design.md) before designing anything.
+gets stranger the deeper he goes. Read [`docs/design.md`](docs/design.md) before designing
+anything, and [`docs/north-star-catalogue.md`](docs/north-star-catalogue.md) before proposing
+content. If something in the tree contradicts an ACCEPTED ADR, it is stale — supersede it.
 
 **Phone-native or it does not count (DEC-07).** The designer tests on a phone browser during
 the day; that is the only testing opportunity that exists. Everything must be openable on a

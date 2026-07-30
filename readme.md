@@ -33,14 +33,8 @@ banks something permanent, and the shaft stays carved between visits.
 | `index.html` | the game. one file. no dependencies, no build step. |
 | `docs/design.md` | the design document — read this first |
 | `docs/north-star.png` | the art and tone reference of record |
+| `docs/north-star-catalogue.md` | every object in that image, with the role it plays |
 | `docs/philosophy.md` | the designer's own game preferences, project-independent |
-
-Retired material is in git, not in the tree:
-
-```sh
-git show archive/little-digger:old/deep.html      # the pre-DOWNSHAFT prototypes
-git show iteration/3d-diorama:index.html          # the shelved 3-D build
-```
 
 ## Decisions and open questions
 
@@ -66,10 +60,9 @@ Four rules worth knowing before touching anything:
 
 ## Status
 
-Playable prototype, re-founded on DOWNSHAFT (DEC-09) after a week of exploring other shapes.
-The shaft, the collapse, five depth bands, finds, landings, the lift and a shop all exist. The
-art is placeholder pixel work moving toward `north-star.png`, via an importer that does not
-exist yet (TOOL-01).
+Playable prototype. The shaft, the collapse, five depth bands, finds, landings, the lift and a
+shop all exist. The art is placeholder pixel work moving toward `north-star.png`, via an
+importer that does not exist yet (TOOL-01).
 
 The question that decides whether this is a game is Q-04: whether digging is deep enough to
 carry hundreds of hours without turning into grind.
