@@ -875,7 +875,6 @@ function commitBreak(){
   // The bigger the thing you just cut loose, the longer the world holds its breath.
   hitstop = Math.min(.10, .035 + p.sim.frames.length*.012);
   if(p.sim.frames.length>2) noise(.3,.22,600);
-  if(!lab) applyBiomeQuirk();      // authored boards are exactly what was authored
   startAnim(p.sim);
 }
 
@@ -922,33 +921,15 @@ function finishSim(s){
   if(picks<=0 || !safeSwingExists()) endLeg('stuck');
 }
 
-// One new behaviour per layer, applied after the dust settles.
-function applyBiomeQuirk(){
-  const bi = biomeIdx(depth);
-  if(bi===3 && Math.random()<.45){                     // roots grow back
-    const opts=[];
-    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
-      if(scr.g[idx(c,r)] || (c===pc&&r===pr)) continue;
-      const nb=[[c-1,r],[c+1,r],[c,r-1],[c,r+1]];
-      for(const p of nb){ const nc=p[0],nr=p[1];
-        if(nc<0||nc>=COLS||nr<0||nr>=ROWS) continue;
-        if(scr.g[idx(nc,nr)]===12){ opts.push(c,r); break; } }
-    }
-    if(opts.length){ const k=((Math.random()*(opts.length/2))|0)*2;
-      scr.g[idx(opts[k],opts[k+1])] = 12; toast('IT GREW BACK'); }
-  } else if(bi===4 && Math.random()<.35){              // it moves when you are not looking
-    const opts=[];
-    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
-      if(scr.g[idx(c,r)]!==13) continue;
-      const nc=c+Math.sign(pc-c), nr=r+Math.sign(pr-r);
-      if(nc<0||nc>=COLS||nr<0||nr>=ROWS) continue;
-      if(!scr.g[idx(nc,nr)] && !(nc===pc&&nr===pr)) opts.push(c,r,nc,nr);
-    }
-    if(opts.length){ const k=((Math.random()*(opts.length/4))|0)*4;
-      scr.g[idx(opts[k+2],opts[k+3])] = 13; scr.g[idx(opts[k],opts[k+1])] = 0;
-      tone(70,.18,'sine',.12,50); toast('SOMETHING MOVED'); }
-  }
-}
+/* applyBiomeQuirk is deleted.
+   It ran after every commit and rewrote the board -- regrowing a root, walking a block of
+   living meat one cell toward you -- at random, outside resolve, after the preview had
+   already been computed and shown. That made it the one thing in the file that could make
+   the preview a lie, which is the single failure DEC-19's first completion criterion is
+   watching for. It was also unpreviewable in principle: it fired on a coin flip.
+   Q-03 ruled regrowing roots and living material LATER, and LAB-10's worm is the M0
+   representative for anything that changes the board after you act -- deterministically,
+   strictly after the action resolves, at a stated boundary the game tells you about. */
 
 function placeBeam(c,r){
   if(!SV.beams || beamsLeft<=0) return false;
@@ -982,7 +963,22 @@ function loadLab(i){
   parts.length = 0; floats.length = 0; pips.length = 0; rings.length = 0; flashes.length = 0;
   if(!motes.length) for(let k=0;k<14;k++) motes.push(newMote(true));
   clearUI(); restartEl.hidden = false;
-  toast(def.name);
+  if(!previewBoundaryNotice()) toast(def.name);
+}
+
+// Where the promise stops. The preview is exact about the action you are committing, all
+// the way to the settled state. It does NOT predict what a living thing does on its own
+// turn afterwards. That is a real limit, so the game says it out loud the first time the
+// player meets something that takes turns, rather than letting them find out by losing.
+// (LAB-10's worm is the first and only M0 entity; boards without one never see this.)
+let boundarySaid = false;
+function previewBoundaryNotice(){
+  if(boundarySaid || !scr) return false;
+  const b = liveBoard();
+  if(!b.entities.length) return false;
+  boundarySaid = true;
+  toast('THE PREVIEW IS EXACT. WHAT LIVES HERE MOVES AFTER YOU DO.');
+  return true;
 }
 
 // One thumb, no confirmation. A puzzle you cannot cheaply retry is a puzzle nobody
@@ -1527,33 +1523,83 @@ function render(){
 
   if(scr) lightPass(dig.x+.5, dig.y+.5);
 
-  // preview: exactly what this swing does, before it costs anything
+  // THE PREVIEW (LAB-03). The promise, drawn.
+  //
+  // Four distinct things have to be readable at once, and they have to be told apart
+  // WITHOUT relying on colour -- a phone in sunlight, or a colour-blind player, still has
+  // to be able to plan. So each one gets its own shape:
+  //
+  //   removed      cross-hatched, hard white border   -- this is going away
+  //   falls from   hollow, a chevron pointing down    -- this leaves, going that way
+  //   lands here   solid ghost with a bracket under   -- this is where it stops
+  //   you          ghost digger, or a hatched cage    -- what happens to the man
+  //
+  // Everything drawn here is read off the resolve result that the commit will replay.
+  // Nothing in this block recomputes a consequence, which is the only reason the drawing
+  // and the outcome cannot disagree.
   if(mode==='play' && pending && G){
     const P = pending, t = Math.sin(now/90)*.5+.5;
+    const fin = P.sim.frames.length ? P.sim.frames[P.sim.frames.length-1] : null;
+
+    // 1. cells this action removes
     for(let i=0;i<P.cells.length;i+=2){
       const x=P.cells[i]*TILE, y=HUD+P.cells[i+1]*TILE;
       ctx.fillStyle = t>.5 ? 'rgba(255,255,255,.30)' : 'rgba(255,255,255,.10)';
       ctx.fillRect(x,y,TILE,TILE);
+      for(let d=-TILE;d<TILE;d+=4){                       // hatch: "gone", not "selected"
+        for(let k=0;k<TILE;k++){
+          const hx = x+d+k, hy = y+k;
+          if(hx>=x && hx<x+TILE) px(hx, hy, 1, 1, 'rgba(255,255,255,.5)');
+        }
+      }
       px(x,y,TILE,1,'#fff'); px(x,y+TILE-1,TILE,1,'#fff');
       px(x,y,1,TILE,'#fff'); px(x+TILE-1,y,1,TILE,'#fff');
     }
-    const fin = P.sim.frames.length ? P.sim.frames[P.sim.frames.length-1] : null;
+
     if(fin){
-      ctx.globalAlpha = .40;                     // ghost of where everything ends up
+      // 2. every mass that loses its footing: mark where it leaves from, and which way.
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+        const was = G[idx(c,r)], willBe = fin.g[idx(c,r)];
+        if(!was || was === willBe) continue;
+        if(P.cells.includes(c) && (() => {              // already drawn as removed
+          for(let i=0;i<P.cells.length;i+=2) if(P.cells[i]===c && P.cells[i+1]===r) return true;
+          return false; })()) continue;
+        px(c*TILE, HUD+r*TILE, TILE, 1, 'rgba(255,255,255,.35)');
+        const cx = c*TILE + 8, cy = HUD + r*TILE + 6;    // chevron: this is on its way down
+        for(let k=0;k<4;k++){
+          px(cx-4+k, cy+k, 1, 1, 'rgba(255,255,255,.75)');
+          px(cx+3-k, cy+k, 1, 1, 'rgba(255,255,255,.75)');
+        }
+      }
+      // 3. where it all comes to rest
+      ctx.globalAlpha = .40;
       for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
         const m = fin.g[idx(c,r)];
         if(!m || G[idx(c,r)]===m) continue;
         px(c*TILE, HUD+r*TILE, TILE, TILE, MAT[m].pal[1]);
       }
       ctx.globalAlpha = 1;
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+        const m = fin.g[idx(c,r)];
+        if(!m || G[idx(c,r)]===m) continue;
+        if(r+1>=ROWS || fin.g[idx(c,r+1)]!==m || G[idx(c,r+1)]===fin.g[idx(c,r+1)]){
+          px(c*TILE+1, HUD+r*TILE+TILE-2, TILE-2, 1, '#fff3c0');   // it stops on this line
+          px(c*TILE+1, HUD+r*TILE+TILE-4, 1, 3, '#fff3c0');
+          px(c*TILE+TILE-2, HUD+r*TILE+TILE-4, 1, 3, '#fff3c0');
+        }
+      }
+      // 4. and what becomes of the man
       if(!P.sim.buried){
         const gy = HUD + fin.pr*TILE;
         ctx.globalAlpha = .8; drawDigger(fin.pc*TILE+1, gy+1); ctx.globalAlpha = 1;
         if(P.sim.out) textC('THROUGH', HUD+4, '#5ed986');
+        else if(fin.pr > P.sim.pr0 && P.sim.pr0 >= 0) textC('YOU RIDE IT DOWN', HUD+4, '#5ed986');
       }
     }
     if(P.sim.buried){
-      px(pc*TILE-2, HUD+pr*TILE-2, TILE+4, TILE+4, 'rgba(224,96,79,.55)');
+      const bx = pc*TILE, by = HUD + pr*TILE;
+      px(bx-2, by-2, TILE+4, TILE+4, 'rgba(224,96,79,.55)');
+      for(let k=0;k<TILE+4;k+=3) px(bx-2, by-2+k, TILE+4, 1, 'rgba(255,255,255,.55)');
       textC('THIS BURIES YOU', HUD+4, '#e0604f');
     }
   }
