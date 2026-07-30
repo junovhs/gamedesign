@@ -14,6 +14,10 @@
   #ui{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
   .panel{pointer-events:auto;width:100%;height:100%;background:rgba(8,6,12,.93);
     display:flex;align-items:center;justify-content:center;padding:4%}
+  /* The compare screen draws its variants on the canvas, so its controls have to sit over
+     the canvas rather than behind a blackout. Same buttons, no backdrop, pinned low. */
+  .panel.clear{background:none;align-items:flex-end;padding:0 3% 3%}
+  .panel.clear .card{background:rgba(8,6,12,.86)}
   .card{width:100%;max-width:440px;max-height:100%;overflow:auto;background:#1e1826;
     border:4px solid #08060c;box-shadow:6px 6px 0 #08060c;padding:13px}
   .card::-webkit-scrollbar{width:8px}.card::-webkit-scrollbar-thumb{background:#4d3d63}
@@ -810,6 +814,128 @@ function parseBoard(def){
 // broken level select three taps in.
 const BOARDS_PARSED = BOARDS.map(parseBoard);
 
+/* ================= COMPARE (TOOL-02) =================
+
+Every question currently blocking progress is one an agent cannot answer: does this shape
+read as danger, does this tile look like it is holding something up, is this arrow visible
+against bright ore. Measuring thumb targets and asserting zero mismatches does not touch
+any of it. Only the designer, on a phone, can say.
+
+So: one subject, drawn two to four times, with exactly ONE tiny difference between them.
+He taps nothing and nothing is recorded -- he just looks, and tells whoever is building.
+
+THE RULE THAT KEEPS THIS HONEST: a variant is a handful of lines. If writing three of them
+is real work, the question is too big for this screen and belongs in a normal issue. That
+constraint is the designer's, and it is what stops this becoming a settings menu.
+
+Each variant draws in TILE-space at the origin; the screen scales it up. Adding a
+comparison is one entry here and nothing else. */
+
+const COMPARE_SCALE = 3;
+const COMPARISONS = [
+  {q:'WHICH ONE SAYS DANGER?', note:'the marker over you',
+   mat:2, variants:[
+    {l:'A  STRIPES', d:()=>{                       // what ships today
+      px(-1,-1,TILE+2,TILE+2,'rgba(224,96,79,.55)');
+      for(let k=0;k<TILE+2;k+=3) px(-1,-1+k,TILE+2,1,'rgba(255,255,255,.55)');
+    }},
+    {l:'B  CROSS', d:()=>{
+      px(-1,-1,TILE+2,TILE+2,'rgba(224,96,79,.5)');
+      for(let k=0;k<TILE;k++){ px(k,k,2,2,'#fff'); px(TILE-1-k,k,2,2,'#fff'); }
+    }},
+    {l:'C  JAWS', d:()=>{
+      px(-1,-1,TILE+2,TILE+2,'rgba(224,96,79,.5)');
+      for(let k=0;k<5;k++){ px(k*3,0,2,3+((k%2)*2),'#fff'); px(k*3,TILE-3-((k%2)*2),2,3+((k%2)*2),'#fff'); }
+    }}
+  ]},
+
+  {q:'WHICH ARROW READS ON ORE?', note:'a mass about to fall',
+   mat:3, variants:[
+    {l:'A  PLAIN', d:()=>{                          // what ships today
+      for(let k=0;k<4;k++){ px(4+k,6+k,1,1,'rgba(255,255,255,.75)'); px(11-k,6+k,1,1,'rgba(255,255,255,.75)'); }
+    }},
+    {l:'B  OUTLINED', d:()=>{
+      for(let k=0;k<5;k++){ px(3+k,5+k,3,3,'#08060c'); px(11-k,5+k,3,3,'#08060c'); }
+      for(let k=0;k<4;k++){ px(4+k,6+k,1,1,'#fff'); px(11-k,6+k,1,1,'#fff'); }
+    }},
+    {l:'C  SOLID WEDGE', d:()=>{
+      for(let k=0;k<6;k++) px(3+k,4+k,TILE-6-k*2,1,'#08060c');
+      for(let k=0;k<5;k++) px(4+k,5+k,TILE-8-k*2,1,'#fff3c0');
+    }}
+  ]},
+
+  {q:'WHICH TILE LOOKS LOAD-BEARING?', note:'this tile holds up the mass',
+   mat:3, variants:[
+    {l:'A  NOTHING', d:()=>{}},                      // what ships today
+    {l:'B  SEAM', d:()=>{
+      px(2,0,2,TILE,'rgba(255,255,255,.30)'); px(TILE-4,0,2,TILE,'rgba(0,0,0,.45)');
+    }},
+    {l:'C  BRACED', d:()=>{
+      px(0,0,TILE,2,'rgba(255,255,255,.45)'); px(0,TILE-2,TILE,2,'rgba(0,0,0,.5)');
+      px(1,2,2,2,'rgba(255,255,255,.35)'); px(TILE-3,2,2,2,'rgba(255,255,255,.35)');
+    }}
+  ]},
+
+  {q:'WHICH WARNING READS?', note:'over the brightest tile',
+   mat:8, variants:[
+    {l:'A  BARE', d:()=>{ text('BURIED',-4,6,'#e0604f'); }},   // what ships today
+    {l:'B  PLATE', d:()=>{
+      px(-6,4,TILE+12,9,'#08060c'); text('BURIED',-4,6,'#e0604f');
+    }},
+    {l:'C  PLATE+RULE', d:()=>{
+      px(-6,4,TILE+12,9,'#08060c'); px(-6,4,TILE+12,1,'#e0604f'); px(-6,12,TILE+12,1,'#e0604f');
+      text('BURIED',-4,6,'#fff');
+    }}
+  ]}
+];
+
+let compareAt = 0;
+
+// Draws one comparison across the board area: the question, then each variant blown up
+// over the material the question is actually about.
+function drawCompare(){
+  const C = COMPARISONS[compareAt];
+  px(0,0,W,H,'#0d0a14');
+  textC('COMPARE  '+(compareAt+1)+'/'+COMPARISONS.length, 4, '#665a80');
+  const qy = 13;
+  const fit = (t) => { const max = ((W-6)/4)|0; return t.length>max ? t.slice(0,max) : t; };
+  textC(fit(C.q), qy, '#e8b830');
+  textC(fit(C.note.toUpperCase()), qy+9, '#665a80');
+
+  // a 3x3 patch of the subject material, so the treatment is judged in context
+  const patch = new Uint8Array(COLS*ROWS);
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) patch[idx(c,r)] = C.mat;
+
+  const S = COMPARE_SCALE, cell = TILE*S;
+  let y = qy + 20;
+  for(const v of C.variants){
+    const x = 8;
+    ctx.save(); ctx.translate(x, y); ctx.scale(S, S);
+    drawTile(patch, 0, 0, C.mat, 4, 4);
+    v.d();
+    ctx.restore();
+    textSh(v.l, x + cell + 7, y + (cell>>1) - 2, '#c0b4d8');
+    y += cell + 7;
+  }
+  // Directly under the last variant, not pinned to the bottom -- the controls live there.
+  textC('TELL THE AI WHICH ONE READS', y + 2, '#5ed986');
+}
+
+function comparePanel(back){
+  mode = 'compare'; restartEl.hidden = true;
+  ui(`<div class="panel clear"><div class="card">
+    <div class="row">
+      <button class="b g" id="prev">&lt;</button>
+      <button class="b g" id="next">&gt;</button>
+    </div>
+    <div class="row"><button class="b g" id="back">BACK</button></div>
+  </div></div>`);
+  const n = COMPARISONS.length;
+  on('#prev', ()=>{ compareAt = (compareAt + n - 1) % n; comparePanel(back); });
+  on('#next', ()=>{ compareAt = (compareAt + 1) % n; comparePanel(back); });
+  on('#back', back || surface);
+}
+
 /* ---------------- run state ---------------- */
 let mode = 'boot';           // boot | play | anim | panel
 let scr = null;              // {g,f,ec}
@@ -1130,8 +1256,10 @@ function labPanel(back){
     <p class="s">Handcrafted problems. Each one is asking a single question. Restart costs
     nothing, so try the thing you think will not work.</p>
     ${rows}
+    <div class="row"><button class="b a" id="cmp">COMPARE TREATMENTS</button></div>
     <div class="row"><button class="b g" id="back">BACK</button></div>
   </div></div>`);
+  on('#cmp', ()=>comparePanel(()=>labPanel(back)));
   uiEl.querySelectorAll('[data-lab]').forEach(n => {
     n.onclick = () => { ac(); tone(700,.04,'square',.08); loadLab(+n.getAttribute('data-lab')); };
   });
@@ -1601,6 +1729,7 @@ function lightPass(lx, ly){
 }
 
 function render(){
+  if(mode==='compare'){ drawCompare(); return; }   // its own screen, no board underneath
   const B = biomeAt(depth||1);
   // Shake leans vertical: what hits you in this game always arrives from above.
   const sx = shake>0 ? (Math.random()-.5)*shake*.6 : 0;
@@ -1868,6 +1997,7 @@ function tileAt(x,y){
   return [c,r];
 }
 function tap(x,y){
+  if(mode==='compare') return;     // the compare screen is looked at, not played
   if(y<HUD) return;                                // the HUD is a readout; the menu is a DOM button
   if(mode!=='play' || !scr) return;
   const t = tileAt(x,y); if(!t) return;
