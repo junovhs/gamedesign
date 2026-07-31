@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0a0710">
+<title>DOWNSHAFT — CHAIN POC</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:#0a0710;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+  canvas{display:block;width:100%;height:100%}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<script>
+"use strict";
+/* ============================================================================
+   DOWNSHAFT — CHAIN PROOF OF CONCEPT
+
+   The question this file exists to answer: is dragging a chain through rock
+   fun, and is routing it strategic? Nothing else is in here. No shop, no
+   inventory, no economy, no world. Three boards, then it tells you how you did.
+
+   The loop, in one paragraph: the guy stands in a full grid of rock. You drag
+   a path out of him through touching tiles of the SAME material — eight ways,
+   diagonals included — and release. He walks it, mining every tile, and ends
+   where the path ends. Longer chains pay quadratically, so the whole game is
+   reading the board for the long route. You get twelve swings and a quota. Meet
+   the quota and the floor opens; end a chain on the bottom row and you drop.
+   ========================================================================= */
+
+/* ---------------- materials ------------------------------------------------
+   These are the colours you match. They have to be unmistakable from each
+   other at thumb distance, so they are picked as hues around the wheel rather
+   than as realistic rock. Every one is drawn from pixel data by code — there
+   are no image files in this build and there never will be.
+
+   The ORDER matters as much as the colours. A board only ever uses the first
+   `mats` of them, so the first four have to be the four most separable hues in
+   the set — orange, teal, violet, lime — or the opening board reads as mud.
+   The near-neighbours (crimson beside orange, cobalt beside violet) are held
+   back for the deep boards, where telling them apart IS the added difficulty. */
+const MATS = [
+  {n:'COPPER',    pal:['#f0801f','#ffb457','#94430a']},
+  {n:'VERDIGRIS', pal:['#12b8a0','#5cf0d6','#06655a']},
+  {n:'AMETHYST',  pal:['#9b4fe8','#c98cff','#54198f']},
+  {n:'MOSS',      pal:['#9ed419','#ccf85c','#54760a']},
+  {n:'MEAT',      pal:['#e83a63','#ff7d9c','#8c1c38']},
+  {n:'COBALT',    pal:['#3a7bf0','#7dabff','#173f8c']}
+];
+
+/* ---------------- boards ---------------------------------------------------
+   Three of them, and they get stranger going down because that is the whole
+   promise of the game.
+
+   The difficulty dial is `mats` — how many colours are in play. More colours
+   fragments the board into smaller same-colour components, so the long route
+   gets rarer and harder to see. Measured: at four colours the best available
+   chain is typically 9 tiles, at six it is 5.
+
+   But a deeper board must play *differently*, not just worse, so every colour
+   added is paid for with more swings and far more geodes. By the third shaft
+   the game is no longer "find the big blob", it is "route through geodes" —
+   which is a different skill wearing the same input.
+
+   Quotas are measured, not guessed. A solver that plays each board optimally
+   scores a median of 1478 / 1106 / 961, and the quota is set at a deliberately
+   rising fraction of that — 30% / 47% / 58% — so the first shaft is generous
+   and the third is genuinely tight. The number going UP while the fraction
+   also goes up is the point: it should read as descending into harder rock,
+   not as the game quietly asking for less. */
+const BOARDS = [
+  {name:'THE BACKYARD',   mats:4, quota:450, swings:12, geode:14, seed:0, wall:'#1a1220',
+   note:'DRAG THROUGH MATCHING ROCK. DIAGONALS COUNT.'},
+  {name:'THE CUTLERY',    mats:5, quota:520, swings:13, geode:8,  seed:2, wall:'#111a2a',
+   note:'FIVE COLOURS. THE LONG ROUTE IS HIDING NOW.'},
+  {name:'SOMEONES FLOOR', mats:6, quota:560, swings:14, geode:6,  seed:3, wall:'#0d2220',
+   note:'SIX COLOURS. RIDE THE GEODES OR YOU WILL NOT MAKE QUOTA.'}
+];
+
+const COLS = 8, ROWS = 12;
+const MINE_MS = 52;          // per-tile step of the mining walk
+
+/* ---------------- canvas ---------------- */
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d', {alpha:false});
+let W=0, H=0, DPR=1, TILE=0, OX=0, OY=0, HUD=0;
+
+function resize(){
+  DPR = Math.min(devicePixelRatio||1, 2.5);
+  W = innerWidth; H = innerHeight;
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  cv.style.width = W+'px'; cv.style.height = H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.imageSmoothingEnabled = false;
+  // The HUD is a fixed slice of the screen and the board takes what is left,
+  // so a short landscape phone shrinks the tiles instead of clipping the board.
+  HUD = Math.max(64, Math.min(96, Math.round(H*0.13)));
+  const availW = W - 16, availH = H - HUD - 16;
+  TILE = Math.max(18, Math.floor(Math.min(availW/COLS, availH/ROWS)));
+  OX = Math.round((W - TILE*COLS)/2);
+  OY = HUD + Math.round((H - HUD - TILE*ROWS)/2);
+}
+addEventListener('resize', resize);
+addEventListener('orientationchange', ()=>setTimeout(resize,80));
+
+/* ---------------- audio ----------------------------------------------------
+   The single most addictive thing in this genre is the pitch climbing as the
+   chain resolves. It is not decoration; it is the feedback that tells your
+   thumb the route was good, one tile at a time. */
+let AC=null;
+function ac(){ if(!AC){ try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return AC; }
+function tone(freq, dur, type, vol, slideTo){
+  const a = ac(); if(!a) return;
+  if(a.state === 'suspended') a.resume();
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type||'square'; o.frequency.setValueAtTime(freq, a.currentTime);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, a.currentTime+dur);
+  g.gain.setValueAtTime(0.0001, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(vol||0.10, a.currentTime+0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime+dur);
+  o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+dur+0.02);
+}
+function noise(dur, vol){
+  const a = ac(); if(!a) return;
+  const n = Math.floor(a.sampleRate*dur), b = a.createBuffer(1,n,a.sampleRate), d = b.getChannelData(0);
+  for(let i=0;i<n;i++) d[i] = (Math.random()*2-1) * (1 - i/n);
+  const s = a.createBufferSource(), g = a.createGain();
+  s.buffer = b; g.gain.value = vol||0.10;
+  s.connect(g); g.connect(a.destination); s.start();
+}
+
+/* ---------------- state ---------------- */
+let grid = [];               // COLS*ROWS of {m, geode} or null
+let guy = {c:0, r:0, x:0, y:0, sq:1, face:1, swing:0};
+let depth = 0, ore = 0, swings = 0, minedSinceGeode = 0, runOre = 0;
+let path = [];               // [{c,r}] current dragged chain
+let chainMat = -1;           // material the chain is currently matching
+let wildArmed = false;       // a geode is in the path; next tile may be any colour
+let phase = 'title';         // title | play | mine | settle | cleared | failed | done
+let shakeX=0, shakeY=0, shakeMag=0, flash=0, slowmo=0;
+let parts = [], floats = [], rings = [];
+let mineStep = 0, mineTimer = 0, minePlan = null, comboOre = 0;
+let settleTimer = 0, bannerT = 0, bannerText = '', bannerSub = '';
+const idx = (c,r) => r*COLS + c;
+
+/* ---------------- deterministic per-cell texture ---------------------------
+   Rock has to look like rock without any art, so each cell gets a stable
+   pseudo-random speckle keyed on its coordinates. Stable matters: if it
+   re-rolled every frame the board would boil. */
+function hash(c,r,s){
+  let h = (c*374761393 + r*668265263 + s*1442695040) | 0;
+  h = (h ^ (h>>13)) * 1274126177 | 0;
+  return ((h ^ (h>>16)) >>> 0) / 4294967296;
+}
+
+/* ---------------- board build ---------------- */
+function board(){ return BOARDS[Math.min(depth, BOARDS.length-1)]; }
+
+function newTile(){
+  return {m: Math.floor(Math.random()*board().mats), geode:false, yoff:0, pop:0};
+}
+
+function buildBoard(){
+  const b = board();
+  grid = new Array(COLS*ROWS);
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) grid[idx(c,r)] = newTile();
+  // The guy starts in the middle of the top row, standing in a pocket he
+  // clearly made on the way in. Rock under him, sky above.
+  guy.c = COLS>>1; guy.r = 0;
+  grid[idx(guy.c, guy.r)] = null;
+  guy.x = guy.c*TILE; guy.y = guy.r*TILE; guy.sq = 1; guy.swing = 0;
+  ore = 0; swings = b.swings; minedSinceGeode = 0;
+  path = []; chainMat = -1; wildArmed = false;
+  parts = []; floats = []; rings = [];
+  for(let i=0;i<b.seed;i++) spawnGeode(true);
+  bannerT = 2.4; bannerText = b.name; bannerSub = b.note;
+  phase = 'play';
+}
+
+/* ---------------- chain rules ----------------------------------------------
+   A legal chain starts on a tile touching the guy (eight ways) and every step
+   after that touches the previous one and matches the chain's current colour.
+   A geode is enterable from any colour and re-arms the chain, so the tile
+   after a geode may be anything — and becomes the new colour to match. That
+   one rule is what turns "find the biggest blob" into "find the route". */
+function adj8(a, b){
+  const dc = Math.abs(a.c-b.c), dr = Math.abs(a.r-b.r);
+  return dc<=1 && dr<=1 && (dc+dr)>0;
+}
+function tileAt(c,r){
+  if(c<0||c>=COLS||r<0||r>=ROWS) return null;
+  return grid[idx(c,r)];
+}
+function inPath(c,r){
+  for(let i=0;i<path.length;i++) if(path[i].c===c && path[i].r===r) return i;
+  return -1;
+}
+function canExtend(c,r){
+  const t = tileAt(c,r); if(!t) return false;
+  if(inPath(c,r) >= 0) return false;
+  const from = path.length ? path[path.length-1] : {c:guy.c, r:guy.r};
+  if(!adj8(from, {c,r})) return false;
+  if(t.geode) return true;                       // geodes accept any colour
+  if(path.length === 0) return true;             // first tile sets the colour
+  if(wildArmed) return true;                     // just came off a geode
+  return t.m === chainMat;
+}
+function pushTile(c,r){
+  const t = tileAt(c,r);
+  path.push({c,r});
+  if(t.geode){ wildArmed = true; }
+  else { chainMat = t.m; wildArmed = false; }
+  // The pitch climbs with the length of the chain so far, capped so a huge
+  // chain does not end up inaudible.
+  const step = Math.min(path.length-1, 24);
+  tone(196 * Math.pow(2, step/12), 0.055, 'square', 0.075);
+  const t2 = tileAt(c,r);
+  if(t2 && t2.geode) tone(1200, 0.14, 'triangle', 0.11, 1900);
+}
+function recomputeChainState(){
+  // After a backtrack the colour and the geode arming have to be rebuilt from
+  // whatever is still in the path, or the next step would be judged against a
+  // colour the player already undid.
+  chainMat = -1; wildArmed = false;
+  for(const p of path){
+    const t = tileAt(p.c, p.r); if(!t) continue;
+    if(t.geode) wildArmed = true;
+    else { chainMat = t.m; wildArmed = false; }
+  }
+}
+// Quadratic pay: a chain of N is worth 1+2+...+N. Doubling the length nearly
+// quadruples the reward, which is the entire reason to hunt for the route
+// instead of taking the first three tiles you see.
+function chainValue(n){ return n*(n+1)/2; }
+
+/* ---------------- input ---------------- */
+let dragging = false;
+function toCell(px, py){
+  const c = Math.floor((px - OX)/TILE), r = Math.floor((py - OY)/TILE);
+  return {c, r};
+}
+function onDown(px, py){
+  if(ac() && ac().state === 'suspended') ac().resume();
+  if(phase === 'title'){ depth = 0; runOre = 0; buildBoard(); return; }
+  if(phase === 'cleared'){ depth++; if(depth >= BOARDS.length){ phase = 'done'; } else buildBoard(); return; }
+  if(phase === 'failed'){ buildBoard(); return; }
+  if(phase === 'done'){ phase = 'title'; return; }
+  if(phase !== 'play') return;
+  const {c,r} = toCell(px,py);
+  if(canExtend(c,r)){ dragging = true; path = []; chainMat = -1; wildArmed = false; pushTile(c,r); }
+}
+function onMove(px, py){
+  if(!dragging || phase !== 'play') return;
+  const {c,r} = toCell(px,py);
+  if(c<0||c>=COLS||r<0||r>=ROWS) return;
+  // Backtracking: sliding your thumb back onto the second-to-last tile drops
+  // the last one. Without this, one misplaced pixel ruins a twenty-chain and
+  // you would stop trying for long routes at all.
+  if(path.length >= 2){
+    const prev = path[path.length-2];
+    if(prev.c===c && prev.r===r){
+      path.pop(); recomputeChainState();
+      tone(150, 0.04, 'sine', 0.05);
+      return;
+    }
+  }
+  if(canExtend(c,r)) pushTile(c,r);
+}
+function onUp(){
+  if(!dragging) return;
+  dragging = false;
+  if(phase !== 'play') return;
+  if(path.length === 0) return;
+  commitChain();
+}
+cv.addEventListener('pointerdown', e=>{ e.preventDefault(); cv.setPointerCapture(e.pointerId); onDown(e.clientX, e.clientY); });
+cv.addEventListener('pointermove', e=>{ e.preventDefault(); onMove(e.clientX, e.clientY); });
+cv.addEventListener('pointerup',   e=>{ e.preventDefault(); onUp(); });
+cv.addEventListener('pointercancel', ()=>{ dragging = false; path = []; });
+cv.addEventListener('contextmenu', e=>e.preventDefault());
+
+/* ---------------- committing a chain ---------------- */
+function commitChain(){
+  minePlan = path.slice();
+  path = [];
+  swings--;
+  mineStep = 0; mineTimer = 0; comboOre = 0;
+  phase = 'mine';
+}
+
+function mineOne(i){
+  const p = minePlan[i];
+  const t = tileAt(p.c, p.r);
+  guy.face = (p.c > guy.c) ? 1 : (p.c < guy.c ? -1 : guy.face);
+  guy.c = p.c; guy.r = p.r;
+  guy.sq = 0.62; guy.swing = 1;
+  if(t){
+    const pal = MATS[t.m].pal;
+    burst(p.c, p.r, pal[0], t.geode ? 20 : 9);
+    if(t.geode){ ring(p.c, p.r, '#ffe872'); shake(7); }
+    grid[idx(p.c,p.r)] = null;
+    minedSinceGeode++;
+  }
+  const n = i+1;
+  comboOre = chainValue(n);
+  // Rising pitch again on the resolve, and the shake grows with the chain so a
+  // long one physically escalates instead of just lasting longer.
+  const step = Math.min(i, 24);
+  tone(262 * Math.pow(2, step/12), 0.07, 'square', 0.09);
+  noise(0.04, 0.05);
+  shake(1.4 + n*0.32);
+  if(n === 5 || n === 10 || n === 15 || n === 20){
+    tone(880 * (n/5), 0.20, 'triangle', 0.14);
+    flash = Math.min(0.55, 0.18 + n*0.015);
+    slowmo = 0.10;
+    floats.push({x:guy.c*TILE+TILE/2, y:guy.r*TILE, t:1.1,
+                 s: n>=20?'INSANE':n>=15?'ENORMOUS':n>=10?'HUGE':'NICE', col:'#ffe872', big:true});
+  }
+}
+
+function finishMine(){
+  ore += comboOre;
+  runOre += comboOre;
+  floats.push({x:guy.c*TILE+TILE/2, y:guy.r*TILE-6, t:1.3, s:'+'+comboOre, col:'#9fe8bb', big:comboOre>=40});
+  // Geodes are earned by volume, not luck: mine enough rock and the board hands
+  // you the tool that makes the next chain longer. That is the ramp.
+  while(minedSinceGeode >= board().geode){
+    minedSinceGeode -= board().geode;
+    spawnGeode();
+  }
+  phase = 'settle'; settleTimer = 0;
+  settleBoard();
+}
+
+function spawnGeode(silent){
+  // Placed away from the guy so it reads as something to travel to.
+  const cand = [];
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const t = grid[idx(c,r)];
+    if(t && !t.geode && (Math.abs(c-guy.c) + Math.abs(r-guy.r)) > 2) cand.push({c,r});
+  }
+  if(!cand.length) return;
+  const p = cand[Math.floor(Math.random()*cand.length)];
+  grid[idx(p.c,p.r)].geode = true;
+  if(silent) return;
+  ring(p.c, p.r, '#ffe872');
+  tone(1400, 0.22, 'triangle', 0.12, 2200);
+}
+
+/* ---------------- gravity and refill ---------------------------------------
+   The guy is a solid body in the grid, so rock stacks on top of him rather
+   than through him. That is what makes where you end a chain a real decision:
+   finish under an overhang and you have buried yourself in a pocket with only
+   three neighbours to chain from next turn. */
+function settleBoard(){
+  // 1. the guy falls into whatever hole is under him
+  while(guy.r < ROWS-1 && !grid[idx(guy.c, guy.r+1)]) guy.r++;
+  // 2. each column compacts downward around him. Every surviving tile keeps
+  //    the row it came from so it can be drawn falling from there rather than
+  //    teleporting into its new slot.
+  for(let c=0;c<COLS;c++){
+    const stack = [];
+    for(let r=ROWS-1;r>=0;r--){
+      const t = grid[idx(c,r)];
+      if(t){ t.fromRow = r; stack.push(t); }
+      grid[idx(c,r)] = null;
+    }
+    let write = ROWS-1, si = 0;
+    while(si < stack.length && write >= 0){
+      if(c === guy.c && write === guy.r){ write--; continue; }
+      const t = stack[si++];
+      grid[idx(c,write)] = t;
+      t.yoff = (t.fromRow - write) * TILE;   // negative: it starts up where it was
+      t.vy = 0;
+      write--;
+    }
+    // 3. everything left above is fresh rock sliding in from off-screen
+    let slide = 1;
+    for(let r=write; r>=0; r--){
+      if(c === guy.c && r === guy.r) continue;
+      const t = newTile();
+      t.yoff = -TILE * (slide++ + 1.2);
+      t.vy = 0;
+      grid[idx(c,r)] = t;
+    }
+  }
+  noise(0.10, 0.07);
+  tone(90, 0.16, 'sine', 0.10, 55);
+}
+
+function settleDone(){
+  const b = board();
+  if(ore >= b.quota && guy.r === ROWS-1){
+    phase = 'cleared';
+    flash = 0.6; shake(16);
+    tone(392,0.14,'triangle',0.16); setTimeout(()=>tone(523,0.14,'triangle',0.16),110);
+    setTimeout(()=>tone(659,0.26,'triangle',0.16),220);
+    bannerT = 3; bannerText = 'SHAFT CLEARED'; bannerSub = 'DEPTH ' + (depth+2) + ' BELOW';
+    return;
+  }
+  if(swings <= 0){
+    if(ore >= b.quota){
+      // Quota met but stranded off the bottom row — the shaft is right there
+      // and you cannot reach it. That is a real loss and it should sting.
+      phase = 'failed';
+      bannerText = 'SO CLOSE'; bannerSub = 'QUOTA MET. YOU NEVER REACHED THE FLOOR.';
+    } else {
+      phase = 'failed';
+      bannerText = 'OUT OF SWINGS'; bannerSub = ore + ' / ' + b.quota + ' — TAP TO RETRY';
+    }
+    bannerT = 99;
+    tone(180,0.3,'sawtooth',0.12,70); shake(10);
+    return;
+  }
+  phase = 'play';
+}
+
+/* ---------------- juice ---------------- */
+function shake(m){ shakeMag = Math.min(20, Math.max(shakeMag, m)); }
+function burst(c, r, col, n){
+  const cx = c*TILE + TILE/2, cy = r*TILE + TILE/2;
+  for(let i=0;i<n;i++){
+    const a = Math.random()*Math.PI*2, sp = 40 + Math.random()*170;
+    parts.push({x:cx, y:cy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 60,
+                t:0.35+Math.random()*0.45, mt:0.8, col, s: 2 + Math.random()*3});
+  }
+}
+function ring(c, r, col){ rings.push({x:c*TILE+TILE/2, y:r*TILE+TILE/2, t:1, col}); }
+
+/* ---------------- drawing ---------------- */
+function drawTile(t, x, y, hi, dim){
+  const pal = MATS[t.m].pal;
+  const s = TILE;
+  ctx.fillStyle = pal[2]; ctx.fillRect(x, y, s, s);
+  ctx.fillStyle = pal[0]; ctx.fillRect(x+1, y+1, s-2, s-3);
+  ctx.fillStyle = pal[1]; ctx.fillRect(x+1, y+1, s-2, Math.max(2, s*0.16));
+  // speckle — cheap, stable, and it stops eight flat squares reading as a UI
+  const px = Math.max(2, Math.floor(s/7));
+  ctx.fillStyle = pal[2];
+  for(let i=0;i<4;i++){
+    const hx = hash(x/s|0, y/s|0, i*7+1), hy = hash(x/s|0, y/s|0, i*7+2);
+    if(hx > 0.45) ctx.fillRect(x + 2 + hx*(s-6), y + 3 + hy*(s-8), px, px);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,.13)';
+  ctx.fillRect(x+1, y+1, s-2, 1);
+  if(t.geode){
+    const g = 0.55 + 0.45*Math.sin(performance.now()/160);
+    ctx.fillStyle = 'rgba(255,232,114,'+(0.35+0.35*g)+')';
+    ctx.fillRect(x+2, y+2, s-4, s-4);
+    ctx.fillStyle = '#fff8d0';
+    const q = Math.max(3, s*0.22);
+    ctx.fillRect(x + s/2 - q/2, y + s/2 - q/2, q, q);
+    ctx.fillStyle = '#ffe872';
+    ctx.fillRect(x + s/2 - q*0.9, y + s/2 - 1, q*1.8, 2);
+    ctx.fillRect(x + s/2 - 1, y + s/2 - q*0.9, 2, q*1.8);
+  }
+  if(dim){ ctx.fillStyle = 'rgba(8,5,14,.5)'; ctx.fillRect(x, y, s, s); }
+  if(hi){
+    ctx.fillStyle = 'rgba(255,255,255,.30)'; ctx.fillRect(x, y, s, s);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.strokeRect(x+1, y+1, s-2, s-2);
+  }
+}
+
+function drawGuy(x, y){
+  const s = TILE, u = Math.max(1, Math.floor(s/9));
+  const sq = guy.sq, w = s*sq, h = s*(2-sq);
+  const gx = x + (s-w)/2, gy = y + s - h;
+  ctx.save();
+  ctx.translate(gx + w/2, gy + h/2);
+  ctx.scale(guy.face, 1);
+  ctx.translate(-w/2, -h/2);
+  const P = (px,py,pw,ph,col)=>{ ctx.fillStyle=col; ctx.fillRect(Math.round(px*u), Math.round(py*u), Math.ceil(pw*u), Math.ceil(ph*u)); };
+  P(2.2,0.6,4.4,3.2,'#f0c98a');            // head
+  P(2.0,0.2,4.8,1.1,'#d64a2a');            // helmet
+  P(6.0,1.4,1.4,1.1,'#fff4c0');            // lamp
+  P(3.0,2.1,0.9,0.9,'#20141c'); P(5.0,2.1,0.9,0.9,'#20141c'); // eyes
+  P(2.4,3.8,4.0,3.4,'#2f7fd6');            // body
+  P(2.4,3.8,4.0,0.9,'#5fa8f0');
+  P(2.6,7.2,1.5,1.6,'#20141c'); P(4.7,7.2,1.5,1.6,'#20141c'); // legs
+  // the pickaxe swings on the beat of the chain, which is most of why mining
+  // a long route reads as work rather than as a highlight animation
+  const sw = guy.swing;
+  const ang = -0.9 + sw*2.2;
+  ctx.save();
+  ctx.translate(6.2*u, 4.4*u); ctx.rotate(ang);
+  ctx.fillStyle = '#8a6a3a'; ctx.fillRect(0, -0.4*u, 3.6*u, 0.8*u);
+  ctx.fillStyle = '#cfd8e6'; ctx.fillRect(3.0*u, -1.5*u, 1.2*u, 3.0*u);
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawHUD(){
+  const b = board();
+  ctx.fillStyle = '#0a0710'; ctx.fillRect(0, 0, W, HUD);
+  ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(0, HUD-1, W, 1);
+  const pad = 12, fs = Math.max(10, Math.round(HUD*0.15));
+  ctx.textBaseline = 'top';
+
+  ctx.font = 'bold '+fs+'px ui-monospace,monospace';
+  ctx.fillStyle = '#6b5f7d'; ctx.textAlign = 'left';
+  ctx.fillText('DEPTH', pad, 10);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold '+Math.round(fs*1.7)+'px ui-monospace,monospace';
+  ctx.fillText(String(depth+1), pad, 10+fs+2);
+
+  ctx.textAlign = 'right';
+  ctx.font = 'bold '+fs+'px ui-monospace,monospace';
+  ctx.fillStyle = swings <= 2 ? '#ff7089' : '#6b5f7d';
+  ctx.fillText('SWINGS', W-pad, 10);
+  ctx.fillStyle = swings <= 2 ? '#ff7089' : '#fff';
+  ctx.font = 'bold '+Math.round(fs*1.7)+'px ui-monospace,monospace';
+  ctx.fillText(String(swings), W-pad, 10+fs+2);
+
+  // The quota bar is the only readout that matters, so it gets the middle.
+  const bw = W - pad*2 - 130, bx = pad + 65, by = HUD - 20, bh = 10;
+  const live = ore + (dragging ? chainValue(path.length) : 0);
+  const frac = Math.max(0, Math.min(1, live / b.quota));
+  ctx.fillStyle = '#221a2e'; ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = frac >= 1 ? '#ffe872' : '#9fe8bb';
+  ctx.fillRect(bx, by, bw*frac, bh);
+  if(dragging && path.length){
+    const base = Math.max(0, Math.min(1, ore / b.quota));
+    ctx.fillStyle = 'rgba(255,255,255,.55)';
+    ctx.fillRect(bx + bw*base, by, bw*(frac-base), bh);
+  }
+  ctx.font = 'bold '+Math.max(9, Math.round(fs*0.85))+'px ui-monospace,monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = frac >= 1 ? '#ffe872' : '#c9bfd8';
+  ctx.fillText(live + ' / ' + b.quota, W/2, by - fs - 2);
+}
+
+function drawChainReadout(){
+  if(!dragging || path.length < 1) return;
+  const p = path[path.length-1];
+  const n = path.length, v = chainValue(n);
+  const fs = Math.max(16, Math.round(TILE*0.72));
+  ctx.font = 'bold '+fs+'px ui-monospace,monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  // Clamped into the viewport: the readout follows your thumb, and a chain
+  // ending in column 0 or on the top row would otherwise print off-screen
+  // exactly when the number is most worth reading.
+  const half = ctx.measureText(n + '  +' + v).width/2 + 6;
+  const x = Math.max(half, Math.min(W - half, OX + p.c*TILE + TILE/2));
+  const y = Math.max(HUD + fs + 6, OY + p.r*TILE - 8);
+  ctx.lineWidth = 4; ctx.strokeStyle = '#12091c';
+  const s = n + '  +' + v;
+  ctx.strokeText(s, x, y);
+  ctx.fillStyle = n >= 10 ? '#ffe872' : '#fff';
+  ctx.fillText(s, x, y);
+}
+
+// Drawn inside the board transform, so these are board-local coordinates —
+// adding OX/OY here would offset the line by a whole board from its tiles.
+function drawPathLine(){
+  if(path.length < 1) return;
+  ctx.save();
+  ctx.lineWidth = Math.max(3, TILE*0.16);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,.75)';
+  ctx.beginPath();
+  ctx.moveTo(guy.c*TILE + TILE/2, guy.r*TILE + TILE/2);
+  for(const p of path) ctx.lineTo(p.c*TILE + TILE/2, p.r*TILE + TILE/2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBanner(){
+  if(bannerT <= 0) return;
+  const a = Math.min(1, bannerT);
+  ctx.save(); ctx.globalAlpha = a;
+  const fs = Math.max(16, Math.round(W*0.062));
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold '+fs+'px ui-monospace,monospace';
+  ctx.fillStyle = 'rgba(10,7,16,.82)';
+  ctx.fillRect(0, H/2 - fs*1.6, W, fs*3.2);
+  ctx.fillStyle = '#ffe872'; ctx.fillText(bannerText, W/2, H/2 - fs*0.45);
+  ctx.font = 'bold '+Math.round(fs*0.42)+'px ui-monospace,monospace';
+  ctx.fillStyle = '#c9bfd8'; ctx.fillText(bannerSub, W/2, H/2 + fs*0.75);
+  ctx.restore();
+}
+
+function drawScreenText(title, lines, cta){
+  ctx.fillStyle = 'rgba(10,7,16,.92)'; ctx.fillRect(0,0,W,H);
+  const fs = Math.max(20, Math.round(W*0.085));
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold '+fs+'px ui-monospace,monospace';
+  ctx.fillStyle = '#ffe872';
+  ctx.fillText(title, W/2, H*0.30);
+  ctx.font = 'bold '+Math.round(fs*0.30)+'px ui-monospace,monospace';
+  ctx.fillStyle = '#c9bfd8';
+  lines.forEach((l,i)=> ctx.fillText(l, W/2, H*0.44 + i*fs*0.46));
+  ctx.font = 'bold '+Math.round(fs*0.36)+'px ui-monospace,monospace';
+  ctx.fillStyle = (performance.now()%1000 < 620) ? '#fff' : '#6b5f7d';
+  ctx.fillText(cta, W/2, H*0.80);
+}
+
+/* ---------------- loop ---------------- */
+let last = performance.now();
+function frame(now){
+  let dt = Math.min(0.05, (now - last)/1000); last = now;
+  if(slowmo > 0){ slowmo -= dt; dt *= 0.35; }
+
+  // ----- update -----
+  if(phase === 'mine'){
+    mineTimer += dt*1000;
+    while(phase === 'mine' && mineTimer >= MINE_MS){
+      mineTimer -= MINE_MS;
+      if(mineStep < minePlan.length){ mineOne(mineStep++); }
+      else { finishMine(); }
+    }
+  } else if(phase === 'settle'){
+    settleTimer += dt;
+    let moving = false;
+    for(const t of grid){ if(t && t.yoff < 0){ moving = true; break; } }
+    if(!moving || settleTimer > 1.2){
+      for(const t of grid) if(t) t.yoff = 0;
+      settleDone();
+    }
+  }
+
+  // tile fall easing — accelerating, then it just stops, which reads as weight
+  for(const t of grid){
+    if(t && t.yoff < 0){
+      t.vy = (t.vy || 0) + 2600*dt;
+      t.yoff += t.vy*dt;
+      if(t.yoff >= 0){ t.yoff = 0; t.vy = 0; }
+    }
+  }
+
+  guy.sq += (1 - guy.sq) * Math.min(1, dt*14);
+  guy.swing *= Math.pow(0.0006, dt);
+  guy.x += (guy.c*TILE - guy.x) * Math.min(1, dt*22);
+  guy.y += (guy.r*TILE - guy.y) * Math.min(1, dt*22);
+
+  shakeMag *= Math.pow(0.0016, dt);
+  if(shakeMag < 0.05) shakeMag = 0;
+  shakeX = (Math.random()*2-1)*shakeMag; shakeY = (Math.random()*2-1)*shakeMag;
+  flash *= Math.pow(0.004, dt);
+
+  for(let i=parts.length-1;i>=0;i--){
+    const p = parts[i];
+    p.vy += 900*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.t -= dt;
+    if(p.t <= 0) parts.splice(i,1);
+  }
+  for(let i=floats.length-1;i>=0;i--){
+    const f = floats[i]; f.y -= 34*dt; f.t -= dt;
+    if(f.t <= 0) floats.splice(i,1);
+  }
+  for(let i=rings.length-1;i>=0;i--){
+    rings[i].t -= dt*2.2; if(rings[i].t <= 0) rings.splice(i,1);
+  }
+  if(bannerT > 0 && bannerT < 90) bannerT -= dt;
+
+  // ----- draw -----
+  const b = board();
+  ctx.fillStyle = '#0a0710'; ctx.fillRect(0,0,W,H);
+
+  // A twelve-row board cannot give 44 CSS px thumb targets on a landscape
+  // phone — twelve times forty-four is 528, and a landscape phone is 390 tall.
+  // Shrinking the tiles to 25px to make it "fit" would be shipping a control
+  // surface too small to drag accurately, so the game asks for portrait instead.
+  if(W > H && H < ROWS*44 + HUD){
+    drawScreenText('TURN IT UPRIGHT', [
+      'DOWNSHAFT IS PLAYED IN PORTRAIT.',
+      'THE SHAFT GOES DOWN, NOT ACROSS.'
+    ], '');
+    requestAnimationFrame(frame); return;
+  }
+
+  if(phase === 'title'){
+    drawScreenText('DOWNSHAFT', [
+      'DRAG A PATH THROUGH MATCHING ROCK.',
+      'DIAGONALS COUNT. LONGER PAYS MUCH MORE.',
+      '',
+      'MEET THE QUOTA, THEN END A CHAIN',
+      'ON THE FLOOR TO DROP A LEVEL.',
+      '',
+      'THREE SHAFTS. TWELVE SWINGS EACH.'
+    ], 'TAP TO DIG');
+    requestAnimationFrame(frame); return;
+  }
+  if(phase === 'done'){
+    drawScreenText('BOTTOM REACHED', [
+      'THREE SHAFTS CLEARED.',
+      '',
+      'TOTAL ORE  ' + runOre
+    ], 'TAP TO RUN IT AGAIN');
+    requestAnimationFrame(frame); return;
+  }
+
+  ctx.save();
+  ctx.translate(Math.round(shakeX), Math.round(shakeY));
+
+  // shaft walls
+  ctx.fillStyle = b.wall;
+  ctx.fillRect(0, HUD, W, H-HUD);
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.fillRect(OX-8, OY, 8, TILE*ROWS);
+  ctx.fillRect(OX+TILE*COLS, OY, 8, TILE*ROWS);
+
+  // the floor opens once the quota is met, so the way out is a thing you can
+  // see arrive rather than a message you have to read
+  const quotaMet = ore >= b.quota;
+  if(quotaMet){
+    const g = 0.5 + 0.5*Math.sin(now/220);
+    ctx.fillStyle = 'rgba(255,232,114,'+(0.20+0.28*g)+')';
+    ctx.fillRect(OX, OY + TILE*(ROWS-1), TILE*COLS, TILE);
+    ctx.fillStyle = 'rgba(255,232,114,'+(0.5+0.5*g)+')';
+    ctx.fillRect(OX, OY + TILE*ROWS - 3, TILE*COLS, 3);
+  }
+
+  ctx.save();
+  ctx.translate(OX, OY);
+
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const t = grid[idx(c,r)]; if(!t) continue;
+    const pi = inPath(c,r);
+    // Anything you cannot currently add to the chain is dimmed while dragging.
+    // That is the whole readability of the mechanic: the board sorts itself
+    // into "route" and "not route" the instant your thumb goes down.
+    const dim = dragging && pi < 0 && !canExtend(c,r);
+    drawTile(t, c*TILE, r*TILE + t.yoff, pi >= 0, dim);
+  }
+
+  drawPathLine();
+  drawGuy(guy.x, guy.y);
+
+  for(const p of parts){
+    const a = Math.max(0, p.t/p.mt);
+    ctx.globalAlpha = a; ctx.fillStyle = p.col;
+    ctx.fillRect(p.x - p.s/2, p.y - p.s/2, p.s, p.s);
+  }
+  ctx.globalAlpha = 1;
+  for(const rg of rings){
+    const rad = (1 - rg.t) * TILE * 2.4;
+    ctx.globalAlpha = rg.t; ctx.strokeStyle = rg.col;
+    ctx.lineWidth = 3; ctx.beginPath();
+    ctx.arc(rg.x, rg.y, rad, 0, Math.PI*2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  for(const f of floats){
+    ctx.font = 'bold '+Math.round(TILE*(f.big?0.62:0.44))+'px ui-monospace,monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.globalAlpha = Math.min(1, f.t);
+    ctx.lineWidth = 4; ctx.strokeStyle = '#12091c'; ctx.strokeText(f.s, f.x, f.y);
+    ctx.fillStyle = f.col; ctx.fillText(f.s, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  ctx.restore();
+
+  drawChainReadout();
+  drawHUD();
+  drawBanner();
+
+  if(phase === 'cleared'){
+    drawScreenText('SHAFT CLEARED', [
+      'ORE THIS SHAFT  ' + ore,
+      'SWINGS LEFT  ' + swings,
+      '',
+      'RUN TOTAL  ' + runOre
+    ], depth+1 >= BOARDS.length ? 'TAP TO FINISH' : 'TAP TO GO DEEPER');
+  }
+  if(phase === 'failed'){
+    drawScreenText(bannerText, [bannerSub], 'TAP TO RETRY');
+  }
+
+  if(flash > 0.01){
+    ctx.fillStyle = 'rgba(255,255,255,'+Math.min(0.7, flash)+')';
+    ctx.fillRect(0,0,W,H);
+  }
+
+  requestAnimationFrame(frame);
+}
+
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
