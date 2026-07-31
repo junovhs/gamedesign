@@ -54,7 +54,7 @@ const MIN = [
 const COLS = 6, ROWS = 11;          // last row is bedrock + the seal
 const FLOOR = ROWS - 1;
 const CHAMBER_H = 12;               // metres gained per chamber
-const SEAL_CHAIN = 2;               // detonation number the bedrock demands
+const SEAL_SIZE = 6;                // cells one detonation must take to open bedrock
 const REACH = 2;                    // columns the drill-line covers either side
 
 /* ---------------- canvas / layout ----------------------------------------- */
@@ -160,6 +160,43 @@ const N4 = [[-1,0],[1,0],[0,-1],[0,1]];
 function rnd(n){ return Math.floor(Math.random()*n); }
 function pick(a){ return a[rnd(a.length)]; }
 
+/* Every chamber is carved with one honest way out, because a size rule the board
+   cannot satisfy is worse than no rule. Two three-cell seams of the same mineral
+   sit either side of a one-cell gap of a different mineral:
+
+        M . M          M = the seal's mineral, three cells each
+        M G M          G = the gap: drop a matching canister in and the
+        M . M              two seams become one blast of seven
+
+   Three is under the six the bedrock demands, so neither seam opens it alone.
+   Returns the mineral, so the chamber can guarantee canisters of it. */
+function carveSealWeld(sealC, palette){
+  const d = sealC <= COLS - 3 ? 1 : -1;
+  const colA = sealC, colG = sealC + d, colB = sealC + 2*d;
+  const top = FLOOR - 3;
+  const m = grid[FLOOR-1][colA] && grid[FLOOR-1][colA].t === 'rock'
+    ? grid[FLOOR-1][colA].c : rnd(palette);
+  let other = (m + 1) % Math.max(2, palette);
+  if(other === m) other = (m + 2) % Math.max(2, palette);
+
+  const put = (r, c, mineral) => {
+    if(!inB(r,c)) return;
+    grid[r][c] = cell('rock', {c:mineral, ore: Math.random() < 0.08});
+  };
+  for(let r=top;r<FLOOR;r++){
+    put(r, colA, m);
+    put(r, colG, other);
+    put(r, colB, m);
+  }
+  // fence the two seams so they stay three cells: anything touching them from
+  // outside the carve is set to the other mineral
+  put(top-1, colA, other);
+  put(top-1, colB, other);
+  const outA = sealC - d, outB = sealC + 3*d;
+  for(let r=top;r<FLOOR;r++){ put(r, outA, other); put(r, outB, other); }
+  return {m, cols:[colA, colG, colB], guard:[outA, outB], top};
+}
+
 function buildChamber(){
   const palette = Math.min(3 + Math.floor(chamber/2), MIN.length);
   grid = [];
@@ -172,7 +209,17 @@ function buildChamber(){
   for(let r=0;r<FLOOR;r++) for(let c=0;c<COLS;c++) unset.add(r+','+c);
   while(unset.size){
     const [sr,sc] = unset.values().next().value.split(',').map(Number);
-    const m = rnd(palette), want = 3 + rnd(5);
+    // Seams are kept small and pushed away from their neighbours' minerals. A
+    // seam big enough to open the bedrock by itself would make the whole game
+    // one tap again, so no seam is allowed to be that big on its own.
+    const near = [];
+    for(const [dr,dc] of N4){
+      const n = at(sr+dr, sc+dc);
+      if(n && n.t === 'rock') near.push(n.c);
+    }
+    let m = rnd(palette);
+    for(let tries=0; tries<6 && near.indexOf(m) >= 0; tries++) m = rnd(palette);
+    const want = 2 + rnd(3);
     const q = [{r:sr,c:sc}]; let n = 0;
     while(q.length && n < want){
       const p = q.splice(rnd(q.length),1)[0];
@@ -188,13 +235,10 @@ function buildChamber(){
 
   // --- bedrock floor with the seal the chamber is locked behind
   for(let c=0;c<COLS;c++) grid[FLOOR][c] = cell('bedrock');
-  const seals = 1 + (chamber >= 3 ? 1 : 0);
-  const freeCols = [];
-  for(let c=0;c<COLS;c++) freeCols.push(c);
-  for(let i=0;i<seals;i++){
-    grid[FLOOR][freeCols.splice(rnd(freeCols.length),1)[0]] = cell('seal');
-  }
-  sealsLeft = seals;
+  const sealC = rnd(COLS);
+  grid[FLOOR][sealC] = cell('seal');
+  sealsLeft = 1;
+  const weld = carveSealWeld(sealC, palette);
 
   // --- vessels and charges, placed into the rock face
   const present = [];
@@ -205,24 +249,23 @@ function buildChamber(){
   // Nothing is placed in the top row — it is the first thing the ceiling eats —
   // and nothing is placed directly on a seal, so the mineral the bedrock must be
   // opened with is always a readable piece of rock rather than a stray canister.
+  // Nothing is placed inside the carved weld, nor on the fence cells that keep
+  // its two seams apart: a matching powder dropped on a fence conducts, welds
+  // the seam to whatever is behind it, and hands the player a chamber they can
+  // open with one tap — exactly the thing this rule exists to prevent.
   const spots = [];
   for(let r=1;r<FLOOR;r++) for(let c=0;c<COLS;c++){
     if(r === FLOOR-1 && grid[FLOOR][c] && grid[FLOOR][c].t === 'seal') continue;
+    if(r >= weld.top - 1 && weld.cols.indexOf(c) >= 0) continue;
+    if(r >= weld.top && weld.guard.indexOf(c) >= 0) continue;
     spots.push({r,c});
   }
 
   const canCols = [];
   const nCan = 3 + Math.min(2, Math.floor(chamber/3));
-  // The bedrock takes a chained detonation, and the relay that delivers it has
-  // to be the mineral of the rock sitting on the seal — so the chamber is built
-  // guaranteeing at least one canister of that mineral exists to be walked down.
-  const keyMinerals = [];
-  for(let c=0;c<COLS;c++){
-    if(grid[FLOOR][c] && grid[FLOOR][c].t === 'seal'){
-      const above = grid[FLOOR-1][c];
-      if(above && above.t === 'rock') keyMinerals.push(above.c);
-    }
-  }
+  // Two canisters of the weld's mineral, guaranteed: one to drop into the gap
+  // and one to arm and fire at the joined mass.
+  const keyMinerals = [weld.m, weld.m];
   for(let i=0;i<nCan;i++){
     const m = i < keyMinerals.length ? keyMinerals[i] : present[i % present.length];
     const p = spots.splice(rnd(spots.length),1)[0];
@@ -343,6 +386,15 @@ function conducts(g, m){
   return g.t === 'canister' && g.ch < 2;
 }
 
+/* Does this set of cells reach the bedrock seal? Used by the preview so the
+   promise about the seal is made from the same test that keeps it. */
+function sealTouched(cells){
+  return cells.some(p => N4.some(([dr,dc]) => {
+    const g = at(p.r+dr, p.c+dc);
+    return g && g.t === 'seal';
+  }));
+}
+
 function area(r,c){
   const out = [];
   for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
@@ -425,9 +477,10 @@ function wave(cells, mult){
       const g = at(nr,nc);
       if(!g || seen[k]) continue;
       if(g.t === 'seal'){
-        // One charge is a bang. The bedrock only goes under a chain, so the
-        // seam under the exit is never the answer on its own.
-        if(mult < SEAL_CHAIN){ sealHeld = true; continue; }
+        // Bedrock does not care how many bangs, it cares how big one was. A lone
+        // seam is never enough, so the answer is always to have joined seams
+        // together first.
+        if(dead.length < SEAL_SIZE){ sealHeld = true; continue; }
         seen[k] = 1; grid[nr][nc] = null; sealsLeft--;
         burst(BX+nc*S+S/2, BY+nr*S+S/2, '#7dfcff', 22);
         shakeT = 0.45; shakeMag = 15; sfx.open();
@@ -438,7 +491,7 @@ function wave(cells, mult){
   }
 
   if(sealHeld){
-    say('THE SEAL HOLDS — BEDROCK NEEDS A CHAIN');
+    say('THE SEAL HOLDS — ' + dead.length + ' CELLS, IT NEEDS ' + SEAL_SIZE);
     sfx.deny();
     for(let c=0;c<COLS;c++) if(grid[FLOOR][c] && grid[FLOOR][c].t === 'seal')
       burst(BX + c*S + S/2, BY + FLOOR*S + S/2, '#7dfcff', 8);
@@ -456,13 +509,8 @@ function wave(cells, mult){
           const k = p.r+','+p.c;
           if(!mark[k]){ mark[k] = 1; cs.push(p); }
         }
-        // a primed pocket cracks the bedrock beside it, but only as a chained
-        // detonation — the same rule the rest of the blast lives under
-        if(mult + 1 >= SEAL_CHAIN) for(const [dr,dc] of N4){
-          const g = at(t.r+dr, t.c+dc);
-          if(g && g.t === 'seal'){ grid[t.r+dr][t.c+dc] = null; sealsLeft--; sfx.open();
-            burst(BX+(t.c+dc)*S+S/2, BY+(t.r+dr)*S+S/2, '#7dfcff', 22); }
-        }
+        // no special case for the pocket: its area goes through the same wave,
+        // so the same size rule decides whether the bedrock opens
       } else {
         for(const [dr,dc] of N4){
           const g = at(t.r+dr, t.c+dc);
@@ -709,7 +757,11 @@ function tap(x,y){
     if(aim && aim.r === p.r && aim.c === p.c){ fireShot(sel, p, aim.cells); return; }
     const cells = s.t === 'gas' ? area(p.r, p.c) : seam(p.r, p.c);
     aim = {r:p.r, c:p.c, cells};
-    sfx.pick(); say('TAP AGAIN TO BLAST · ' + cells.length + ' ROCK');
+    sfx.pick();
+    // the count is the whole readout: it is what the bedrock is measured against
+    say(cells.length + ' CELLS' + (sealTouched(cells)
+        ? (cells.length >= SEAL_SIZE ? ' · THE SEAL CRACKS' : ' · TOO SMALL FOR THE SEAL')
+        : ' · TAP AGAIN TO BLAST'));
     return;
   }
   sfx.deny();
@@ -862,7 +914,7 @@ function drawBedrock(x,y,s,seal){
     ctx.font = 'bold ' + Math.floor(s*0.2) + 'px ui-monospace,monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     // the bedrock states its own price, so the rule is never a surprise
-    ctx.fillStyle = '#bff8ff'; ctx.fillText('CHAIN x' + SEAL_CHAIN, x + s/2, y + s*0.76);
+    ctx.fillStyle = '#bff8ff'; ctx.fillText('BLAST ' + SEAL_SIZE + '+', x + s/2, y + s*0.76);
   } else {
     ctx.fillStyle = '#241f2e'; ctx.fillRect(x,y,s,s);
     ctx.fillStyle = '#332c40'; ctx.fillRect(x+1,y+1,s-2,s*0.3);
@@ -1019,9 +1071,17 @@ function draw(){
     for(const p of aim.cells) ctx.fillRect(BX + p.c*S, BY + p.r*S, S, S);
     ctx.globalAlpha = 1;
     outline(aim.cells, '#ffffff', 3);
-    // Only what this blast will actually set off. The seal is deliberately NOT
-    // outlined: a first detonation cannot crack it, and promising otherwise
-    // would be the preview telling a lie.
+    // The seal is outlined only when this blast is genuinely big enough to open
+    // it — same test the blast itself uses, so the promise cannot drift.
+    if(aim.cells.length >= SEAL_SIZE){
+      const cracks = [];
+      for(const p of aim.cells) for(const [dr,dc] of N4){
+        const g = at(p.r+dr, p.c+dc);
+        if(g && g.t === 'seal') cracks.push({r:p.r+dr, c:p.c+dc});
+      }
+      if(cracks.length) outline(cracks, '#7dfcff', 4);
+    }
+
     const chain = [];
     for(const p of aim.cells){
       const inside = at(p.r, p.c);
@@ -1133,7 +1193,16 @@ function draw(){
 
   const fy = BY + S*ROWS + 30;
   if(msgT > 0) label(msg, W/2, fy, 13, '#cbb9e8', 'center');
-  else if(state === 'play') label(sel ? 'TAP A TARGET' : 'TAP A POWDER CHARGE', W/2, fy, 13, '#6f6488', 'center');
+  else if(state === 'play'){
+    // the first chamber names the verb; after that the board is the teacher
+    const hint = sel ? 'TAP A TARGET'
+      : chamber === 0
+        ? (Math.floor(T/4) % 2
+            ? 'SET A CANISTER BETWEEN TWO SEAMS OF ITS MINERAL'
+            : 'ONE BLAST OF ' + SEAL_SIZE + '+ CELLS OPENS THE SEAL')
+        : 'TAP A POWDER CHARGE';
+    label(hint, W/2, fy, chamber === 0 ? 11 : 13, '#6f6488', 'center');
+  }
 
   for(const f of floaters){
     ctx.globalAlpha = Math.max(0, 1 - f.t/1.1);
@@ -1218,6 +1287,7 @@ requestAnimationFrame(frame);
 window.__game = {
   tap, state:()=>state, grid:()=>grid, px:(r,c)=>({x:BX+c*S+S/2, y:BY+r*S+S/2}),
   selected:()=>sel && {r:sel.r, c:sel.c},
+  aimSize:()=>aim ? aim.cells.length : 0,
   info:()=>({state, deathMsg, sealsLeft, gold, depth, ceil, actions, minerC,
              clouds: clouds.map(g=>({c:g.c, left:g.left, r:cloudRow(g)})),
              FLOOR, COLS, S, BX, BY, LEDGE})
