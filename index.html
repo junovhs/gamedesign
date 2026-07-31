@@ -111,6 +111,7 @@ const sfx = {
   pick:  ()=>tone(520, 0.07, 'square', 0.07, 700),
   deny:  ()=>tone(150, 0.10, 'sawtooth', 0.08, 90),
   fly:   ()=>tone(300, 0.16, 'triangle', 0.07, 820),
+  clank: ()=>{ tone(220, 0.09, 'square', 0.09, 160); noise(0.12, 0.16, 1800); },
   load:  (n)=>tone(n>=2?880:600, 0.12, 'square', 0.10, n>=2?1300:760),
   boom:  (combo)=>{ noise(0.34, 0.34, 700 + combo*220); tone(90+combo*26, 0.24, 'sawtooth', 0.13, 45); },
   crush: ()=>{ noise(0.5, 0.34, 380); tone(70, 0.4, 'sawtooth', 0.14, 34); },
@@ -521,8 +522,13 @@ function tap(x,y){
     if(g.t === 'powder' || ((g.t === 'canister' || g.t === 'gas') && g.ch >= 2)){
       sel = {r:p.r, c:p.c}; aim = null; sfx.pick();
       say(g.t === 'powder' ? 'LOAD IT INTO A MATCHING CANISTER' : 'FIRE IT INTO A MATCHING SEAM');
-    } else if(g.t === 'canister' || g.t === 'gas'){
-      sfx.deny(); say('NEEDS TWO POWDER CHARGES');
+    } else if(g.t === 'canister'){
+      // an unarmed canister comes loose on the drill-line: where it sits before
+      // it is armed is the arrangement decision the whole chain hangs on
+      sel = {r:p.r, c:p.c}; aim = null; sfx.pick();
+      say('SET IT IN THE ROCK, OR TAP A CHARGE');
+    } else if(g.t === 'gas'){
+      sfx.deny(); say('GAS POCKETS CANNOT BE MOVED');
     }
     return;
   }
@@ -539,6 +545,14 @@ function tap(x,y){
     return;
   }
 
+  // carrying an unarmed canister: set it into the rock, or load it where it is
+  if(s.t === 'canister' && s.ch < 2){
+    if(g && g.t === 'rock'){ moveShot(sel, p); return; }
+    if(g && g.t === 'powder' && g.c === s.c){ loadShot(p, sel); return; }
+    sfx.deny(); say(g && g.t === 'powder' ? 'WRONG MINERAL' : 'SET IT INTO ROCK');
+    return;
+  }
+
   // an armed vessel is selected: target a seam, confirm on the second tap
   if(g && g.t === 'rock'){
     if(s.t === 'canister' && g.c !== s.c){ sfx.deny(); say('WRONG MINERAL'); return; }
@@ -549,6 +563,24 @@ function tap(x,y){
     return;
   }
   sfx.deny();
+}
+
+/* The canister and the rock trade places. A swap rather than a drop, because the
+   face is always packed to the floor — dropping into "empty space" would only
+   ever land the canister on top of the pile, nowhere near the seams that matter. */
+function moveShot(from, to){
+  state = 'busy'; sel = null; aim = null;
+  const can = grid[from.r][from.c], rock = grid[to.r][to.c];
+  grid[to.r][to.c] = can; grid[from.r][from.c] = rock;
+  can.pop = 0.3; rock.pop = 0.3;
+  sfx.clank();
+  burst(BX + to.c*S + S/2, BY + to.r*S + S/2, '#c9cee0', 9);
+  burst(BX + from.c*S + S/2, BY + from.r*S + S/2, MIN[rock.c].a, 7);
+  shakeT = 0.12; shakeMag = 4;
+  settle(false);
+  tickCeiling();
+  if(state === 'busy') state = 'play';
+  checkChamber();
 }
 
 function loadShot(from, to){
@@ -812,9 +844,13 @@ function draw(){
       ctx.globalAlpha = 0.22 + t*0.16; ctx.fillStyle = '#7dfcff';
       for(let r=ceil;r<FLOOR;r++) for(let c=0;c<COLS;c++){
         const g = grid[r][c]; if(!g) continue;
+        // carrying an unarmed canister, every rock cell is a legal seat, so
+        // glowing them all would be noise — only the matching charges glow
         const ok = s.t === 'powder'
           ? ((g.t === 'canister' && g.c === s.c && g.ch < 2) || (g.t === 'gas' && g.ch < 2))
-          : (g.t === 'rock' && (s.t === 'gas' || g.c === s.c));
+          : (s.t === 'canister' && s.ch < 2
+              ? (g.t === 'powder' && g.c === s.c)
+              : (g.t === 'rock' && (s.t === 'gas' || g.c === s.c)));
         if(ok) ctx.fillRect(BX + c*S, BY + r*S, S, S);
       }
       ctx.globalAlpha = 1;
