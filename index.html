@@ -61,6 +61,7 @@ const ctx = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1;
 let S = 0, BX = 0, BY = 0;          // cell size, board origin
 let tooSmall = false;               // landscape bail-out
+const LEDGE = 52;                   // the miner's walkable band, above the board
 
 function layout(){
   DPR = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -68,13 +69,13 @@ function layout(){
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.imageSmoothingEnabled = false;
-  // the miner stands in the chamber now, not on a ledge above it, so the HUD
-  // band only has to clear its own text
-  const HUD = 84, FOOT = 72;
-  S = Math.floor(Math.min((W - 14) / COLS, (H - HUD - FOOT) / ROWS));
+  // the miner's ledge sits between the readout and the chamber. He is always
+  // above the rock: down is progress, up is where the danger comes from.
+  const HUD = 78, FOOT = 66;
+  S = Math.floor(Math.min((W - 14) / COLS, (H - HUD - LEDGE - FOOT) / ROWS));
   tooSmall = S < 38;
   BX = Math.round((W - S * COLS) / 2);
-  BY = Math.round(HUD + (H - HUD - FOOT - S * ROWS) / 2);
+  BY = Math.round(HUD + LEDGE + (H - HUD - LEDGE - FOOT - S * ROWS) / 2);
 }
 window.addEventListener('resize', layout);
 window.addEventListener('orientationchange', ()=>setTimeout(layout,120));
@@ -113,6 +114,7 @@ const sfx = {
   fly:   ()=>tone(300, 0.16, 'triangle', 0.07, 820),
   clank: ()=>{ tone(220, 0.09, 'square', 0.09, 160); noise(0.12, 0.16, 1800); },
   step:  ()=>noise(0.09, 0.14, 600),
+  hiss:  ()=>noise(0.28, 0.12, 4200),
   load:  (n)=>tone(n>=2?880:600, 0.12, 'square', 0.10, n>=2?1300:760),
   boom:  (combo)=>{ noise(0.34, 0.34, 700 + combo*220); tone(90+combo*26, 0.24, 'sawtooth', 0.13, 45); },
   crush: ()=>{ noise(0.5, 0.34, 380); tone(70, 0.4, 'sawtooth', 0.14, 34); },
@@ -137,7 +139,9 @@ let msg = '', msgT = 0;
 let shakeT = 0, shakeMag = 0;
 let flashT = 0, flashCol = '#fff';
 let parts = [], shots = [], timers = [], floaters = [];
-let minerC = 0, minerFall = 0;   // he occupies one column of the bedrock floor
+let minerC = 0, minerFall = 0;   // he walks the ledge along the top of the chamber
+let clouds = [];                 // released gas, climbing toward that ledge
+let deathMsg = 'BURIED';
 let chainRocks = 0;       // rock destroyed by the chain in progress — pays out charges
 let T = 0;                // seconds since load, drives every idle animation
 
@@ -231,6 +235,7 @@ function buildChamber(){
   ceil = 0; actions = 0; sel = null; aim = null; combo = 0;
   actionsPerCollapse = Math.max(4, 7 - Math.floor(chamber/2));
   minerC = Math.floor(COLS/2);
+  clouds = [];
   state = 'play';
   settle(true);
 }
@@ -239,51 +244,54 @@ function buildChamber(){
    Everything that is not bedrock falls in its column. Rock falls too, which is
    what turns one blast into a reshaped chamber instead of a hole in a wall. */
 function settle(instant){
-  const fellGas = [];
   for(let c=0;c<COLS;c++){
     let write = FLOOR - 1;
     for(let r=FLOOR-1;r>=ceil;r--){
       const g = grid[r][c];
       if(!g) continue;
+      // a pocket whose support is gone does not drop — it breaks open, and gas
+      // goes the only way gas goes
+      if(g.t === 'gas' && write !== r){
+        grid[r][c] = null;
+        clouds.push({c, r0:r, left:CLOUD_FUSE});
+        burst(BX + c*S + S/2, BY + r*S + S/2, '#8dff9a', 14);
+        sfx.hiss();
+        say('THE POCKET BREAKS OPEN');
+        continue;                       // the column keeps compacting past it
+      }
       if(write !== r){
         grid[write][c] = g; grid[r][c] = null;
         if(!instant){ g.oy = (write - r) * S; g.vy = 0; }
-        if(g.t === 'gas') fellGas.push(g);
       }
       write--;
     }
   }
-  // a pocket that has been dropped is a pocket that is about to go off
-  if(!instant && fellGas.length) after(300, ()=>detonateFallen(fellGas));
 }
 
-function locate(cellObj){
-  for(let r=ceil;r<FLOOR;r++) for(let c=0;c<COLS;c++)
-    if(grid[r][c] === cellObj) return {r,c};
-  return null;
-}
+/* Released gas climbs toward the ledge on a fixed fuse of actions rather than by
+   threading empty cells: the chamber packs downward, so the void is always
+   directly under the ledge and a physical rise would surface instantly with no
+   chance to answer it. Three actions is the answer window — walk out of its
+   column, or blast it apart. The count is drawn on the cloud. */
+const CLOUD_FUSE = 3;
 
-/* Gas pockets are structurally unstable: cut the rock holding one up and it
-   comes down and detonates where it lands, spending none of your charges and
-   asking none of your permission. If it lands on the miner, that is the run —
-   the only thing in the chamber that can kill him is a mistake he made. */
-function detonateFallen(list){
-  const cells = [], mark = {};
-  let caught = false;
-  for(const g of list){
-    const p = locate(g);
-    if(!p) continue;                       // already consumed by a chain
-    if(p.r >= FLOOR - 1 && Math.abs(p.c - minerC) <= 1) caught = true;
-    for(const q of area(p.r, p.c)){
-      const k = q.r+','+q.c;
-      if(!mark[k]){ mark[k] = 1; cells.push(q); }
+function cloudRow(g){ return ceil + (g.r0 - ceil) * (g.left / CLOUD_FUSE); }
+
+function advanceClouds(){
+  for(let i=clouds.length-1;i>=0;i--){
+    const g = clouds[i];
+    g.left--;
+    sfx.hiss();
+    if(g.left > 0) continue;
+    clouds.splice(i,1);
+    burst(BX + g.c*S + S/2, BY + ceil*S, '#8dff9a', 22);
+    if(Math.abs(g.c - minerC) <= 1){
+      say('THE GAS REACHES YOUR LEDGE');
+      flashT = 0.3; flashCol = '#3fae6a';
+      die('POISONED');
+      return;
     }
   }
-  if(!cells.length) return;
-  state = 'busy'; chainRocks = 0;
-  say(caught ? 'IT COMES DOWN ON TOP OF YOU' : 'THE POCKET COMES DOWN');
-  wave(cells, 1);
-  if(caught) after(430, ()=>{ say('CAUGHT IN THE BLAST'); die(); });
 }
 
 /* ---------------- seam lookup ---------------------------------------------- */
@@ -350,6 +358,18 @@ function wave(cells, mult){
 
   const dead = [];
   for(const p of cells){ if(grid[p.r][p.c]){ dead.push(p); killCell(p.r, p.c, mult); } }
+
+  // A blast blows released gas apart, so the cloud is a threat you can answer.
+  // Wash, not a direct hit: the cloud floats in the void a blast never occupies,
+  // so blasting rock beside it has to be enough.
+  for(let i=clouds.length-1;i>=0;i--){
+    const g = clouds[i];
+    if(cells.some(p => Math.abs(p.c - g.c) <= 1)){
+      burst(BX + g.c*S + S/2, BY + cloudRow(g)*S, '#8dff9a', 18);
+      clouds.splice(i,1);
+      floatText(W/2, BY + 2*S, 'GAS DISPERSED', '#8dff9a');
+    }
+  }
 
   // what the blast touched on its way out
   const next = [], seen = {};
@@ -462,13 +482,16 @@ function collapseRow(){
 
 function tickCeiling(){
   actions++;
+  advanceClouds();                  // released gas climbs on your clock, not its own
+  if(state === 'dead') return;
   if(actions % actionsPerCollapse !== 0) return;
   say('THE CEILING COMES DOWN');
   collapseRow();
 }
 
-function die(){
+function die(how){
   if(state === 'dead') return;
+  deathMsg = how || 'BURIED';
   state = 'dead'; sel = null; aim = null;
   shakeT = 0.8; shakeMag = 18; sfx.dead();
 }
@@ -545,7 +568,7 @@ function walkTo(c){
   if(c === minerC) return;
   minerC = c;
   sfx.step();
-  const x = BX + c*S + S/2, y = BY + FLOOR*S + S*0.9;
+  const x = BX + c*S + S/2, y = BY - 6;
   for(let i=0;i<6;i++)
     parts.push({x, y, vx:(Math.random()-0.5)*70, vy:-30-Math.random()*50,
                 life:0.3, t:0, col:'#4a3a55', s:2+Math.random()*3});
@@ -557,13 +580,15 @@ function tap(x,y){
   if(state === 'dead'){ if(hitBtn(btnRestart,x,y)) restart(); return; }
   if(state !== 'play') return;
 
+  // the ledge is his to walk. Free, and it never cancels what he is holding —
+  // getting out from under rising gas must never cost the plan you were making
+  if(y >= BY - LEDGE && y < BY){
+    const c = Math.floor((x - BX)/S);
+    if(c >= 0 && c < COLS){ walkTo(c); return; }
+  }
+
   const p = cellAtPx(x,y);
   if(!p){ sel = null; aim = null; return; }
-
-  // the floor is his to walk. Free, and it never cancels what he is holding —
-  // getting out from under a pocket must never cost the plan you were making
-  if(p.r === FLOOR){ walkTo(p.c); return; }
-
   const g = at(p.r, p.c);
 
   if(!sel){
@@ -776,6 +801,40 @@ function drawCrushed(x,y,s){
   ctx.strokeStyle = '#0d0a14'; ctx.lineWidth = 1; ctx.strokeRect(x+0.5, y+0.5, s-1, s-1);
 }
 
+/* The ledge is a real surface, not a frame: it is the thing gas is climbing
+   toward, and the only place in the chamber the player can stand. */
+function drawLedge(danger){
+  const y = BY - LEDGE, h = LEDGE;
+  ctx.fillStyle = '#191325'; ctx.fillRect(BX - 6, y, S*COLS + 12, h);
+  ctx.fillStyle = '#2a2136'; ctx.fillRect(BX - 6, y + h - 12, S*COLS + 12, 12);
+  ctx.fillStyle = '#3a2f4d'; ctx.fillRect(BX - 6, y + h - 12, S*COLS + 12, 3);
+  // faint stops so it reads as six standable places
+  ctx.fillStyle = '#241d33';
+  for(let c=1;c<COLS;c++) ctx.fillRect(BX + c*S - 1, y + h - 10, 2, 8);
+  drawMiner(BX + minerC*S + S/2, y + h - 12 + minerFall*70, S, danger);
+}
+
+function drawCloud(x,y,s,left){
+  ctx.globalAlpha = 0.85;
+  for(let i=0;i<9;i++){
+    const a = (T*1.6 + i*0.7);
+    const bx = x + s*0.5 + Math.cos(a)*s*0.3, by = y + s*0.5 + Math.sin(a*1.3)*s*0.28;
+    ctx.fillStyle = i%2 ? '#8dff9a' : '#4de08a';
+    ctx.beginPath(); ctx.arc(bx, by, s*(0.1 + 0.05*Math.sin(T*5+i)), 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = '#3fae6a';
+  ctx.beginPath(); ctx.arc(x + s*0.5, y + s*0.5, s*0.36, 0, 7); ctx.fill();
+  ctx.globalAlpha = 1;
+  // an arrow, because the one thing the player must read is which way it goes,
+  // and the count of actions before it gets there
+  ctx.fillStyle = '#d8ffd8';
+  const cx = x + s*0.5, ty = y + s*0.1 - 3*Math.abs(Math.sin(T*4));
+  ctx.beginPath(); ctx.moveTo(cx, ty); ctx.lineTo(cx + s*0.13, ty + s*0.16);
+  ctx.lineTo(cx - s*0.13, ty + s*0.16); ctx.closePath(); ctx.fill();
+  label(String(left), cx, y + s*0.6, Math.floor(s*0.42), '#062012', 'center');
+}
+
 function drawMiner(x,y,s,danger){
   const u = Math.max(2, s/13);
   if(danger){
@@ -787,12 +846,12 @@ function drawMiner(x,y,s,danger){
   ctx.fillStyle = '#3b2a1e'; ctx.fillRect(x - u*3, y - u*7, u*6, u*7);
   ctx.fillStyle = '#f0c08a'; ctx.fillRect(x - u*2, y - u*10, u*4, u*3);
   ctx.fillStyle = danger ? '#ff4d6d' : '#f2b21f'; ctx.fillRect(x - u*3, y - u*12, u*6, u*2);
-  // he is at the bottom of the chamber, so the lamp shines up into the rock
-  // rather than out through the frame
+  // he is above the chamber, so the lamp shines down the shaft — the direction
+  // the whole game reads in — and never up into the readout
   ctx.globalAlpha = 0.3 + (0.5 + 0.5*Math.sin(T*4))*0.28;
   ctx.fillStyle = '#fff3a0';
-  ctx.beginPath(); ctx.moveTo(x + u*2, y - u*11); ctx.lineTo(x + u*13, y - u*18);
-  ctx.lineTo(x + u*13, y - u*8); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x + u*2, y - u*10); ctx.lineTo(x + u*12, y - u*1);
+  ctx.lineTo(x + u*12, y + u*7); ctx.closePath(); ctx.fill();
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#fff'; ctx.fillRect(x + u*2, y - u*11, u*1.4, u*1.4);
 }
@@ -915,7 +974,7 @@ function draw(){
     ctx.strokeStyle = 'rgba(125,252,255,.5)'; ctx.lineWidth = 2;
     ctx.setLineDash([6,6]); ctx.lineDashOffset = -T*30;
     ctx.beginPath();
-    ctx.moveTo(BX + minerC*S + S/2, BY + FLOOR*S + S/2);
+    ctx.moveTo(BX + minerC*S + S/2, BY - 12);
     ctx.lineTo(BX + sel.c*S + S/2, BY + sel.r*S + S/2);
     ctx.stroke(); ctx.setLineDash([]);
   }
@@ -937,27 +996,34 @@ function draw(){
   }
   ctx.globalAlpha = 1;
 
-  // every gas pocket owns a drop lane: the columns it can detonate in if the
-  // rock under it goes. Standing in one is the mistake the chamber can kill for.
-  const lanes = {};
+  // Rise lanes. A pocket still in the wall shows where its gas WOULD go if you
+  // cut it loose; a released cloud shows where it is going now, and the three
+  // columns of ledge it will reach. Standing in one is the mistake that kills.
+  let danger = false;
+  ctx.globalAlpha = 0.05 + 0.03*Math.abs(Math.sin(T*3));
+  ctx.fillStyle = '#3fae6a';
   for(let r=ceil;r<FLOOR;r++) for(let c=0;c<COLS;c++){
     const g = grid[r][c];
-    if(!g || g.t !== 'gas') continue;
-    for(let d=-1;d<=1;d++){
-      const cc = c+d;
-      if(cc >= 0 && cc < COLS) lanes[cc] = Math.max(lanes[cc] === undefined ? -1 : lanes[cc], r);
-    }
-  }
-  const danger = lanes[minerC] !== undefined;
-  ctx.globalAlpha = 0.06 + 0.05*Math.abs(Math.sin(T*3));
-  ctx.fillStyle = '#ff4d6d';
-  for(const k in lanes){
-    const c = +k, top = lanes[k] + 1;
-    ctx.fillRect(BX + c*S, BY + top*S, S, (FLOOR + 1 - top)*S);
+    if(g && g.t === 'gas') ctx.fillRect(BX + c*S, BY + ceil*S, S, (r - ceil)*S);
   }
   ctx.globalAlpha = 1;
 
-  drawMiner(BX + minerC*S + S/2, BY + (FLOOR+1)*S - 4 - minerFall*60, S, danger);
+  for(const g of clouds){
+    const gr = cloudRow(g);
+    const lit = 0.14 + 0.1*Math.abs(Math.sin(T*4));
+    for(let d=-1;d<=1;d++){
+      const cc = g.c + d;
+      if(cc < 0 || cc >= COLS) continue;
+      if(cc === minerC) danger = true;
+      ctx.globalAlpha = d === 0 ? lit : lit*0.5;
+      ctx.fillStyle = '#ff4d6d';
+      ctx.fillRect(BX + cc*S, BY - LEDGE, S, (gr - ceil)*S + LEDGE);
+    }
+    ctx.globalAlpha = 1;
+    drawCloud(BX + g.c*S, BY + gr*S, S, g.left);
+  }
+
+  drawLedge(danger);
 
   ctx.restore();
 
@@ -1003,7 +1069,7 @@ function draw(){
   }
   if(state === 'dead'){
     ctx.fillStyle = 'rgba(20,4,10,.76)'; ctx.fillRect(0,0,W,H);
-    label('BURIED', W/2, H*0.32, 34, '#ff4d6d', 'center');
+    label(deathMsg, W/2, H*0.32, 34, '#ff4d6d', 'center');
     label('depth ' + depth + 'm  ·  gold ' + gold, W/2, H*0.32 + 36, 15, '#ffe66a', 'center');
     btnRestart = button('DIG AGAIN', H*0.5, '#ff8a2b');
   }
@@ -1063,7 +1129,9 @@ requestAnimationFrame(frame);
 /* Exposed only so the CDP verification harness can drive real taps. */
 window.__game = {
   tap, state:()=>state, grid:()=>grid, px:(r,c)=>({x:BX+c*S+S/2, y:BY+r*S+S/2}),
-  info:()=>({state, sealsLeft, gold, depth, ceil, actions, minerC, FLOOR, COLS, S, BX, BY})
+  info:()=>({state, deathMsg, sealsLeft, gold, depth, ceil, actions, minerC,
+             clouds: clouds.map(g=>({c:g.c, left:g.left, r:cloudRow(g)})),
+             FLOOR, COLS, S, BX, BY, LEDGE})
 };
 </script>
 </body>
