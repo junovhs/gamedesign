@@ -85,12 +85,36 @@
 const TILE = 16, COLS = 10, ROWS = 16, HUD = 28;
 // The top-right of the HUD belongs to the menu button, which is a DOM element sized in
 // CSS pixels. Nothing on the canvas may be drawn under it, so the readouts reserve this
-// much width; PIPROW is the pick-pip wrap, kept short enough to clear the bag meter.
+// much width; PIPROW is the pick-pip wrap, kept short enough to clear the money readout.
 const MENUW = 36, PIPROW = 8;
 // The laboratory's restart button takes the mirror corner, so the HUD gives up the
 // same width on the left whenever a handcrafted board is loaded.
 const RESTARTW = 36;
-const W = COLS*TILE, H = HUD + ROWS*TILE;      // 160 x 284
+
+/* THE HOTBAR BAND (LAB-05, DEC-18)
+
+   Carried things stay visible and usable on the board, so the hotbar is not a panel you
+   open -- it is a permanent band of the canvas, below the board and outside it. Being
+   outside the board matters twice: a slot tap can never be mistaken for a board tap, and
+   the board keeps every one of its 256 rows.
+
+   The band height is not a taste decision, it is solved from the 44 CSS px thumb rule at
+   the WORST orientation. The canvas letterboxes at a fixed aspect, so landscape (390 tall)
+   is where everything is smallest:
+
+       SCALE_landscape = 390 / (284 + band)
+       slot height in CSS px = band * SCALE_landscape >= 44
+       => 390*band >= 44*(284+band) => band >= 36.1
+
+   So 37. It costs portrait nothing at all: portrait scale is bound by WIDTH (390/160 =
+   2.4375, against 844/321 = 2.63), so the board renders at exactly the size it did before
+   this band existed. Four slots divide the 160px width evenly at 40px each, and 40x37
+   clears 44 CSS px on its shortest side in both orientations. Four is also the honest
+   number for M0: it is small enough that picking a fourth thing up is a real decision. */
+const HOTBAR = 37, SLOTS = 4, SLOTW = (COLS*TILE)/SLOTS;   // 40 wide, 37 tall
+const BOARDH = ROWS*TILE;                                   // 256
+const BOARDBOT = HUD + BOARDH;                              // 284: where the band starts
+const W = COLS*TILE, H = HUD + BOARDH + HOTBAR;             // 160 x 321
 const idx = (c,r) => r*COLS + c;
 
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d',{alpha:false});
@@ -435,6 +459,31 @@ function settle(G, F, pc0, pr0){
   return {frames:frames, buried:buried, out:out, pc:pc, pr:pr, fell:fell, g0:g0, pc0:pc0, pr0:pr0};
 }
 
+/* A dropped thing is subject to gravity and support like everything else, but it is not
+   structural -- it holds nothing up, and it never holds itself up. It rests on the first
+   solid cell beneath it, or on the floor.
+
+   Rock that lands in an item's cell does not destroy the item: it lifts it to the nearest
+   empty cell above. Crushing a beam you set down two moves ago would be a consequence the
+   preview promised nothing about, and losing a slot to a collapse you could not read is
+   exactly the kind of opaque punishment DEC-19's first criterion exists to catch. An item
+   that has nowhere at all to go rides out of the bottom of the board and is gone -- the
+   same fate the board already gives a find, by the same rule.
+
+   Deterministic, no clock, no random: safe to run inside resolve. */
+function settleItems(G, items){
+  const kept = [], lost = [];
+  for(const it of items){
+    let c = it.c, r = it.r;
+    while(r >= 0 && G[idx(c,r)]) r--;             // shoved up out of arriving rock
+    if(r < 0){ lost.push(it); continue; }
+    while(r+1 < ROWS && !G[idx(c,r+1)]) r++;      // then straight down onto whatever holds
+    if(r >= ROWS-1){ lost.push(it); continue; }   // same rule the player falls out by
+    kept.push({...it, c:c, r:r});
+  }
+  return {items:kept, lost:lost};
+}
+
 /* ---------------- clusters ---------------- */
 // One swing takes the nearest MAXBREAK tiles of the same material, breadth-first from
 // where you tapped. Capping it means a big seam is several decisions instead of one
@@ -501,7 +550,61 @@ the identical resolution on commit.
 
 Render and animation CONSUME the event list. They never mutate board state. */
 
-const ACT = {BREAK:'break', WALK:'walk', PLACE:'place', SETTLE:'settle'};
+/* ================= CARRIED THINGS (LAB-05) =================
+
+A carried thing is one entry in the ITEM table and nothing else. The table says what it is
+called, how many fit in one slot, and -- if it is the kind of thing that becomes terrain --
+which material it turns into when it is used on a cell.
+
+Two rules cover every item in M0, which is why LAB-06/07/11 can each add a verb without
+touching this file's plumbing:
+
+  USE   an item with a `place` material becomes that material in an empty cell in reach.
+        That is exactly what the beam already did, so the beam needs no special case.
+  DROP  an item without one is set down into the world as a real object, subject to
+        gravity and support, and can be picked up again.
+
+`stack` is how many of a thing one slot holds. Capacity therefore reads as slots and
+stacks -- never as a bar, which is what DEC-18 is about. */
+const ITEM = {
+  beam:    {n:'BEAM',    stack:5, place:14, pal:['#e8b878','#c98a4b','#7a4e28']},
+  balloon: {n:'BALLOON', stack:3,           pal:['#f0836f','#e0604f','#8a2f28']},
+  tnt:     {n:'TNT',     stack:3,           pal:['#e0604f','#8a2f28','#fff3c0']},
+  find:    {n:'FIND',    stack:1,           pal:['#fff3c0','#e8b830','#8a6a12']}
+};
+const stackOf = (k) => (ITEM[k] ? ITEM[k].stack : 1);
+
+// A slot is {k, n} or null. Null slots are real: an empty slot in the middle of the bar is
+// a place a thing can be put, so the four slots always exist and only their contents move.
+const emptySlots = () => [null, null, null, null];
+const cloneSlots = (a) => {
+  const out = emptySlots();
+  for(let i=0;i<SLOTS;i++) out[i] = (a && a[i]) ? {k:a[i].k, n:a[i].n} : null;
+  return out;
+};
+
+// Where would one more of `k` go? An existing stack with room first, then the leftmost
+// empty slot. Returns -1 when the hotbar is genuinely full, which is the case that has to
+// become a decision rather than a silent conversion into money.
+function slotFor(carried, k){
+  const cap = stackOf(k);
+  for(let i=0;i<SLOTS;i++) if(carried[i] && carried[i].k===k && carried[i].n < cap) return i;
+  for(let i=0;i<SLOTS;i++) if(!carried[i]) return i;
+  return -1;
+}
+function addToSlots(carried, k, count){
+  let left = count===undefined ? 1 : count;
+  while(left > 0){
+    const i = slotFor(carried, k);
+    if(i < 0) break;
+    if(carried[i]) carried[i].n++; else carried[i] = {k:k, n:1};
+    left--;
+  }
+  return left;                                   // whatever would not fit
+}
+
+const ACT = {BREAK:'break', WALK:'walk', PLACE:'place', SETTLE:'settle',
+             USE:'use', DROP:'drop', TAKE:'take', SWAP:'swap'};
 
 function makeBoard(cell, find, playerC, playerR, picksLeft, meta){
   const n = COLS*ROWS;
@@ -509,7 +612,7 @@ function makeBoard(cell, find, playerC, playerR, picksLeft, meta){
     cols:COLS, rows:ROWS,
     cell: cell ? Uint8Array.from(cell) : new Uint8Array(n),
     find: find ? Uint8Array.from(find) : new Uint8Array(n),
-    objects: [], items: [], entities: [], carried: [],
+    objects: [], items: [], entities: [], carried: emptySlots(),
     player: {c:playerC|0, r:playerR|0, buried:false, out:false},
     picks: picksLeft|0,
     meta: meta || {},
@@ -527,7 +630,7 @@ function cloneBoard(b){
     objects: b.objects.map(o => ({...o, cells:o.cells.slice()})),
     items:   b.items.map(i => ({...i})),
     entities:b.entities.map(e => ({...e})),
-    carried: b.carried.map(s => ({...s})),
+    carried: cloneSlots(b.carried),
     player: {...b.player},
     picks: b.picks,
     meta: b.meta,
@@ -542,7 +645,7 @@ function boardToJSON(b){
           cell:Array.from(b.cell), find:Array.from(b.find),
           objects:b.objects.map(o=>({...o, cells:o.cells.slice()})),
           items:b.items.map(i=>({...i})), entities:b.entities.map(e=>({...e})),
-          carried:b.carried.map(s=>({...s})),
+          carried:cloneSlots(b.carried),
           player:{...b.player}, picks:b.picks, meta:b.meta, nextId:b.nextId};
 }
 function boardFromJSON(o){
@@ -551,7 +654,7 @@ function boardFromJSON(o){
   b.objects  = (o.objects ||[]).map(x=>({...x, cells:x.cells.slice()}));
   b.items    = (o.items   ||[]).map(x=>({...x}));
   b.entities = (o.entities||[]).map(x=>({...x}));
-  b.carried  = (o.carried ||[]).map(x=>({...x}));
+  b.carried  = cloneSlots(o.carried);
   b.nextId = o.nextId || 1;
   return b;
 }
@@ -590,6 +693,47 @@ function validateAction(b, a){
       if(b.picks <= 0)                       return 'no picks left';
       return null;
     }
+    // Using or dropping a carried thing costs the thing, never a pick. A pick is the
+    // budget for cutting the board; spending one to set down a beam would make the two
+    // budgets the same budget and quietly halve every board that expects both.
+    case ACT.USE: {
+      if(!inBounds(a.c,a.r))                 return 'off board';
+      const s = b.carried[a.slot|0];
+      if(!s || s.n<=0)                       return 'that slot is empty';
+      if(!ITEM[s.k] || !ITEM[s.k].place)     return 'that is not used on a cell';
+      if(b.cell[idx(a.c,a.r)])               return 'cell is occupied';
+      if(!nearPlayer(a.c,a.r))               return 'out of reach';
+      return null;
+    }
+    case ACT.DROP: {
+      if(!inBounds(a.c,a.r))                 return 'off board';
+      const s = b.carried[a.slot|0];
+      if(!s || s.n<=0)                       return 'that slot is empty';
+      if(b.cell[idx(a.c,a.r)])               return 'cell is occupied';
+      if(!nearPlayer(a.c,a.r))               return 'out of reach';
+      return null;
+    }
+    case ACT.TAKE: {
+      if(!inBounds(a.c,a.r))                 return 'off board';
+      const it = b.items.find(x => x.c===a.c && x.r===a.r);
+      if(!it)                                return 'nothing to pick up there';
+      // Reach for picking up includes the cell the player is STANDING IN, which the six
+      // reach cells deliberately do not. A dropped thing very often comes to rest at your
+      // own feet -- that is where it lands if you drop it into the cell above you -- and
+      // being unable to pick up the thing you are standing on would make dropping a way to
+      // lose an item permanently.
+      const here = (a.c===b.player.c && a.r===b.player.r);
+      if(!here && !nearPlayer(a.c,a.r))      return 'out of reach';
+      if(slotFor(b.carried, it.k) < 0)       return 'hotbar is full';
+      return null;
+    }
+    // Rearranging what you already carry is free and always legal: it changes nothing
+    // about the board, so it must never be refused and never cost a turn.
+    case ACT.SWAP: {
+      const i = a.from|0, j = a.to|0;
+      if(i<0||i>=SLOTS||j<0||j>=SLOTS)       return 'no such slot';
+      return null;
+    }
   }
   return 'unknown action';
 }
@@ -608,6 +752,59 @@ function applyAction(b, a, events){
     b.cell[idx(a.c,a.r)] = a.mat;
     b.picks--;
     events.push({t:'placed', c:a.c, r:a.r, mat:a.mat});
+    return;
+  }
+
+  // Spend one out of a slot and emit which item it was, by name. The event carries the
+  // name because the preview has to be able to say "this consumes your last BEAM" before
+  // the tap that spends it -- naming the limited thing is part of the promise.
+  const spend = (slot) => {
+    const s = b.carried[slot];
+    s.n--; const left = s.n;
+    if(s.n <= 0) b.carried[slot] = null;
+    return left;
+  };
+
+  if(a.t === ACT.USE){
+    const s = b.carried[a.slot|0], k = s.k;
+    b.cell[idx(a.c,a.r)] = ITEM[k].place;
+    const left = spend(a.slot|0);
+    events.push({t:'used', c:a.c, r:a.r, k:k, slot:a.slot|0, left:left, mat:ITEM[k].place});
+    return;
+  }
+
+  if(a.t === ACT.DROP){
+    const s = b.carried[a.slot|0], k = s.k;
+    const left = spend(a.slot|0);
+    b.items.push({id:b.nextId++, k:k, c:a.c, r:a.r});
+    events.push({t:'dropped', c:a.c, r:a.r, k:k, slot:a.slot|0, left:left});
+    return;
+  }
+
+  if(a.t === ACT.TAKE){
+    const at = b.items.findIndex(x => x.c===a.c && x.r===a.r);
+    const it = b.items[at];
+    b.items.splice(at,1);
+    addToSlots(b.carried, it.k, 1);
+    events.push({t:'took', c:a.c, r:a.r, k:it.k});
+    return;
+  }
+
+  // Two slots trade places. Stacks of the same thing merge as far as one stack allows,
+  // and whatever will not fit stays where it was, so a drag can never delete anything.
+  if(a.t === ACT.SWAP){
+    const i = a.from|0, j = a.to|0;
+    if(i !== j){
+      const A = b.carried[i], B = b.carried[j];
+      if(A && B && A.k === B.k){
+        const cap = stackOf(A.k), room = cap - B.n, move = Math.min(room, A.n);
+        B.n += move; A.n -= move;
+        if(A.n <= 0) b.carried[i] = null;
+      } else {
+        b.carried[i] = B; b.carried[j] = A;
+      }
+    }
+    events.push({t:'swapped', from:i, to:j});
     return;
   }
 
@@ -659,6 +856,12 @@ function resolve(b0, action){
   b.player.c = s.pc; b.player.r = s.pr;
   events.push({t:'settle', frames:s.frames, g0:s.g0, pc0:s.pc0, pr0:s.pr0});
 
+  // Dropped things come to rest against the SETTLED board, not the board mid-collapse, so
+  // an item and the rock it lands on always agree about where the floor ended up.
+  const si = settleItems(b.cell, b.items);
+  b.items = si.items;
+  if(si.lost.length) events.push({t:'itemsLost', list:si.lost.map(x=>x.k)});
+
   // 4 OUTCOMES
   if(s.fell.length) events.push({t:'finds', list:s.fell, when:'fell'});
   b.player.buried = s.buried;
@@ -708,7 +911,11 @@ const PLAYER_CH = '@';
 const BOARDS = [
   // Board 1 of the twelve. One pillar holds one mass: walk two steps, cut the pillar,
   // watch the copper drop exactly where the preview said. LAB-12 authors the other eleven.
-  {name:'FIRST CUT', teaches:'Cutting support drops the mass.', picks:3, art:[
+  // `give` is what you start holding, `lying` is what is already in the board. Both are
+  // part of the board's authored problem (LAB-05): what you carry in is as much a premise
+  // as where the rock is. LAB-12 tunes these when it authors the twelve for real.
+  {name:'FIRST CUT', teaches:'Cutting support drops the mass.', picks:3,
+   give:[['beam',2],['balloon',1]], lying:[['tnt',2,7]], art:[
     '##########',
     '#........#',
     '#........#',
@@ -732,7 +939,8 @@ const BOARDS = [
   // with it, seven rows, and you are fine. The drop is deliberately long: landing costs
   // nothing at any height, and the board makes that point by letting you fall a long way
   // and walk away.
-  {name:'RIDE IT DOWN', teaches:'Stand on the mass and you ride it.', picks:3, art:[
+  {name:'RIDE IT DOWN', teaches:'Stand on the mass and you ride it.', picks:3,
+   give:[['beam',1]], art:[
     '##########',
     '#.c......#',
     '#.c......#',
@@ -755,7 +963,8 @@ const BOARDS = [
   // you completely -- so this board is not about whether to cut, it is about where to
   // stand first. The preview says THIS BURIES YOU before you commit, every time, which is
   // exactly why burial is allowed to be final.
-  {name:'OR UNDER IT', teaches:'Stand under it and it lands on you.', picks:3, art:[
+  {name:'OR UNDER IT', teaches:'Stand under it and it lands on you.', picks:3,
+   give:[['beam',2]], art:[
     '##########',
     '#........#',
     '#........#',
@@ -803,7 +1012,20 @@ function parseBoard(def){
   for(let i=0;i<g.length;i++) if(g[i] !== settled[i])
     throw new Error(def.name+': not stable as drawn -- cell '+(i%COLS)+','+((i/COLS)|0)+
                     ' moves before the player acts. Anchor it to a wall or a support.');
-  return {g:g, f:f, ec:pcx, start:{c:pcx, r:pcy}, picks:def.picks, name:def.name, teaches:def.teaches};
+  // Carried and lying things are validated as loudly as the art is: an item name with a
+  // typo in it would otherwise be a slot that silently never appears, which is exactly the
+  // class of authoring bug the character check above exists to prevent.
+  for(const gv of (def.give || []))
+    if(!ITEM[gv[0]]) throw new Error(def.name+': gives unknown item "'+gv[0]+'"');
+  for(const ly of (def.lying || [])){
+    if(!ITEM[ly[0]]) throw new Error(def.name+': places unknown item "'+ly[0]+'"');
+    if(ly[1]<0||ly[1]>=COLS||ly[2]<0||ly[2]>=ROWS)
+      throw new Error(def.name+': item "'+ly[0]+'" is off the board at '+ly[1]+','+ly[2]);
+    if(g[idx(ly[1],ly[2])])
+      throw new Error(def.name+': item "'+ly[0]+'" at '+ly[1]+','+ly[2]+' is inside solid rock');
+  }
+  return {g:g, f:f, ec:pcx, start:{c:pcx, r:pcy}, picks:def.picks, name:def.name,
+          teaches:def.teaches, give:def.give || [], lying:def.lying || []};
 }
 
 // Parsed once at load so an authoring mistake is a loud failure at boot rather than a
@@ -821,7 +1043,12 @@ let mode = 'boot';           // boot | play | anim | panel
 let scr = null;              // {g,f,ec}
 let lab = null;              // {i, def} while a handcrafted board is loaded, else null
 let depth = 0, pc = 0, pr = 0;
-let picks = 0, haul = 0, beamsLeft = 0;
+let picks = 0, haul = 0;
+// The hotbar, live. `sel` is the selected slot or -1; nothing is selected by default, so
+// the first tap on the board is always a swing and never an accidental placement.
+let carried = emptySlots(), worldItems = [], sel = -1;
+let dragFrom = -1, dragX = 0, dragY = 0, dragging = false;
+const slotPop = [0,0,0,0];                       // per-slot bump when it gains or is chosen
 let pending = null;          // previewed, not yet committed
 let anim = null;
 let parts = [], floats = [], shake = 0, msg = '', msgT = 0, msgAt = 0;
@@ -869,7 +1096,7 @@ let hitstop = 0;                // impact freeze; render keeps drawing the stall
 let motes = [];                 // ambient drift, so a screen with nothing happening still breathes
 let slide = 0;                  // 1 -> 0: the new screen rising into place under you
 let dig = {x:0, y:0, face:1, sq:1, swing:-1, hop:0};
-let hudBag = 0, popDepth = 0, popBag = 0, pips = [];
+let popDepth = 0, popBag = 0, pips = [];
 // The two-tap commit is learnable in seconds but is not discoverable on the very first
 // preview: nothing on screen says the game is waiting for confirmation. Say it once.
 let tapAgainShown = false;
@@ -1021,7 +1248,25 @@ function breakable(m){ return !!m && MAT[m].hard <= TOOL(); }
 /* ---------------- the break ---------------- */
 // The live globals, packaged as a board. This is the only place the running game turns
 // itself into the contract's shape, so every rule downstream reads one object.
-function liveBoard(){ return makeBoard(scr.g, scr.f, pc, pr, picks, {depth:depth}); }
+function liveBoard(){
+  const b = makeBoard(scr.g, scr.f, pc, pr, picks, {depth:depth});
+  b.carried = cloneSlots(carried);
+  b.items   = worldItems.map(i => ({...i}));
+  b.nextId  = nextItemId;
+  return b;
+}
+let nextItemId = 1;
+
+// The mirror of liveBoard: adopt a resolved board's carried and dropped things wholesale.
+// Commit paths call this instead of recomputing, for the same reason commitBreak adopts
+// the previewed board wholesale -- anything re-derived here could disagree with what the
+// preview showed, and that disagreement is the one bug the milestone is watching for.
+function adoptItems(board){
+  carried = cloneSlots(board.carried);
+  worldItems = board.items.map(i => ({...i}));
+  nextItemId = board.nextId;
+  if(sel >= 0 && !carried[sel]) sel = -1;         // the slot you were holding is spent
+}
 
 // A resolve result, in the shape the renderer and commit path already speak. Nothing here
 // recomputes anything -- it only reads the event list, which is the point of having one.
@@ -1030,10 +1275,17 @@ function pendingFrom(res, c, r){
   const rm  = ev('removed'), st = ev('settle'), gn = ev('gain');
   const cut  = res.events.find(e => e.t==='finds' && e.when==='cut');
   const fell = res.events.find(e => e.t==='finds' && e.when==='fell');
+  // Which limited thing this action spends, named before it is spent (LAB-05). `left` is
+  // what remains AFTER the action, so `left===0` is the last one and says so.
+  const sp   = res.events.find(e => e.t==='used' || e.t==='dropped');
+  const lost = ev('itemsLost');
   return {
     c:c, r:r,
     cells: rm ? rm.cluster : [],
     g: res.board.cell, f: res.board.find,
+    items: res.board.items,
+    spent: sp ? {k:sp.k, left:sp.left, how:sp.t} : null,
+    lost:  lost ? lost.list : [],
     sim: {
       frames: st ? st.frames : [],
       buried: res.board.player.buried, out: res.board.player.out,
@@ -1078,14 +1330,16 @@ function commitBreak(){
   // The cut punches the screen on its own account, before anything has even fallen.
   shake = Math.max(shake, 1.2 + heft*2.6);
   hitstop = Math.max(hitstop, .02 + heft*.03);
+  // Ore is money and money has no capacity: the thing you can run out of room for is now
+  // slots, and slots are visible. The old clamp silently dropped part of a payout the
+  // moment an invisible number hit an invisible ceiling (DEC-18).
   if(p.gain>0){
-    const room = Math.max(0, CAP()-haul), got = Math.min(room, p.gain);
-    haul += got; popBag = 1;
-    if(got>0) fl(p.c*TILE+8, HUD+p.r*TILE, '+'+got, '#e8b830');
-    if(got<p.gain) toast('SATCHEL FULL');
+    haul += p.gain; popBag = 1;
+    fl(p.c*TILE+8, HUD+p.r*TILE, '+'+p.gain, '#e8b830');
   }
   awardFinds(p.got);
   scr.g = p.g; scr.f = p.f;
+  adoptItems(p.board);                            // a collapse moves what you set down
   // Two separate things make a swing feel big: how much rock it took, and how much came
   // down afterwards. This used to assign, which threw away the first -- a six-tile cut and
   // a two-tile cut that dislodged the same amount felt identical. Take the larger.
@@ -1188,14 +1442,83 @@ function hatPop(x,y){
    representative for anything that changes the board after you act -- deterministically,
    strictly after the action resolves, at a stated boundary the game tells you about. */
 
-function placeBeam(c,r){
-  if(!SV.beams || beamsLeft<=0) return false;
-  const res = resolve(liveBoard(), {t:ACT.PLACE, c:c, r:r, mat:14});
-  if(!res.ok) return false;
-  const p = pendingFrom(res, c, r);
-  scr.g = p.g; scr.f = p.f; picks = res.board.picks; beamsLeft--;
-  tone(330,.09,'square',.1); toast('BEAM SET');
+/* ---------------- carried things: use, drop, take, rearrange (LAB-05) ----------------
+
+   placeBeam is gone. It was the beam's own private code path -- its own resource counter,
+   its own placement rule, its own commit -- and it could not have been reused by the
+   balloon or the TNT without being copied twice. A carried thing now goes through the
+   same resolve() every other action does, so LAB-06/07/11 add a table entry and a verb,
+   not a third copy of this. */
+
+// Using an item is consequential, so it previews exactly like a cut: the first tap plans,
+// the second commits. Dropping is previewed too -- where a dropped thing comes to rest is
+// a real consequence, because it falls.
+function planItem(c, r, kind){
+  const a = kind === 'use'
+    ? {t:ACT.USE,  c:c, r:r, slot:sel}
+    : {t:ACT.DROP, c:c, r:r, slot:sel};
+  const p = pendingFrom(resolve(liveBoard(), a), c, r);
+  p.kind = kind;
+  return p;
+}
+
+function commitItem(){
+  const p = pending; pending = null;
+  if(!p.ok) return;
+  tapAgainShown = true;
+  const k = p.spent ? p.spent.k : null;
+  const it = k ? ITEM[k] : null;
+  scr.g = p.g; scr.f = p.f; picks = p.board.picks;
+  adoptItems(p.board);
+  if(p.c !== pc) dig.face = p.c > pc ? 1 : -1;
+  ring(p.c, p.r, '#fff3c0'); buzz(10);
+  if(p.kind === 'use'){
+    // Setting a thing into the rock is a solid, satisfying clunk, not a swing: a lower
+    // knock, a puff of dust where it seats, and a short kick. It must not sound like a
+    // pickaxe, because it is the opposite decision -- adding instead of taking away.
+    tone(300,.07,'square',.11,180); tone(150,.11,'sine',.09,90);
+    puff(p.c*TILE, HUD + p.r*TILE, 5);
+    flash([p.c, p.r]);
+    shake = Math.max(shake, 1.4); hitstop = Math.max(hitstop, .03);
+  } else {
+    tone(420,.05,'triangle',.08,260);
+    dust(p.c*TILE + TILE/2, HUD + p.r*TILE + TILE/2, 4);
+  }
+  if(it) toast(p.spent.left === 0 ? ('LAST ' + it.n + ' ' + (p.kind==='use'?'USED':'DROPPED'))
+                                  : (it.n + '  ' + p.spent.left + ' LEFT'));
+  if(p.lost.length) toast(ITEM[p.lost[0]].n + ' FELL OUT OF THE WORLD');
   startAnim(p.sim);
+}
+
+// Picking a thing back up is not consequential -- it moves nothing and drops nothing --
+// so it commits on the first tap. Making the player confirm it would be ceremony.
+function takeItem(c, r){
+  const res = resolve(liveBoard(), {t:ACT.TAKE, c:c, r:r});
+  if(!res.ok){
+    const why = res.events[0] && res.events[0].why;
+    if(why === 'hotbar is full'){ fullHotbarNotice(c, r); return true; }
+    return false;
+  }
+  const p = pendingFrom(res, c, r);
+  scr.g = p.g; scr.f = p.f;
+  adoptItems(p.board);
+  const got = res.events.find(e => e.t==='took');
+  tone(760,.05,'triangle',.1,1140); buzz(8);
+  ring(c, r, '#9fe8bb');
+  fl(c*TILE+8, HUD+r*TILE, ITEM[got.k].n, '#9fe8bb');
+  // The slot it went into bumps, so the eye is told WHERE the thing you just picked up
+  // ended up without having to hunt the bar for what changed.
+  for(let i=0;i<SLOTS;i++) if(carried[i] && carried[i].k === got.k){ slotPop[i] = 1; break; }
+  return true;
+}
+
+/* The full-hotbar case. DEC-18 says carried things stay visible and usable, and the scope
+   of LAB-05 says a find must never be silently converted into money -- so a full hotbar
+   is a decision presented on the board, not a conversion that happens behind your back.
+   The thing stays exactly where it is; you free a slot and take it, or you leave it. */
+function fullHotbarNotice(c, r){
+  ring(c, r, '#e0604f'); buzz([12,20]); tone(180,.10,'square',.09);
+  toast('HOTBAR FULL. DROP SOMETHING FIRST.');
   return true;
 }
 
@@ -1208,15 +1531,24 @@ function loadLab(i){
   depth = 0; haul = 0;
   scr = {g:Uint8Array.from(def.g), f:Uint8Array.from(def.f), ec:def.ec};
   pc = def.start.c; pr = def.start.r;
-  picks = def.picks; beamsLeft = 0;
+  picks = def.picks;
+  // The board hands you what it expects you to have. An authored board that needs a beam
+  // says so in its own definition, so what you start holding is part of the puzzle rather
+  // than something carried in from a shop the laboratory does not have.
+  carried = emptySlots(); worldItems = []; nextItemId = 1; sel = -1;
+  dragFrom = -1; dragging = false;
+  for(let i=0;i<SLOTS;i++) slotPop[i] = 0;
+  if(def.give) for(const g of def.give) addToSlots(carried, g[0], g[1]);
+  if(def.lying) for(const l of def.lying) worldItems.push({id:nextItemId++, k:l[0], c:l[1], r:l[2]});
   pending = null; anim = null; mode = 'play';
   // Drop the player onto whatever is under the authored start, through the same resolve
   // every other action uses, so an authored board and a played board agree from frame one.
-  const s = pendingFrom(resolve(liveBoard(), {t:ACT.SETTLE}), pc, pr).sim;
+  const p0 = pendingFrom(resolve(liveBoard(), {t:ACT.SETTLE}), pc, pr), s = p0.sim;
   if(s.frames.length) scr.g = s.frames[s.frames.length-1].g;
+  adoptItems(p0.board);                            // authored items land where they rest
   pc = s.pc; pr = s.pr;
   dig.x = pc; dig.y = pr; dig.sq = .7; dig.swing = -1; dig.hop = 0;
-  slide = 1; hudBag = 0;
+  slide = 1;
   parts.length = 0; floats.length = 0; pips.length = 0; rings.length = 0; flashes.length = 0;
   squashes.length = 0;
   if(!motes.length) for(let k=0;k<14;k++) motes.push(newMote(true));
@@ -1302,11 +1634,18 @@ function enterScreen(d, entryCol){
   if(s.frames.length) scr.g = s.frames[s.frames.length-1].g;
   pc = s.pc; pr = Math.min(s.pr, ROWS-2);
   awardFinds(s.fell);                               // anything shaken loose on the way in
-  picks = PICKS(); beamsLeft = SV.beams ? 2 : 0; pending = null; anim = null;
+  picks = PICKS(); pending = null; anim = null;
+  // The shop's BEAMS purchase now arrives as hotbar stock rather than as its own private
+  // counter, which is what it always meant. Without this, deleting placeBeam would have
+  // left a 280-coin purchase that silently did nothing at all.
+  carried = emptySlots(); worldItems = []; nextItemId = 1; sel = -1;
+  dragFrom = -1; dragging = false;
+  for(let i=0;i<SLOTS;i++) slotPop[i] = 0;
+  if(SV.beams) addToSlots(carried, 'beam', 2);
   // Arriving is a landing, not a cut: the room rises into place under you and you hit
   // the floor of it.
   dig.x = pc; dig.y = pr; dig.sq = .7; dig.swing = -1; dig.hop = 0;
-  slide = 1; popDepth = 1; hudBag = haul;
+  slide = 1; popDepth = 1;
   parts.length = 0; floats.length = 0; pips.length = 0; rings.length = 0; flashes.length = 0;
   if(!motes.length) for(let i=0;i<14;i++) motes.push(newMote(true));
   puff(pc*TILE, HUD+pr*TILE, 8);
@@ -1346,7 +1685,7 @@ function reshapeScreen(){
 function fellThrough(){
   if(lab){ labEnd('THROUGH THE FLOOR', 'You went out the bottom of the board.'); return; }
   const bonus = Math.max(0, picks)*3;                // leftover picks are the mastery score
-  if(bonus>0){ haul = Math.min(CAP(), haul+bonus); fl(pc*TILE, HUD+(ROWS-2)*TILE, '+'+bonus, '#5ed986'); }
+  if(bonus>0){ haul += bonus; fl(pc*TILE, HUD+(ROWS-2)*TILE, '+'+bonus, '#5ed986'); }
   tone(140,.2,'sine',.13,70);
   enterScreen(depth+1, pc);
 }
@@ -1566,7 +1905,7 @@ function pausePanel(){
   const wedged = pausedFrom==='play' && scr && !safeSwingExists();
   ui(`<div class="panel"><div class="card">
     <h1>DEPTH ${depth}</h1><h2>${biomeAt(depth).name}</h2>
-    <div class="st"><span>CARRYING</span><b>${haul} / ${CAP()}</b></div>
+    <div class="st"><span>HAUL</span><b>${haul}</b></div>
     <div class="st"><span>PICKS LEFT</span><b>${picks}</b></div>
     <div class="st"><span>PURSE</span><b>${SV.bank}</b></div>
     <div class="row"><button class="b" id="res">KEEP DIGGING</button></div>
@@ -1829,6 +2168,45 @@ function render(){
     const P = pending, t = Math.sin(now/90)*.5+.5;
     const fin = P.sim.frames.length ? P.sim.frames[P.sim.frames.length-1] : null;
 
+    // 0. a carried thing being used or dropped (LAB-05). The same promise, for the other
+    // half of the verbs: the exact cell it goes into, drawn as the thing itself so there
+    // is no doubt WHICH item is about to leave the hotbar -- and, for a drop, the cell it
+    // actually comes to REST in, which is not the cell you tapped if it has to fall.
+    if(P.kind){
+      const rest = P.kind === 'drop'
+        ? (P.items.find(x => x.id === nextItemId) || {c:P.c, r:P.r})
+        : {c:P.c, r:P.r};
+      const x = P.c*TILE, y = HUD + P.r*TILE;
+      const col = P.kind === 'use' ? '#e8b878' : '#9fe8bb';
+      ctx.globalAlpha = .18 + t*.16;
+      px(x+1, y+1, TILE-2, TILE-2, col);
+      ctx.globalAlpha = 1;
+      px(x,y,TILE,1,col); px(x,y+TILE-1,TILE,1,col);
+      px(x,y,1,TILE,col); px(x+TILE-1,y,1,TILE,col);
+      ctx.globalAlpha = .55 + t*.35;
+      drawItemIcon(x + (TILE>>1), y + (TILE>>1), P.spent ? P.spent.k : 'find', true);
+      ctx.globalAlpha = 1;
+      // It falls: show the path and bracket the cell it stops in, exactly like a mass.
+      if(rest.r !== P.r){
+        for(let rr = P.r+1; rr <= rest.r; rr++){
+          const cy = HUD + rr*TILE;
+          for(let k=0;k<4;k++){ px(x+4+k, cy+6+k, 1, 1, col); px(x+11-k, cy+6+k, 1, 1, col); }
+        }
+        const ry = HUD + rest.r*TILE;
+        ctx.globalAlpha = .45; drawItemIcon(x + (TILE>>1), ry + (TILE>>1), P.spent.k, true);
+        ctx.globalAlpha = 1;
+        px(x+1, ry+TILE-2, TILE-2, 1, '#fff3c0');
+        px(x+1, ry+TILE-4, 1, 3, '#fff3c0'); px(x+TILE-2, ry+TILE-4, 1, 3, '#fff3c0');
+      }
+      // ONE banner, never two. Every warning here anchors to the same tapped cell, so
+      // drawing two of them stacks them into an unreadable overlap -- which is worse than
+      // showing neither, because it looks like the game is broken. Highest stake wins:
+      // losing the thing outright, then spending the last one, then the first-time hint.
+      if(P.lost.length)                     warnAt('IT FALLS OUT', P.c, P.r, '#e0604f');
+      else if(P.spent && P.spent.left === 0) warnAt('YOUR LAST ' + ITEM[P.spent.k].n, P.c, P.r, '#e8b830');
+      else if(!tapAgainShown)                warnAt('TAP AGAIN', P.c, P.r, '#e8b830');
+    }
+
     // 1. cells this action removes
     for(let i=0;i<P.cells.length;i+=2){
       const x=P.cells[i]*TILE, y=HUD+P.cells[i+1]*TILE;
@@ -1885,7 +2263,8 @@ function render(){
         else if(fin.pr > P.sim.pr0 && P.sim.pr0 >= 0) warnAt('YOU RIDE IT DOWN', fin.pc, fin.pr, '#5ed986');
       }
     }
-    if(!tapAgainShown && !P.sim.buried) warnAt('TAP AGAIN', P.c, P.r, '#e8b830');
+    // P.kind actions draw their own single banner above, so this one stays out of their way.
+    if(!tapAgainShown && !P.sim.buried && !P.kind) warnAt('TAP AGAIN', P.c, P.r, '#e8b830');
     if(P.sim.buried){
       // The warning is drawn ON the man. A marker around him was occluded by his own
       // sprite and read as clutter; and a banner at the top of the board is nowhere near
@@ -1958,6 +2337,20 @@ function render(){
     }
   }
 
+  // Things lying in the board. They bob a pixel so they read as objects sitting on the
+  // rock rather than as part of it, and one in reach carries a soft ring so that "you can
+  // pick this up" never has to be written in words.
+  for(const it of worldItems){
+    const x = it.c*TILE + (TILE>>1), y = HUD + it.r*TILE + (TILE>>1);
+    const bob = Math.sin(now/380 + it.id*1.7) > 0 ? 0 : 1;
+    if(inReach(it.c, it.r) || (it.c===pc && it.r===pr)){
+      ctx.globalAlpha = .30 + Math.sin(now/300)*.14;
+      px(it.c*TILE+1, HUD+it.r*TILE+1, TILE-2, TILE-2, '#9fe8bb');
+      ctx.globalAlpha = 1;
+    }
+    drawItemIcon(x, y + bob, it.k, true);
+  }
+
   // The cluster you just took, blown out white and fading. Drawn over the tiles it
   // removed, so the swing visibly consumes them.
   for(const f of flashes){
@@ -2010,20 +2403,23 @@ function render(){
 
   ctx.restore();                                   // end of the sliding world layer
 
-  if(!VIG){ VIG = ctx.createLinearGradient(0,HUD,0,H);
+  if(!VIG){ VIG = ctx.createLinearGradient(0,HUD,0,BOARDBOT);
     // Light on the character now does the depth work, so the old flat vignette pulls
     // right back -- stacked, the two of them crushed the bottom of the board.
     VIG.addColorStop(0,'rgba(0,0,0,0)'); VIG.addColorStop(1,'rgba(0,0,0,.20)'); }
-  ctx.fillStyle=VIG; ctx.fillRect(0,HUD,W,H-HUD);
+  ctx.fillStyle=VIG; ctx.fillRect(0,HUD,W,BOARDH);
   ctx.restore();                                   // end of the shake
 
   drawHUD();
+  drawHotbar();
 
   if(msg && now<msgT){
     const a = Math.min(1,(msgT-now)/350);
     const rise = Math.max(0, 1-(now-msgAt)/140);   // slides up out of the floor
     ctx.globalAlpha=a;
-    const w = textW(msg,1)+6, y = H-14 + Math.round(rise*10);
+    // Toasts sit just inside the bottom of the BOARD, never over the hotbar -- a message
+    // that covered the slots would hide the one readout that has to stay legible.
+    const w = textW(msg,1)+6, y = BOARDBOT-12 + Math.round(rise*10);
     px((W-w)>>1, y, w, 9, 'rgba(8,6,12,.85)');
     textC(msg, y+2, '#c0b4d8');
     ctx.globalAlpha=1;
@@ -2052,39 +2448,138 @@ function drawHUD(){
   if(!lab && depth>0 && depth%3!==0) textSh((3-(depth%3))+' TO LAND', px0, 19, '#665a80');
   if(lab){ textSh(lab.def.name.slice(0,12), px0, 19, '#665a80'); return; }
 
-  const bw = 40, bx = W-MENUW-bw-3, cap = Math.max(1,CAP());
-  textSh('BAG', bx, 3, '#665a80');
-  px(bx, 11, bw, 6, '#251d33');
-  const full = haul>=CAP();
-  // The bar chases the number instead of jumping to it, and a full bag pulses at you.
-  const fillc = full ? (Math.sin(now/160)>0 ? '#e0604f' : '#f0836f') : (popBag>0 ? '#fff3c0' : '#e8b830');
-  px(bx, 11, Math.round(bw*Math.min(1, hudBag/cap)), 6, fillc);
-  textSh(String(haul), bx+2, 19, popBag>0?'#fff3c0':'#c0b4d8');
+  // Money, as a number. The bag-fullness bar that used to live here is gone (DEC-18): what
+  // you carry is now four visible slots at the bottom of the screen, so a meter that told
+  // you how full an invisible container was had nothing left to describe.
+  const s = String(haul), bx = W-MENUW-textW(s,2)-3;
+  textSh('HAUL', W-MENUW-textW('HAUL',1)-3, 3, '#665a80');
+  textSh(s, bx, 11 - (popBag>.5?1:0), popBag>0?'#fff3c0':'#e8b830', 2);
+}
+
+/* THE HOTBAR (LAB-05, DEC-18)
+
+   Four slots, permanently on screen, below the board and never over it. What you are
+   carrying is a thing you can see without opening anything, and the selected slot is
+   obvious at arm's length -- on a phone, in sunlight, mid-collapse.
+
+   Selection is drawn as a raised, brightened, outlined slot AND a caret above it, because
+   colour alone is not a readout: the same rule FIX-04 applied to the preview symbols. */
+function drawHotbar(){
+  px(0, BOARDBOT, W, HOTBAR, '#120e1a');
+  px(0, BOARDBOT, W, 1, '#08060c');
+
+  for(let i=0;i<SLOTS;i++){
+    const s = carried[i];
+    const held = dragging && dragFrom === i;       // the dragged slot reads as lifted out
+    const on = sel === i && !held;
+    const pop = slotPop[i] > 0 ? Math.sin(slotPop[i]*Math.PI)*2 : 0;
+    const x = i*SLOTW, y = BOARDBOT + 2 - (on ? 2 : 0) - pop;
+    const h = HOTBAR - 4;
+
+    px(x+2, y, SLOTW-4, h, on ? '#2c2340' : '#1b1528');
+    // The seat under an empty slot reads as a place a thing could go, not as damage.
+    if(!s && !held){
+      for(let d=4; d<SLOTW-4; d+=3) px(x+d, y+h-3, 2, 1, '#2a2238');
+    }
+    if(on){
+      const c = '#e8b830';
+      px(x+2, y, SLOTW-4, 1, c); px(x+2, y+h-1, SLOTW-4, 1, c);
+      px(x+2, y, 1, h, c);       px(x+SLOTW-3, y, 1, h, c);
+      px(x + (SLOTW>>1) - 2, y-3, 4, 1, c); px(x + (SLOTW>>1) - 1, y-2, 2, 1, c);
+    }
+    if(s && !held){
+      drawItemIcon(x + (SLOTW>>1), y + (h>>1) - 2, s.k, on);
+      // The count only appears when there is more than one, so a single thing is a clean
+      // icon rather than an icon with a "1" stuck to it.
+      if(s.n > 1) textSh(String(s.n), x+SLOTW-9, y+h-8, '#c0b4d8');
+    }
+  }
+
+  // The thing being dragged rides under the finger, above everything else.
+  if(dragging && dragFrom >= 0 && carried[dragFrom]){
+    ctx.globalAlpha = .9;
+    drawItemIcon(dragX, dragY, carried[dragFrom].k, true);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* Item art, drawn by code like every other pixel in the game (DEC-14). Placeholder shapes,
+   deliberately: LAB-06/07/11 own what these things finally look like, and the only job
+   here is that four slots are told apart instantly at thumb size. */
+function drawItemIcon(cx, cy, k, bright){
+  const p = ITEM[k] ? ITEM[k].pal : ['#c0b4d8','#8d80a4','#4a4060'];
+  const a = bright ? p[0] : p[1], b = bright ? p[1] : p[2];
+  cx = cx|0; cy = cy|0;
+  if(k === 'beam'){                                 // a short braced timber, lying flat
+    px(cx-7, cy-2, 14, 5, a); px(cx-7, cy+3, 14, 1, b);
+    px(cx-5, cy-4, 2, 2, b);  px(cx+3, cy-4, 2, 2, b);
+  } else if(k === 'balloon'){                       // a round body on a string
+    px(cx-4, cy-6, 8, 7, a); px(cx-5, cy-5, 1, 5, a); px(cx+4, cy-5, 1, 5, a);
+    px(cx-2, cy-5, 2, 2, '#fff3c0');                // the highlight sells it as inflated
+    px(cx-1, cy+1, 2, 2, b);  px(cx, cy+3, 1, 4, b);
+  } else if(k === 'tnt'){                           // a banded stick with a lit fuse
+    px(cx-5, cy-3, 10, 8, a); px(cx-5, cy-1, 10, 2, b);
+    px(cx+1, cy-6, 1, 3, '#8d80a4'); px(cx+2, cy-7, 2, 2, '#fff3c0');
+  } else {                                          // a find: a lumpy nugget
+    px(cx-4, cy-2, 8, 5, a); px(cx-3, cy-4, 5, 2, a); px(cx-2, cy-3, 2, 2, '#fff3c0');
+    px(cx-4, cy+3, 8, 1, b);
+  }
 }
 
 /* ---------------- input ---------------- */
 function local(e){ const b=cv.getBoundingClientRect();
   return [(e.clientX-b.left)*(W/b.width), (e.clientY-b.top)*(H/b.height)]; }
 function tileAt(x,y){
-  if(y<HUD) return null;
+  if(y<HUD || y>=BOARDBOT) return null;            // the hotbar band is not the board
   const c = Math.floor(x/TILE), r = Math.floor((y-HUD)/TILE);
   if(c<0||c>=COLS||r<0||r>=ROWS) return null;
   return [c,r];
 }
+// Which slot is under this point, or -1. The band is the full width, so every x inside it
+// lands on a slot -- there is no dead gutter to miss into.
+function slotAt(x,y){
+  if(y < BOARDBOT || y >= H) return -1;
+  const i = Math.floor(x / SLOTW);
+  return (i>=0 && i<SLOTS) ? i : -1;
+}
+function itemAt(c,r){ return worldItems.find(x => x.c===c && x.r===r); }
+
 function tap(x,y){
   if(y<HUD) return;                                // the HUD is a readout; the menu is a DOM button
+
   if(mode!=='play' || !scr) return;
   const t = tileAt(x,y); if(!t) return;
   const c=t[0], r=t[1], m = scr.g[idx(c,r)];
 
+  // A thing lying in the board is picked up by tapping it, whether or not a slot is
+  // selected -- the thing you can see is the thing you get. Including the cell he is
+  // standing in: things you drop land at your feet.
+  if(itemAt(c,r) && (inReach(c,r) || (c===pc && r===pr))){
+    pending=null; if(takeItem(c,r)) return;
+  }
+
+  // With a slot selected, an empty cell in reach is where that thing goes. Out of reach
+  // falls through to walking, so a selected item never traps the player in place.
+  if(sel >= 0 && carried[sel] && !m && inReach(c,r)){
+    const kind = ITEM[carried[sel].k].place ? 'use' : 'drop';
+    if(pending && pending.kind && pending.c===c && pending.r===r){ commitItem(); return; }
+    const p = planItem(c, r, kind);
+    if(p.ok){
+      pending = p;
+      ring(c,r,'#fff'); buzz(8); tone(600,.04,'square',.06);
+      return;
+    }
+    pending = null;
+  }
+
   if(!m){
-    if(SV.beams && beamsLeft>0 && !pending && inReach(c,r) && placeBeam(c,r)) return;
     const res = resolve(liveBoard(), {t:ACT.WALK, c:c, r:r});
     if(res.ok){
       pending=null;
       if(c !== pc) dig.face = c > pc ? 1 : -1;
       dig.hop = 1;                                 // one bounce per step, however far
       scr.g = res.board.cell; scr.f = res.board.find;
+      adoptItems(res.board);
       pc = res.board.player.c; pr = res.board.player.r;
       tone(520,.03,'square',.05);
       ring(c,r,'#9fe8bb'); buzz(6);
@@ -2099,6 +2594,7 @@ function tap(x,y){
           if(step[0] !== pc) dig.face = step[0] > pc ? 1 : -1;
           dig.hop = 1;
           scr.g = w.board.cell; scr.f = w.board.find;
+          adoptItems(w.board);
           pc = w.board.player.c; pr = w.board.player.r;
           tone(520,.03,'square',.05); ring(step[0],step[1],'#9fe8bb'); buzz(6);
           return;
@@ -2115,13 +2611,76 @@ function tap(x,y){
     tone(120,.09,'square',.09); return;
   }
   if(picks<=0){ ring(c,r,'#e0604f'); buzz(12); toast('NO PICKS LEFT ON THIS SCREEN'); tone(120,.12,'square',.09); return; }
-  if(pending && pending.c===c && pending.r===r){ commitBreak(); return; }
+  if(pending && !pending.kind && pending.c===c && pending.r===r){ commitBreak(); return; }
   pending = planBreak(c,r);
   ring(c,r,'#fff'); buzz(8);
   tone(660,.04,'square',.06);
 }
+// Selecting a slot is a toggle: tapping the selected slot puts it away. Without that, once
+// you had picked up a beam every tap on empty rock would place one, and there would be no
+// way back to plain walking.
+function tapSlot(i){
+  pending = null;                                  // a new intent cancels a planned cut
+  if(!carried[i]){
+    if(sel >= 0){ sel = -1; tone(300,.03,'square',.05); }
+    return;
+  }
+  if(sel === i){ sel = -1; tone(380,.04,'square',.06); buzz(6); return; }
+  sel = i;
+  tone(620,.04,'square',.07); buzz(8);
+  slotPop[i] = 1;
+  toast(ITEM[carried[i].k].n + '  TAP A CELL');
+}
+
+/* Rearranging by drag. The drag is deliberately only live INSIDE the band: dragging a slot
+   out over the board and letting go does nothing, rather than throwing the item into the
+   world. Dropping into the world is a targeted, previewed action (tap a cell), and a
+   gesture that could dump a limited item somewhere by accident would make the hotbar
+   something to be careful with instead of something to use. */
 cv.addEventListener('pointerdown', e=>{ e.preventDefault(); ac();
-  const p = local(e); tap(p[0], p[1]); }, {passive:false});
+  const p = local(e);
+  const s = slotAt(p[0], p[1]);
+  dragFrom = -1; dragging = false;
+  if(s >= 0){
+    // A full slot might be the start of a drag, so it is decided on pointerup. An empty
+    // one cannot be dragged, so it resolves immediately.
+    if(carried[s]){ dragFrom = s; dragX = p[0]; dragY = p[1]; }
+    else tapSlot(s);
+    return;
+  }
+  tap(p[0], p[1]);
+}, {passive:false});
+
+cv.addEventListener('pointermove', e=>{
+  if(dragFrom < 0) return;
+  e.preventDefault();
+  const p = local(e);
+  dragX = p[0]; dragY = p[1];
+  // A few pixels of slop, so a tap that wobbles is still a tap and not a one-slot drag.
+  if(!dragging && Math.abs(dragX - (dragFrom*SLOTW + SLOTW/2)) > 6) dragging = true;
+}, {passive:false});
+
+cv.addEventListener('pointerup', e=>{
+  e.preventDefault();
+  if(dragFrom < 0) return;
+  const p = local(e), to = slotAt(p[0], p[1]);
+  if(dragging && to >= 0 && to !== dragFrom){
+    const res = resolve(liveBoard(), {t:ACT.SWAP, from:dragFrom, to:to});
+    if(res.ok){
+      adoptItems(res.board);
+      // Selection follows the thing, not the slot index -- you keep holding what you were
+      // holding, wherever you just put it.
+      if(sel === dragFrom) sel = carried[to] ? to : (carried[dragFrom] ? dragFrom : -1);
+      else if(sel === to)  sel = carried[dragFrom] ? dragFrom : (carried[to] ? to : -1);
+      slotPop[to] = 1;
+      tone(540,.04,'square',.07); buzz(10);
+    }
+  } else if(!dragging){
+    tapSlot(dragFrom);                             // it was a tap after all
+  }
+  dragFrom = -1; dragging = false;
+}, {passive:false});
+cv.addEventListener('pointercancel', ()=>{ dragFrom = -1; dragging = false; });
 // Reachable from play AND from mid-collapse. A collapse that somehow never finishes used
 // to leave the player with no legal input at all; the way out must not depend on the
 // simulation being in a good mood.
@@ -2142,7 +2701,7 @@ function update(dt){
   if(popDepth>0) popDepth = Math.max(0, popDepth - dt*3);
   if(popBag>0)   popBag   = Math.max(0, popBag - dt*3);
   if(slide>0)    slide    = Math.max(0, slide - dt*3.4);
-  hudBag += (haul - hudBag) * Math.min(1, dt*9);
+  for(let i=0;i<SLOTS;i++) if(slotPop[i]>0) slotPop[i] = Math.max(0, slotPop[i] - dt*4);
   for(let i=pips.length-1;i>=0;i--){ pips[i].life -= dt*2.2; if(pips[i].life<=0) pips.splice(i,1); }
   // Touch feedback runs ahead of the hitstop return below: the ring answers the finger,
   // so it must never be the thing that freezes.
