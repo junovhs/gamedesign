@@ -54,6 +54,8 @@ const MIN = [
 const COLS = 6, ROWS = 11;          // last row is bedrock + the seal
 const FLOOR = ROWS - 1;
 const CHAMBER_H = 12;               // metres gained per chamber
+const SEAL_CHAIN = 2;               // detonation number the bedrock demands
+const REACH = 2;                    // columns the drill-line covers either side
 
 /* ---------------- canvas / layout ----------------------------------------- */
 const cv = document.getElementById('cv');
@@ -200,14 +202,29 @@ function buildChamber(){
     const g = grid[r][c];
     if(g && g.t==='rock' && present.indexOf(g.c) < 0) present.push(g.c);
   }
-  // nothing is placed in the top row: it is the first thing the ceiling eats
+  // Nothing is placed in the top row — it is the first thing the ceiling eats —
+  // and nothing is placed directly on a seal, so the mineral the bedrock must be
+  // opened with is always a readable piece of rock rather than a stray canister.
   const spots = [];
-  for(let r=1;r<FLOOR;r++) for(let c=0;c<COLS;c++) spots.push({r,c});
+  for(let r=1;r<FLOOR;r++) for(let c=0;c<COLS;c++){
+    if(r === FLOOR-1 && grid[FLOOR][c] && grid[FLOOR][c].t === 'seal') continue;
+    spots.push({r,c});
+  }
 
   const canCols = [];
   const nCan = 3 + Math.min(2, Math.floor(chamber/3));
+  // The bedrock takes a chained detonation, and the relay that delivers it has
+  // to be the mineral of the rock sitting on the seal — so the chamber is built
+  // guaranteeing at least one canister of that mineral exists to be walked down.
+  const keyMinerals = [];
+  for(let c=0;c<COLS;c++){
+    if(grid[FLOOR][c] && grid[FLOOR][c].t === 'seal'){
+      const above = grid[FLOOR-1][c];
+      if(above && above.t === 'rock') keyMinerals.push(above.c);
+    }
+  }
   for(let i=0;i<nCan;i++){
-    const m = present[i % present.length];
+    const m = i < keyMinerals.length ? keyMinerals[i] : present[i % present.length];
     const p = spots.splice(rnd(spots.length),1)[0];
     if(!p) break;
     canCols.push(m);
@@ -297,7 +314,7 @@ function advanceClouds(){
 /* ---------------- seam lookup ---------------------------------------------- */
 function seam(r, c){
   const g = at(r,c);
-  if(!g || g.t !== 'rock') return [];
+  if(!g || !conducts(g, g.c)) return [];
   const m = g.c, seen = {}, out = [], q = [{r,c}];
   seen[r+','+c] = 1;
   while(q.length){
@@ -305,10 +322,25 @@ function seam(r, c){
     for(const [dr,dc] of N4){
       const nr = p.r+dr, nc = p.c+dc, k = nr+','+nc;
       const n = at(nr,nc);
-      if(n && !seen[k] && n.t === 'rock' && n.c === m){ seen[k] = 1; q.push({r:nr, c:nc}); }
+      if(n && !seen[k] && conducts(n, m)){ seen[k] = 1; q.push({r:nr, c:nc}); }
     }
   }
   return out;
+}
+
+/* Same mineral carries the blast, not just rock — so a copper canister set down
+   between two separated copper seams welds them into one and a single
+   detonation takes both. That is the whole point of being able to move it.
+
+   An ARMED vessel deliberately does not conduct. It stops the flood dead and
+   re-emits it one beat later at the next multiplier, which is the only way a
+   player can manufacture a secondary detonation — and the bedrock takes nothing
+   less. So the same canister is a weld while it is empty and a relay once it is
+   armed, and choosing which it should be is the decision. */
+function conducts(g, m){
+  if(g.c !== m) return false;
+  if(g.t === 'rock' || g.t === 'powder') return true;
+  return g.t === 'canister' && g.ch < 2;
 }
 
 function area(r,c){
@@ -356,8 +388,22 @@ function wave(cells, mult){
   flashT = 0.12; flashCol = '#fff2c9';
   sfx.boom(mult);
 
+  const next = [], seen = {};
+
+  // Armed vessels caught inside the blast are left standing for one beat and go
+  // off on the next wave. Killing them here would swallow the chain the player
+  // built — the whole reason for placing them there.
   const dead = [];
-  for(const p of cells){ if(grid[p.r][p.c]){ dead.push(p); killCell(p.r, p.c, mult); } }
+  for(const p of cells){
+    const g = grid[p.r][p.c];
+    if(!g) continue;
+    if((g.t === 'canister' || g.t === 'gas') && g.ch >= 2){
+      const k = p.r+','+p.c;
+      if(!seen[k]){ seen[k] = 1; next.push({r:p.r, c:p.c, kind:g.t === 'gas' ? 'gas' : 'can', m:g.c}); }
+      continue;
+    }
+    dead.push(p); killCell(p.r, p.c, mult);
+  }
 
   // A blast blows released gas apart, so the cloud is a threat you can answer.
   // Wash, not a direct hit: the cloud floats in the void a blast never occupies,
@@ -372,13 +418,16 @@ function wave(cells, mult){
   }
 
   // what the blast touched on its way out
-  const next = [], seen = {};
+  let sealHeld = false;
   for(const p of dead){
     for(const [dr,dc] of N4){
       const nr = p.r+dr, nc = p.c+dc, k = nr+','+nc;
       const g = at(nr,nc);
       if(!g || seen[k]) continue;
       if(g.t === 'seal'){
+        // One charge is a bang. The bedrock only goes under a chain, so the
+        // seam under the exit is never the answer on its own.
+        if(mult < SEAL_CHAIN){ sealHeld = true; continue; }
         seen[k] = 1; grid[nr][nc] = null; sealsLeft--;
         burst(BX+nc*S+S/2, BY+nr*S+S/2, '#7dfcff', 22);
         shakeT = 0.45; shakeMag = 15; sfx.open();
@@ -386,6 +435,13 @@ function wave(cells, mult){
       else if(g.t === 'gas' && g.ch >= 2){ seen[k] = 1; next.push({r:nr, c:nc, kind:'gas'}); }
       else if(g.t === 'powder'){ seen[k] = 1; killCell(nr, nc, mult); }
     }
+  }
+
+  if(sealHeld){
+    say('THE SEAL HOLDS — BEDROCK NEEDS A CHAIN');
+    sfx.deny();
+    for(let c=0;c<COLS;c++) if(grid[FLOOR][c] && grid[FLOOR][c].t === 'seal')
+      burst(BX + c*S + S/2, BY + FLOOR*S + S/2, '#7dfcff', 8);
   }
 
   if(!next.length){ after(240, endChain); return; }
@@ -400,8 +456,9 @@ function wave(cells, mult){
           const k = p.r+','+p.c;
           if(!mark[k]){ mark[k] = 1; cs.push(p); }
         }
-        // a primed pocket also cracks the bedrock seal beside it
-        for(const [dr,dc] of N4){
+        // a primed pocket cracks the bedrock beside it, but only as a chained
+        // detonation — the same rule the rest of the blast lives under
+        if(mult + 1 >= SEAL_CHAIN) for(const [dr,dc] of N4){
           const g = at(t.r+dr, t.c+dc);
           if(g && g.t === 'seal'){ grid[t.r+dr][t.c+dc] = null; sealsLeft--; sfx.open();
             burst(BX+(t.c+dc)*S+S/2, BY+(t.r+dr)*S+S/2, '#7dfcff', 22); }
@@ -409,7 +466,7 @@ function wave(cells, mult){
       } else {
         for(const [dr,dc] of N4){
           const g = at(t.r+dr, t.c+dc);
-          if(g && g.t === 'rock' && g.c === t.m){
+          if(g && conducts(g, t.m)){
             for(const p of seam(t.r+dr, t.c+dc)){
               const k = p.r+','+p.c;
               if(!mark[k]){ mark[k] = 1; cs.push(p); }
@@ -523,7 +580,14 @@ function supplyDrop(){
     if(g && g.t === 'rock') seams.push(g.c);
   }
   if(!seams.length){ die(); return; }
-  const m = pick(seams);
+  // resupply the mineral that can still open the floor, not a random one
+  let m = pick(seams);
+  for(let c=0;c<COLS;c++){
+    if(grid[FLOOR][c] && grid[FLOOR][c].t === 'seal'){
+      const above = grid[FLOOR-1][c];
+      if(above && above.t === 'rock'){ m = above.c; break; }
+    }
+  }
   for(const kind of ['canister','powder','powder']){
     const c = free.splice(rnd(free.length),1)[0];
     grid[ceil][c] = cell(kind, {c:m, oy:S*2.4});
@@ -564,6 +628,8 @@ function cellAtPx(x,y){
 let btnDescend = null, btnRestart = null;
 function hitBtn(b,x,y){ return b && x>=b.x && x<=b.x+b.w && y>=b.y && y<=b.y+b.h; }
 
+function inReach(c){ return Math.abs(c - minerC) <= REACH; }
+
 function walkTo(c){
   if(c === minerC) return;
   minerC = c;
@@ -590,6 +656,16 @@ function tap(x,y){
   const p = cellAtPx(x,y);
   if(!p){ sel = null; aim = null; return; }
   const g = at(p.r, p.c);
+
+  // The drill-line only covers the columns near where he is standing, so where
+  // he stands decides what he can work on. Firing is unrestricted — the launch
+  // crosses the chamber; it is the handling that has a reach.
+  const holding = sel ? at(sel.r, sel.c) : null;
+  const isDeselect = sel && sel.r === p.r && sel.c === p.c;
+  if(!isDeselect && !inReach(p.c) && !(holding && holding.ch >= 2)){
+    sfx.deny(); say('TOO FAR — WALK ALONG THE LEDGE');
+    return;
+  }
 
   if(!sel){
     if(!g) return;
@@ -785,7 +861,8 @@ function drawBedrock(x,y,s,seal){
     ctx.strokeStyle = '#7dfcff'; ctx.lineWidth = 2; ctx.strokeRect(x+2,y+2,s-4,s-4);
     ctx.font = 'bold ' + Math.floor(s*0.2) + 'px ui-monospace,monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#bff8ff'; ctx.fillText('SEAL', x + s/2, y + s*0.76);
+    // the bedrock states its own price, so the rule is never a surprise
+    ctx.fillStyle = '#bff8ff'; ctx.fillText('CHAIN x' + SEAL_CHAIN, x + s/2, y + s*0.76);
   } else {
     ctx.fillStyle = '#241f2e'; ctx.fillRect(x,y,s,s);
     ctx.fillStyle = '#332c40'; ctx.fillRect(x+1,y+1,s-2,s*0.3);
@@ -930,6 +1007,11 @@ function draw(){
 
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) drawCell(r,c);
 
+  // out of the drill-line's reach: dimmed, so the limit is read off the board
+  // rather than discovered by being refused
+  ctx.fillStyle = 'rgba(8,5,14,.55)';
+  for(let c=0;c<COLS;c++) if(!inReach(c)) ctx.fillRect(BX + c*S, BY, S, S*ROWS);
+
   // the promise: the seam that is about to go, and everything it will set off
   if(aim){
     ctx.globalAlpha = 0.20 + (0.5 + 0.5*Math.sin(T*10))*0.2;
@@ -937,11 +1019,17 @@ function draw(){
     for(const p of aim.cells) ctx.fillRect(BX + p.c*S, BY + p.r*S, S, S);
     ctx.globalAlpha = 1;
     outline(aim.cells, '#ffffff', 3);
+    // Only what this blast will actually set off. The seal is deliberately NOT
+    // outlined: a first detonation cannot crack it, and promising otherwise
+    // would be the preview telling a lie.
     const chain = [];
     for(const p of aim.cells){
+      const inside = at(p.r, p.c);
+      if(inside && (inside.t === 'canister' || inside.t === 'gas') && inside.ch >= 2)
+        chain.push({r:p.r, c:p.c});
       for(const [dr,dc] of N4){
         const g = at(p.r+dr, p.c+dc);
-        if(g && (((g.t === 'canister' || g.t === 'gas') && g.ch >= 2) || g.t === 'seal'))
+        if(g && (g.t === 'canister' || g.t === 'gas') && g.ch >= 2)
           chain.push({r:p.r+dr, c:p.c+dc});
       }
     }
@@ -1129,6 +1217,7 @@ requestAnimationFrame(frame);
 /* Exposed only so the CDP verification harness can drive real taps. */
 window.__game = {
   tap, state:()=>state, grid:()=>grid, px:(r,c)=>({x:BX+c*S+S/2, y:BY+r*S+S/2}),
+  selected:()=>sel && {r:sel.r, c:sel.c},
   info:()=>({state, deathMsg, sealsLeft, gold, depth, ceil, actions, minerC,
              clouds: clouds.map(g=>({c:g.c, left:g.left, r:cloudRow(g)})),
              FLOOR, COLS, S, BX, BY, LEDGE})
