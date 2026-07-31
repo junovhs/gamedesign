@@ -1,113 +1,65 @@
-# Stålberg grids for the chain board
+## Miner Puzzle Concept — “Downshaft”
 
-Authored by the designer, 2026-07-31, pasted into `index.html` from work and moved here.
-This is the source note for the organic-mesh board.
+A prospector enters an abandoned mine searching for a legendary deposit at its deepest point, **THEREFORE** he begins at the surface and must excavate downward one chamber at a time.
 
-**Yes. I think *Grindstone* would work extremely well on a Stålberg-style grid.** It would still be grid-based; the grid would simply be an **irregular graph rather than a rectangular lattice**.
+Each full-screen chamber is sealed by a layer of reinforced bedrock, **THEREFORE** the miner must solve the chamber’s blasting puzzle to open a passage to the level below.
 
-At a systems level, *Grindstone* is already basically:
+The chamber contains loose Powder Charges, metal Blast Canisters, and massive Fault Rocks, **THEREFORE** the miner uses a magnetic drill-line to pull objects from the rock face and launch them into one another.
 
-* each tile = a node;
-* neighboring tiles = connections between nodes;
-* a chain = a path through connected nodes of the same color.
+The miner loads a Powder Charge into a matching Blast Canister, **BUT** a single charge only packs the canister and does not arm it.
 
-None of that fundamentally requires straight rows or square cells.
+**THEREFORE**, he must load a second matching Powder Charge into the same canister.
 
-## The important distinction
+The second charge arms the Blast Canister, **BUT** detonating it by itself will only clear a small section of rubble.
 
-There are two ways to do it:
+**THEREFORE**, the miner must pull the armed canister from the wall and fire it into a matching Fault Rock.
 
-### Merely distort the existing square board
+The Fault Rock ruptures and explodes, **THEREFORE** every connected rock of the same mineral type is destroyed in the resulting blast.
 
-Keep exactly the same underlying neighbors, but move the tile centers and bend the cell boundaries.
+**BUT** clearing isolated rocks will not excavate the chamber before the unstable ceiling begins collapsing from above.
 
-```text
-Regular appearance       Irregular appearance
-same topology      →      same topology
-```
+**THEREFORE**, the miner must arrange matching mineral deposits so that one detonation triggers several connected explosions.
 
-This would preserve *Grindstone* almost perfectly. It would feel organic, but the geometry would mainly be visual.
+Each explosion can ignite another armed canister, expose another fault line, or release a falling boulder, **THEREFORE** carefully constructed blast sequences create cascading chain reactions across the entire chamber.
 
-### Use a true irregular Stålberg topology
+Completing an uninterrupted blast route from the miner’s current ledge to the bedrock floor creates a viable descent shaft, **THEREFORE** the miner can rappel through the opening and enter the next puzzle screen below.
 
-The Townscaper-style technique creates a mesh from triangles and quadrilaterals, subdivides it and relaxes the vertices into an organic-looking grid. That can produce curved flows and much less obvious rows and columns. ([andersource][1])
+**BUT** the shortest route downward may leave valuable ore trapped elsewhere in the chamber.
 
-Here, the actual neighbor relationships could vary:
+**THEREFORE**, the player must decide whether to descend immediately or construct a larger chain reaction that extracts additional gold, gems, and relics before the chamber collapses.
 
-```text
-        A
-      /   \
-     B — C — D
-     | \ |   |
-     E — F — G
-```
+Large chain reactions dislodge rare ore from the walls, **THEREFORE** an Ore Cart occasionally rolls onto the miner’s ledge and offers a temporary extraction opportunity.
 
-Now the shape of the board becomes mechanically meaningful. You can create:
+**BUT** the cart remains available for only a few turns before the track collapses.
 
-* bottlenecks;
-* circular routes;
-* pockets and peninsulas;
-* highly connected “junction” cells;
-* isolated regions opened by keys or grindstones;
-* boards shaped like caverns, creatures or terrain.
+**THEREFORE**, the miner must temporarily stop excavating the main shaft and redirect falling ore into the cart to earn tools, upgrades, and score bonuses.
 
-That would make individual levels considerably more distinctive.
+As the miner travels deeper, ordinary Blast Canisters become scarce and volatile Gas Pockets begin appearing inside the rock.
 
-## The main problem: *Grindstone* has diagonal adjacency
+**THEREFORE**, the miner can load any two Powder Charges into a Gas Pocket to trigger a powerful explosion that ignores mineral color.
 
-On its square board, *Grindstone* lets chains travel horizontally, vertically and diagonally, giving an ordinary interior tile up to eight possible neighbors. ([Ladies Gamers][2])
+**BUT** Gas Pockets are structurally unstable.
 
-On a Stålberg grid, you must explicitly decide what “adjacent” means.
+If the miner destroys the rocks supporting one without first detonating it, the pocket falls toward his ledge and explodes on impact.
 
-**Shared-edge only**
+**THEREFORE**, deeper chambers require the player to balance excavation routes, falling hazards, chain-reaction timing, and the structural integrity of the mine.
 
-```text
-┌─────┐
-│  A  │── B is adjacent
-└─────┘
-```
+Some chambers contain wooden supports holding back enormous sections of rock, **THEREFORE** destroying a support can shift an entire row or column and create new blast combinations.
 
-This is visually clear, but most cells may have only around four exits. Chains would be more constrained and the game would feel closer to navigating corridors.
+**BUT** removing supports in the wrong order can bury essential charges, block the descent route, or trap the miner above an impassable layer.
 
-**Shared-edge or shared-corner**
+**THEREFORE**, every screen becomes both a matching puzzle and a spatial excavation problem.
 
-This more closely reproduces *Grindstone’s* eight-direction movement, but irregular corners can become ambiguous. Two cells touching at a tiny point may not look obviously connected.
+When the final bedrock seal is destroyed, a ladder, rope shaft, mine lift, or natural fissure is revealed, **THEREFORE** the miner physically descends into the next chamber.
 
-My recommendation is to allow both, but render the underlying connection clearly while the player drags:
+**BUT** every layer introduces a new geological complication: underground rivers, magma vents, ancient machinery, crystal caverns, toxic gas, buried ruins, or creatures awakened by the explosions.
 
-* eligible neighbors brighten;
-* a faint line connects cell centers;
-* invalid cells dim;
-* the chain snaps decisively from center to center.
+**THEREFORE**, the downward journey continually transforms the basic blasting chain without abandoning its central logic.
 
-The player should never have to guess whether two shapes count as adjacent.
+In Expedition Mode, the collapsing ceiling creates constant pressure, **THEREFORE** players must excavate quickly while collecting as much treasure as possible.
 
-## What would need redesigning
+**BUT** in Survey Mode, the mine remains completely stable.
 
-The chain mechanic itself needs almost no conceptual change. The surrounding systems do.
+**THEREFORE**, the game becomes a deliberate, move-limited puzzle in which the player must open the descent shaft, recover designated treasures, and avoid irreversible collapses using a precise sequence of actions.
 
-**Spawning and gravity:** A rectangular board naturally has columns and a downward direction. An organic grid does not. You would need a flow field—perhaps enemies enter from the upper boundary and travel along predefined graph connections toward empty cells.
-
-**Line-based attacks:** Anything currently described as attacking a row, column or diagonal would need to become “follow this directional lane,” “attack all graph neighbors,” or “attack within two steps.”
-
-**Level generation:** You could no longer balance levels using coordinates alone. You would evaluate connectivity, graph distance, bottlenecks, color clusters and reachable chain lengths.
-
-**Cell size:** Stålberg cells can differ visually in area. Large cells must not accidentally appear more important or become much easier to select unless that is intentional.
-
-## The version I would make
-
-I would use a **true irregular grid**, not just warp a square one, but constrain it carefully:
-
-* roughly 45–55 playable cells;
-* most cells have six to eight selectable neighbors;
-* very few unusually connected cells;
-* visible connection feedback during chaining;
-* an intentional entrance-to-exit flow;
-* occasional narrow regions where geometry becomes part of the puzzle.
-
-That would preserve the long, fluid chain-making pleasure while adding something the original *Grindstone* barely uses: **board topology as level design**.
-
-The result could feel like *Grindstone* taking place across an organic cave network rather than on a spreadsheet. The mechanic would survive; it would probably become deeper.
-
-[1]: https://andersource.dev/2020/11/06/organic-grid.html "Generating an organic grid | andersource"
-[2]: https://ladiesgamers.com/grindstone-review-nintendo-switch/?utm_source=chatgpt.com "Grindstone Review (Nintendo Switch) - LadiesGamers"
+Every solved screen moves the miner visibly deeper on a vertical map of the mine, **THEREFORE** progression is not represented by abstract levels but by an uninterrupted journey from daylight at the surface to the unknown world buried beneath it.
