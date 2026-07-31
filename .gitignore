@@ -6,3 +6,6 @@
 # semmap artifacts (regenerable, not committed - DEC-10)
 SEMMAP.md
 .semmap/
+
+# semclear change-witness stamp (regenerable per-candidate artifact, not committed)
+semclear-verification.json
