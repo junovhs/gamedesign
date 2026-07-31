@@ -68,9 +68,9 @@ function layout(){
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.imageSmoothingEnabled = false;
-  // the HUD band has to clear the miner's ledge as well as the text, or his
-  // helmet lamp sits on top of the readout
-  const HUD = 120, FOOT = 72;
+  // the miner stands in the chamber now, not on a ledge above it, so the HUD
+  // band only has to clear its own text
+  const HUD = 84, FOOT = 72;
   S = Math.floor(Math.min((W - 14) / COLS, (H - HUD - FOOT) / ROWS));
   tooSmall = S < 38;
   BX = Math.round((W - S * COLS) / 2);
@@ -112,6 +112,7 @@ const sfx = {
   deny:  ()=>tone(150, 0.10, 'sawtooth', 0.08, 90),
   fly:   ()=>tone(300, 0.16, 'triangle', 0.07, 820),
   clank: ()=>{ tone(220, 0.09, 'square', 0.09, 160); noise(0.12, 0.16, 1800); },
+  step:  ()=>noise(0.09, 0.14, 600),
   load:  (n)=>tone(n>=2?880:600, 0.12, 'square', 0.10, n>=2?1300:760),
   boom:  (combo)=>{ noise(0.34, 0.34, 700 + combo*220); tone(90+combo*26, 0.24, 'sawtooth', 0.13, 45); },
   crush: ()=>{ noise(0.5, 0.34, 380); tone(70, 0.4, 'sawtooth', 0.14, 34); },
@@ -136,7 +137,7 @@ let msg = '', msgT = 0;
 let shakeT = 0, shakeMag = 0;
 let flashT = 0, flashCol = '#fff';
 let parts = [], shots = [], timers = [], floaters = [];
-let minerX = 0.5, minerFall = 0;
+let minerC = 0, minerFall = 0;   // he occupies one column of the bedrock floor
 let chainRocks = 0;       // rock destroyed by the chain in progress — pays out charges
 let T = 0;                // seconds since load, drives every idle animation
 
@@ -229,7 +230,7 @@ function buildChamber(){
 
   ceil = 0; actions = 0; sel = null; aim = null; combo = 0;
   actionsPerCollapse = Math.max(4, 7 - Math.floor(chamber/2));
-  minerX = 0.5;
+  minerC = Math.floor(COLS/2);
   state = 'play';
   settle(true);
 }
@@ -238,6 +239,7 @@ function buildChamber(){
    Everything that is not bedrock falls in its column. Rock falls too, which is
    what turns one blast into a reshaped chamber instead of a hole in a wall. */
 function settle(instant){
+  const fellGas = [];
   for(let c=0;c<COLS;c++){
     let write = FLOOR - 1;
     for(let r=FLOOR-1;r>=ceil;r--){
@@ -246,10 +248,42 @@ function settle(instant){
       if(write !== r){
         grid[write][c] = g; grid[r][c] = null;
         if(!instant){ g.oy = (write - r) * S; g.vy = 0; }
+        if(g.t === 'gas') fellGas.push(g);
       }
       write--;
     }
   }
+  // a pocket that has been dropped is a pocket that is about to go off
+  if(!instant && fellGas.length) after(300, ()=>detonateFallen(fellGas));
+}
+
+function locate(cellObj){
+  for(let r=ceil;r<FLOOR;r++) for(let c=0;c<COLS;c++)
+    if(grid[r][c] === cellObj) return {r,c};
+  return null;
+}
+
+/* Gas pockets are structurally unstable: cut the rock holding one up and it
+   comes down and detonates where it lands, spending none of your charges and
+   asking none of your permission. If it lands on the miner, that is the run —
+   the only thing in the chamber that can kill him is a mistake he made. */
+function detonateFallen(list){
+  const cells = [], mark = {};
+  let caught = false;
+  for(const g of list){
+    const p = locate(g);
+    if(!p) continue;                       // already consumed by a chain
+    if(p.r >= FLOOR - 1 && Math.abs(p.c - minerC) <= 1) caught = true;
+    for(const q of area(p.r, p.c)){
+      const k = q.r+','+q.c;
+      if(!mark[k]){ mark[k] = 1; cells.push(q); }
+    }
+  }
+  if(!cells.length) return;
+  state = 'busy'; chainRocks = 0;
+  say(caught ? 'IT COMES DOWN ON TOP OF YOU' : 'THE POCKET COMES DOWN');
+  wave(cells, 1);
+  if(caught) after(430, ()=>{ say('CAUGHT IN THE BLAST'); die(); });
 }
 
 /* ---------------- seam lookup ---------------------------------------------- */
@@ -507,6 +541,16 @@ function cellAtPx(x,y){
 let btnDescend = null, btnRestart = null;
 function hitBtn(b,x,y){ return b && x>=b.x && x<=b.x+b.w && y>=b.y && y<=b.y+b.h; }
 
+function walkTo(c){
+  if(c === minerC) return;
+  minerC = c;
+  sfx.step();
+  const x = BX + c*S + S/2, y = BY + FLOOR*S + S*0.9;
+  for(let i=0;i<6;i++)
+    parts.push({x, y, vx:(Math.random()-0.5)*70, vy:-30-Math.random()*50,
+                life:0.3, t:0, col:'#4a3a55', s:2+Math.random()*3});
+}
+
 function tap(x,y){
   ac();
   if(state === 'won'){ if(hitBtn(btnDescend,x,y)) descend(); return; }
@@ -515,6 +559,11 @@ function tap(x,y){
 
   const p = cellAtPx(x,y);
   if(!p){ sel = null; aim = null; return; }
+
+  // the floor is his to walk. Free, and it never cancels what he is holding —
+  // getting out from under a pocket must never cost the plan you were making
+  if(p.r === FLOOR){ walkTo(p.c); return; }
+
   const g = at(p.r, p.c);
 
   if(!sel){
@@ -727,16 +776,23 @@ function drawCrushed(x,y,s){
   ctx.strokeStyle = '#0d0a14'; ctx.lineWidth = 1; ctx.strokeRect(x+0.5, y+0.5, s-1, s-1);
 }
 
-function drawMiner(x,y,s){
+function drawMiner(x,y,s,danger){
   const u = Math.max(2, s/13);
+  if(danger){
+    ctx.globalAlpha = 0.3 + 0.4*Math.abs(Math.sin(T*9));
+    ctx.fillStyle = '#ff4d6d';
+    ctx.fillRect(x - u*5, y - u*13, u*10, u*14);
+    ctx.globalAlpha = 1;
+  }
   ctx.fillStyle = '#3b2a1e'; ctx.fillRect(x - u*3, y - u*7, u*6, u*7);
   ctx.fillStyle = '#f0c08a'; ctx.fillRect(x - u*2, y - u*10, u*4, u*3);
-  ctx.fillStyle = '#f2b21f'; ctx.fillRect(x - u*3, y - u*12, u*6, u*2);
-  // the lamp points down the shaft, so it never washes over the readout
+  ctx.fillStyle = danger ? '#ff4d6d' : '#f2b21f'; ctx.fillRect(x - u*3, y - u*12, u*6, u*2);
+  // he is at the bottom of the chamber, so the lamp shines up into the rock
+  // rather than out through the frame
   ctx.globalAlpha = 0.3 + (0.5 + 0.5*Math.sin(T*4))*0.28;
   ctx.fillStyle = '#fff3a0';
-  ctx.beginPath(); ctx.moveTo(x + u*2, y - u*10); ctx.lineTo(x + u*10, y - u*2);
-  ctx.lineTo(x + u*10, y + u*4); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x + u*2, y - u*11); ctx.lineTo(x + u*13, y - u*18);
+  ctx.lineTo(x + u*13, y - u*8); ctx.closePath(); ctx.fill();
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#fff'; ctx.fillRect(x + u*2, y - u*11, u*1.4, u*1.4);
 }
@@ -859,7 +915,7 @@ function draw(){
     ctx.strokeStyle = 'rgba(125,252,255,.5)'; ctx.lineWidth = 2;
     ctx.setLineDash([6,6]); ctx.lineDashOffset = -T*30;
     ctx.beginPath();
-    ctx.moveTo(BX + minerX*S*COLS, BY - 14);
+    ctx.moveTo(BX + minerC*S + S/2, BY + FLOOR*S + S/2);
     ctx.lineTo(BX + sel.c*S + S/2, BY + sel.r*S + S/2);
     ctx.stroke(); ctx.setLineDash([]);
   }
@@ -881,8 +937,27 @@ function draw(){
   }
   ctx.globalAlpha = 1;
 
-  ctx.fillStyle = '#2a2136'; ctx.fillRect(BX-6, BY-16, S*COLS+12, 10);
-  drawMiner(BX + minerX*S*COLS, BY - 8 + minerFall*40, S);
+  // every gas pocket owns a drop lane: the columns it can detonate in if the
+  // rock under it goes. Standing in one is the mistake the chamber can kill for.
+  const lanes = {};
+  for(let r=ceil;r<FLOOR;r++) for(let c=0;c<COLS;c++){
+    const g = grid[r][c];
+    if(!g || g.t !== 'gas') continue;
+    for(let d=-1;d<=1;d++){
+      const cc = c+d;
+      if(cc >= 0 && cc < COLS) lanes[cc] = Math.max(lanes[cc] === undefined ? -1 : lanes[cc], r);
+    }
+  }
+  const danger = lanes[minerC] !== undefined;
+  ctx.globalAlpha = 0.06 + 0.05*Math.abs(Math.sin(T*3));
+  ctx.fillStyle = '#ff4d6d';
+  for(const k in lanes){
+    const c = +k, top = lanes[k] + 1;
+    ctx.fillRect(BX + c*S, BY + top*S, S, (FLOOR + 1 - top)*S);
+  }
+  ctx.globalAlpha = 1;
+
+  drawMiner(BX + minerC*S + S/2, BY + (FLOOR+1)*S - 4 - minerFall*60, S, danger);
 
   ctx.restore();
 
@@ -988,7 +1063,7 @@ requestAnimationFrame(frame);
 /* Exposed only so the CDP verification harness can drive real taps. */
 window.__game = {
   tap, state:()=>state, grid:()=>grid, px:(r,c)=>({x:BX+c*S+S/2, y:BY+r*S+S/2}),
-  info:()=>({state, sealsLeft, gold, depth, ceil, actions, S, BX, BY})
+  info:()=>({state, sealsLeft, gold, depth, ceil, actions, minerC, FLOOR, COLS, S, BX, BY})
 };
 </script>
 </body>
