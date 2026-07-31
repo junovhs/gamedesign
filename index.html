@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0a0710">
-<title>DOWNSHAFT — CHAIN POC</title>
+<title>DOWNSHAFT</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%;overflow:hidden;background:#0a0710;
@@ -18,31 +18,29 @@
 <script>
 "use strict";
 /* ============================================================================
-   DOWNSHAFT — CHAIN PROOF OF CONCEPT
+   DOWNSHAFT
 
-   The question this file exists to answer: is dragging a chain through rock
-   fun, and is routing it strategic? Nothing else is in here. No shop, no
-   inventory, no economy, no world. Three boards, then it tells you how you did.
+   You drag a route out of the guy through touching rock of the same colour and
+   he mines the lot. Longer routes pay quadratically, so the game is reading the
+   board for the long line.
 
-   The loop, in one paragraph: the guy stands in a full grid of rock. You drag
-   a path out of him through touching tiles of the SAME material — eight ways,
-   diagonals included — and release. He walks it, mining every tile, and ends
-   where the path ends. Longer chains pay quadratically, so the whole game is
-   reading the board for the long route. You get twelve swings and a quota. Meet
-   the quota and the floor opens; end a chain on the bottom row and you drop.
+   The board is NOT a rectangle. It is an irregular quad mesh built the
+   Townscaper way — triangulate, merge pairs into quads, subdivide everything
+   into quads, relax — so every shaft is a cavern with its own shape. Bottlenecks,
+   pockets, peninsulas and dead ends are level design rather than decoration.
+
+   That shape is the whole reason this is not a colour-matching game with a
+   pickaxe skin: the rock still FALLS. Gravity runs on the mesh, not on columns,
+   so mining a neck collapses everything hanging off it and the cavern reshapes
+   itself under you. You descend by falling out of the bottom of it.
    ========================================================================= */
 
 /* ---------------- materials ------------------------------------------------
-   These are the colours you match. They have to be unmistakable from each
-   other at thumb distance, so they are picked as hues around the wheel rather
-   than as realistic rock. Every one is drawn from pixel data by code — there
-   are no image files in this build and there never will be.
-
-   The ORDER matters as much as the colours. A board only ever uses the first
-   `mats` of them, so the first four have to be the four most separable hues in
-   the set — orange, teal, violet, lime — or the opening board reads as mud.
-   The near-neighbours (crimson beside orange, cobalt beside violet) are held
-   back for the deep boards, where telling them apart IS the added difficulty. */
+   A board only uses the first `mats` of these, so the first four have to be the
+   four most separable hues in the set — orange, teal, violet, lime — or the
+   opening cavern reads as mud. The near-neighbours (crimson beside orange,
+   cobalt beside violet) are held back for the deep boards, where telling them
+   apart IS part of the added difficulty. Every pixel is drawn by code. */
 const MATS = [
   {n:'COPPER',    pal:['#f0801f','#ffb457','#94430a']},
   {n:'VERDIGRIS', pal:['#12b8a0','#5cf0d6','#06655a']},
@@ -52,41 +50,34 @@ const MATS = [
   {n:'COBALT',    pal:['#3a7bf0','#7dabff','#173f8c']}
 ];
 
-/* ---------------- boards ---------------------------------------------------
-   Three of them, and they get stranger going down because that is the whole
-   promise of the game.
+/* ---------------- shafts ---------------------------------------------------
+   `mats` is the difficulty dial: more colours fragments the cavern into smaller
+   same-colour regions, so the long route gets rarer. Every colour added is paid
+   back with more swings and more geodes, so a deep shaft plays DIFFERENTLY —
+   geode-routing rather than region-hunting — instead of just meaner.
 
-   The difficulty dial is `mats` — how many colours are in play. More colours
-   fragments the board into smaller same-colour components, so the long route
-   gets rarer and harder to see. Measured: at four colours the best available
-   chain is typically 9 tiles, at six it is 5.
+   `shape` names the cavern outline, which is the other half of the difficulty
+   and the part a rectangle never had.
 
-   But a deeper board must play *differently*, not just worse, so every colour
-   added is paid for with more swings and far more geodes. By the third shaft
-   the game is no longer "find the big blob", it is "route through geodes" —
-   which is a different skill wearing the same input.
-
-   Quotas are measured, not guessed. A solver that plays each board optimally
-   scores a median of 1478 / 1106 / 961, and the quota is set at a deliberately
-   rising fraction of that — 30% / 47% / 58% — so the first shaft is generous
-   and the third is genuinely tight. The number going UP while the fraction
-   also goes up is the point: it should read as descending into harder rock,
-   not as the game quietly asking for less. */
-const BOARDS = [
-  {name:'THE BACKYARD',   mats:4, quota:450, swings:12, geode:14, seed:0, wall:'#1a1220',
-   note:'DRAG THROUGH MATCHING ROCK. DIAGONALS COUNT.'},
-  {name:'THE CUTLERY',    mats:5, quota:520, swings:13, geode:8,  seed:2, wall:'#111a2a',
-   note:'FIVE COLOURS. THE LONG ROUTE IS HIDING NOW.'},
-  {name:'SOMEONES FLOOR', mats:6, quota:560, swings:14, geode:6,  seed:3, wall:'#0d2220',
-   note:'SIX COLOURS. RIDE THE GEODES OR YOU WILL NOT MAKE QUOTA.'}
+   Measured against a solver that plays each cavern optimally: median score
+   1056 / 658 / 680, and the median best-available route runs 11 / 7 / 6 cells
+   (with 24-29 when the geodes line up). Quotas sit at 28% / 49% / 53% of those
+   medians, so the first shaft is generous and the third is tight. */
+const SHAFTS = [
+  {name:'THE BACKYARD',   mats:4, quota:300, swings:12, geode:12, seed:1, shape:'flask',    pr:9, pc:5,
+   wall:'#1a1220', note:'DRAG THROUGH MATCHING ROCK. IT FALLS WHEN YOU CUT IT.'},
+  {name:'THE CUTLERY',    mats:5, quota:320, swings:13, geode:8,  seed:2, shape:'teardrop', pr:8, pc:5,
+   wall:'#111a2a', note:'FIVE COLOURS, AND IT OPENS OUT UNDER YOU.'},
+  {name:'SOMEONES FLOOR', mats:6, quota:360, swings:14, geode:6,  seed:3, shape:'lobes',    pr:8, pc:5,
+   wall:'#0d2220', note:'SIX COLOURS. RIDE THE GEODES OR YOU WILL NOT MAKE QUOTA.'}
 ];
 
-const COLS = 8, ROWS = 12;
 const MINE_MS = 52;          // per-tile step of the mining walk
+const RELAX_ITERS = 60;      // Laplacian passes; more = rounder, less organic
 
 /* ---------------- canvas ---------------- */
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d', {alpha:false});
-let W=0, H=0, DPR=1, TILE=0, OX=0, OY=0, HUD=0;
+let W=0, H=0, DPR=1, HUD=0, CELLR=30;
 
 function resize(){
   DPR = Math.min(devicePixelRatio||1, 2.5);
@@ -94,22 +85,16 @@ function resize(){
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
   cv.style.width = W+'px'; cv.style.height = H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
-  ctx.imageSmoothingEnabled = false;
-  // The HUD is a fixed slice of the screen and the board takes what is left,
-  // so a short landscape phone shrinks the tiles instead of clipping the board.
   HUD = Math.max(64, Math.min(96, Math.round(H*0.13)));
-  const availW = W - 16, availH = H - HUD - 16;
-  TILE = Math.max(18, Math.floor(Math.min(availW/COLS, availH/ROWS)));
-  OX = Math.round((W - TILE*COLS)/2);
-  OY = HUD + Math.round((H - HUD - TILE*ROWS)/2);
+  if(mesh) fitMesh();
 }
 addEventListener('resize', resize);
 addEventListener('orientationchange', ()=>setTimeout(resize,80));
 
 /* ---------------- audio ----------------------------------------------------
-   The single most addictive thing in this genre is the pitch climbing as the
-   chain resolves. It is not decoration; it is the feedback that tells your
-   thumb the route was good, one tile at a time. */
+   The pitch climbing as the chain resolves is the single most addictive thing
+   in this genre. It is not decoration; it is the feedback that tells your thumb
+   the route was good, one tile at a time. */
 let AC=null;
 function ac(){ if(!AC){ try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return AC; }
 function tone(freq, dur, type, vol, slideTo){
@@ -132,149 +117,448 @@ function noise(dur, vol){
   s.connect(g); g.connect(a.destination); s.start();
 }
 
+/* ---------------- seeded random --------------------------------------------
+   The cavern has to be the same cavern every time you retry a shaft, or a
+   failed board is unlearnable. Play uses Math.random; geometry uses this. */
+function mulberry(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ============================================================================
+   THE MESH
+
+   Townscaper's trick, in four steps:
+     1. lay down a triangulated lattice inside the cavern outline
+     2. greedily merge adjacent triangle PAIRS into quads
+     3. subdivide every face into quads (an n-gon becomes n quads)
+     4. relax the vertices toward the centroids of their faces
+
+   Step 3 is what guarantees an all-quad mesh, and step 4 is what makes it look
+   grown rather than generated. The output is a graph, and everything after this
+   point — chains, gravity, the player — only ever talks to the graph.
+   ========================================================================= */
+
+/* Cavern outlines. Each returns the half-width (0..1) of the shaft at depth t
+   (0 at the top, 1 at the floor). This is the level design. */
+const SHAPES = {
+  flask:     t => 0.42 + 0.46*Math.sin(Math.PI*Math.pow(t,0.75)),
+  // A pinched waist is the one outline that still leaves untouchable cells even
+  // after sliver pruning — the neck squeezes them from both sides at once. This
+  // opens downward instead, which reads as breaking into a chamber and measures
+  // clean. The waisted cavern comes back when cells can merge into n-gons.
+  teardrop:  t => 0.38 + 0.55*Math.pow(t, 0.6),
+  lobes:     t => 0.40 + 0.34*Math.sin(Math.PI*t) + 0.26*Math.abs(Math.sin(2.4*Math.PI*t))
+};
+
+let mesh = null;
+
+function buildMesh(shapeName, seed, pr, pc){
+  const rnd = mulberry(seed*7919 + 13);
+  const shape = SHAPES[shapeName] || SHAPES.flask;
+
+  // ---- 1. triangulated lattice, clipped to the cavern outline --------------
+  // Odd rows are offset half a step, which is what makes the triangles
+  // equilateral-ish and therefore the final quads well-proportioned.
+  // Lattice size sets the final cell count: each face becomes 3 or 4 cells, so
+  // this lands around 50 — the range where a cell is still a 44px thumb target
+  // on a 390px phone. A finer lattice makes a prettier cavern out of cells too
+  // small to hit, which is the trap an irregular board sets for you.
+  const PR = pr || 6, PC = pc || 5;
+  // Row spacing must be 0.866 of the COLUMN spacing, not of 1, or the triangles
+  // come out tall and every quad after merging is an elongated diamond. The
+  // column step is 2/(PC-1) because the lattice spans -1..1.
+  const DY = 0.866 * (2/(PC-1));
+  const P = [];
+  const verts = [];
+  for(let r=0;r<PR;r++){
+    P[r] = [];
+    const halfW = shape(r/(PR-1));
+    for(let c=0;c<PC;c++){
+      const bx = (c + (r%2 ? 0.5 : 0)) / (PC-1) * 2 - 1;   // -1..1
+      if(Math.abs(bx) > halfW){ P[r][c] = -1; continue; }
+      // A little jitter before relaxation stops the result looking like a
+      // deformed lattice; relaxation then pulls it back into good shape.
+      P[r][c] = verts.length;
+      verts.push({x: bx + (rnd()-0.5)*0.16, y: r*DY + (rnd()-0.5)*0.16});
+    }
+  }
+
+  const tris = [];
+  const V = (r,c) => (r>=0 && r<PR && c>=0 && c<PC) ? P[r][c] : -1;
+  for(let r=0;r<PR-1;r++){
+    const off = (r%2) ? 1 : 0;
+    for(let c=0;c<PC;c++){
+      const a = V(r,c), b = V(r,c+1);
+      const d = V(r+1, c-1+off), e = V(r+1, c+off);
+      if(a>=0 && b>=0 && e>=0) tris.push([a,b,e]);
+      if(a>=0 && d>=0 && e>=0) tris.push([a,e,d]);
+    }
+  }
+
+  // ---- 2. merge triangle pairs into quads ---------------------------------
+  // Two triangles sharing an edge become one quad. Doing this greedily in a
+  // shuffled order is what breaks up the regularity: whatever fails to pair
+  // stays a triangle and becomes a 3-cell rosette in step 3, which is the
+  // Townscaper "look".
+  const edgeKey = (a,b) => a<b ? a+'_'+b : b+'_'+a;
+  const triEdges = new Map();
+  tris.forEach((t,i)=>{
+    for(let k=0;k<3;k++){
+      const kk = edgeKey(t[k], t[(k+1)%3]);
+      if(!triEdges.has(kk)) triEdges.set(kk, []);
+      triEdges.get(kk).push(i);
+    }
+  });
+  const used = new Uint8Array(tris.length);
+  const faces = [];
+  const order = tris.map((_,i)=>i);
+  for(let i=order.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; const t=order[i]; order[i]=order[j]; order[j]=t; }
+  for(const i of order){
+    if(used[i]) continue;
+    const t = tris[i];
+    let merged = false;
+    for(let k=0;k<3 && !merged;k++){
+      const a = t[k], b = t[(k+1)%3], c = t[(k+2)%3];
+      for(const j of (triEdges.get(edgeKey(a,b)) || [])){
+        if(j === i || used[j]) continue;
+        const d = tris[j].find(v => v !== a && v !== b);
+        if(d === undefined) continue;
+        used[i] = used[j] = 1;
+        faces.push([c, a, d, b]);
+        merged = true; break;
+      }
+    }
+    if(!merged){ used[i] = 1; faces.push(t.slice()); }
+  }
+
+  // ---- 3. subdivide every face into quads ---------------------------------
+  // n-gon -> n quads, each [corner, edgeMid, faceCentre, prevEdgeMid]. Edge and
+  // face points must be SHARED vertices or the mesh comes apart into confetti.
+  const nv = verts.map(v=>({x:v.x, y:v.y}));
+  const emid = new Map(), cells = [];
+  const edgePoint = (a,b) => {
+    const kk = edgeKey(a,b);
+    if(emid.has(kk)) return emid.get(kk);
+    const i = nv.length;
+    nv.push({x:(nv[a].x+nv[b].x)/2, y:(nv[a].y+nv[b].y)/2});
+    emid.set(kk, i); return i;
+  };
+  for(const f of faces){
+    const n = f.length, fc = nv.length;
+    let sx=0, sy=0;
+    for(const v of f){ sx += nv[v].x; sy += nv[v].y; }
+    nv.push({x:sx/n, y:sy/n});
+    for(let k=0;k<n;k++){
+      const prev = f[(k+n-1)%n], cur = f[k], next = f[(k+1)%n];
+      cells.push({vi:[cur, edgePoint(cur,next), fc, edgePoint(prev,cur)]});
+    }
+  }
+
+  // ---- 4. relax ------------------------------------------------------------
+  // Each vertex drifts toward the average centroid of the cells it belongs to.
+  // Boundary vertices are pinned, or the cavern outline would dissolve.
+  const incident = nv.map(()=>[]);
+  cells.forEach((c,i)=> c.vi.forEach(v => incident[v].push(i)));
+  const edgeUse = new Map();
+  for(const c of cells) for(let k=0;k<4;k++){
+    const kk = edgeKey(c.vi[k], c.vi[(k+1)%4]);
+    edgeUse.set(kk, (edgeUse.get(kk)||0) + 1);
+  }
+  // Boundary vertices relax ALONG the outline rather than being frozen. Freezing
+  // them keeps the cavern silhouette exactly but leaves thin slivers wedged
+  // against the wall — cells far too small to tap. Sliding them along their two
+  // boundary neighbours smooths those out while the silhouette survives.
+  const pinned = new Uint8Array(nv.length);
+  const bnb = nv.map(()=>[]);
+  for(const [kk,n] of edgeUse) if(n === 1){
+    const p2 = kk.split('_'), a = +p2[0], b = +p2[1];
+    pinned[a] = pinned[b] = 1;
+    bnb[a].push(b); bnb[b].push(a);
+  }
+  for(let it=0; it<RELAX_ITERS; it++){
+    const next = nv.map((v,i)=>{
+      if(!incident[i].length) return {x:v.x, y:v.y};
+      if(pinned[i]){
+        if(bnb[i].length !== 2) return {x:v.x, y:v.y};   // corners stay put
+        const a = nv[bnb[i][0]], b = nv[bnb[i][1]];
+        return {x: v.x + ((a.x+b.x)/2 - v.x)*0.22, y: v.y + ((a.y+b.y)/2 - v.y)*0.22};
+      }
+      // Weighting each incident cell's centroid by that cell's AREA is what
+      // equalises the mesh: a big cell pulls the shared vertex into itself and
+      // gives area away to its small neighbour. Plain unweighted smoothing
+      // makes the cavern pretty but leaves 19px cells in the narrow parts,
+      // which on a phone are cells you cannot reliably touch.
+      let sx=0, sy=0, wsum=0;
+      for(const ci of incident[i]){
+        const q = cells[ci].vi;
+        const cx = (nv[q[0]].x+nv[q[1]].x+nv[q[2]].x+nv[q[3]].x)/4;
+        const cy = (nv[q[0]].y+nv[q[1]].y+nv[q[2]].y+nv[q[3]].y)/4;
+        let a = 0;
+        for(let k=0;k<4;k++){
+          const p1 = nv[q[k]], p2 = nv[q[(k+1)%4]];
+          a += p1.x*p2.y - p2.x*p1.y;
+        }
+        const w = Math.abs(a)/2 + 1e-6;
+        sx += cx*w; sy += cy*w; wsum += w;
+      }
+      return {x: v.x + (sx/wsum - v.x)*0.55, y: v.y + (sy/wsum - v.y)*0.55};
+    });
+    for(let i=0;i<nv.length;i++){ nv[i].x = next[i].x; nv[i].y = next[i].y; }
+  }
+
+  // ---- centroids, adjacency, gravity --------------------------------------
+  for(const c of cells){
+    const q = c.vi;
+    c.cx = (nv[q[0]].x+nv[q[1]].x+nv[q[2]].x+nv[q[3]].x)/4;
+    c.cy = (nv[q[0]].y+nv[q[1]].y+nv[q[2]].y+nv[q[3]].y)/4;
+  }
+
+  // ---- prune slivers -------------------------------------------------------
+  // Wherever the cavern outline cuts between two lattice points it leaves a
+  // wedge-shaped cell far smaller than its neighbours. That is independent of
+  // which outline you choose, so tuning the shape functions never fixes it —
+  // and a 20px cell on a phone is a cell you cannot reliably touch.
+  //
+  // So: drop any cell well under the median area, smallest first, and only when
+  // dropping it leaves the cavern in one piece. Removing them from the rim makes
+  // the silhouette MORE ragged, which is the direction we want anyway.
+  const byVertAll = nv.map(()=>[]);
+  cells.forEach((c,i)=> c.vi.forEach(v => byVertAll[v].push(i)));
+  const areaOf = c => {
+    let a = 0;
+    for(let k=0;k<4;k++){
+      const p = nv[c.vi[k]], q = nv[c.vi[(k+1)%4]];
+      a += p.x*q.y - q.x*p.y;
+    }
+    return Math.abs(a)/2;
+  };
+  const alive = new Uint8Array(cells.length).fill(1);
+  let liveCount = cells.length;
+  const liveNb = i => {
+    const s = new Set();
+    for(const v of cells[i].vi) for(const j of byVertAll[v]) if(j !== i && alive[j]) s.add(j);
+    return s;
+  };
+  const stillConnected = () => {
+    let start = -1;
+    for(let i=0;i<cells.length;i++) if(alive[i]){ start = i; break; }
+    if(start < 0) return false;
+    const seen = new Set([start]); const st = [start];
+    while(st.length){
+      const i = st.pop();
+      for(const j of liveNb(i)) if(!seen.has(j)){ seen.add(j); st.push(j); }
+    }
+    return seen.size === liveCount;
+  };
+  const areas = cells.map(areaOf);
+  const med = areas.slice().sort((a,b)=>a-b)[areas.length>>1];
+  const cand = cells.map((_,i)=>i).filter(i => areas[i] < med*0.62).sort((a,b)=> areas[a]-areas[b]);
+  for(const i of cand){
+    if(liveCount <= 30) break;
+    alive[i] = 0; liveCount--;
+    if(!stillConnected()){ alive[i] = 1; liveCount++; }
+  }
+  const kept = [];
+  for(let i=0;i<cells.length;i++) if(alive[i]) kept.push(cells[i]);
+  cells.length = 0;
+  for(const c of kept) cells.push(c);
+
+  // Adjacency is share-an-edge OR share-a-corner. Edge-only would give every
+  // cell four exits and the game would feel like walking corridors; corner
+  // sharing restores the eight-ish directions that make long routes findable.
+  // On an all-quad mesh a shared corner is a shared VERTEX INDEX, so it is
+  // exact — there is no "do these two shapes nearly touch?" judgement anywhere,
+  // which is the failure mode an irregular board is supposed to have.
+  const byVert = nv.map(()=>[]);
+  cells.forEach((c,i)=> c.vi.forEach(v => byVert[v].push(i)));
+  cells.forEach((c,i)=>{
+    const s = new Set();
+    for(const v of c.vi) for(const j of byVert[v]) if(j !== i) s.add(j);
+    c.nb = Array.from(s);
+  });
+
+  // Gravity on a graph. "Below" is the neighbour that is most directly
+  // underneath: furthest down, least sideways. A cell with no such neighbour is
+  // a floor cell, and falling out of one is how you leave the shaft.
+  cells.forEach(c=>{
+    let best = -1, bestScore = 0;
+    for(const j of c.nb){
+      const o = cells[j];
+      const dy = o.cy - c.cy;
+      if(dy <= 0.02) continue;
+      const score = dy - Math.abs(o.cx - c.cx)*0.85;
+      if(score > bestScore){ bestScore = score; best = j; }
+    }
+    c.down = best;
+  });
+  cells.forEach(c=> c.up = []);
+  cells.forEach((c,i)=>{ if(c.down >= 0) cells[c.down].up.push(i); });
+
+  // The exit is the whole bottom rim, not just cells with no down-link. With
+  // only two escape cells in a cavern of forty-four, making quota and then
+  // failing to reach the floor is luck rather than routing — and that failure
+  // reads as the game cheating you, because it is.
+  let maxY = -1e9;
+  for(const c of cells) if(c.cy > maxY) maxY = c.cy;
+  for(const c of cells) c.floor = (c.cy > maxY - DY*1.35);
+
+  mesh = {verts:nv, cells};
+  fitMesh();
+  return mesh;
+}
+
+/* Scale the mesh into the viewport under the HUD. Separate from generation so
+   rotating the phone re-fits without rebuilding the cavern. */
+function fitMesh(){
+  if(!mesh) return;
+  let minx=1e9, maxx=-1e9, miny=1e9, maxy=-1e9;
+  for(const v of mesh.verts){
+    if(v.x<minx)minx=v.x; if(v.x>maxx)maxx=v.x;
+    if(v.y<miny)miny=v.y; if(v.y>maxy)maxy=v.y;
+  }
+  const s = Math.min((W-20)/(maxx-minx), (H-HUD-20)/(maxy-miny));
+  const ox = (W - (maxx-minx)*s)/2 - minx*s;
+  const oy = HUD + (H - HUD - (maxy-miny)*s)/2 - miny*s;
+  mesh.pts = mesh.verts.map(v=>({x: v.x*s + ox, y: v.y*s + oy}));
+  for(const c of mesh.cells){ c.px = c.cx*s + ox; c.py = c.cy*s + oy; }
+  // Average cell radius drives every art size, so the guy and the numbers scale
+  // with the cavern instead of being tuned per screen.
+  let acc = 0;
+  for(const c of mesh.cells){
+    let d = 0;
+    for(const v of c.vi) d += Math.hypot(mesh.pts[v].x - c.px, mesh.pts[v].y - c.py);
+    acc += d/4;
+  }
+  CELLR = acc/mesh.cells.length;
+}
+
 /* ---------------- state ---------------- */
-let grid = [];               // COLS*ROWS of {m, geode} or null
-let guy = {c:0, r:0, x:0, y:0, sq:1, face:1, swing:0};
+let tiles = [];              // parallel to mesh.cells: {m, geode, ox, oy, vy} or null
+let guy = {i:0, x:0, y:0, sq:1, face:1, swing:0};
 let depth = 0, ore = 0, swings = 0, minedSinceGeode = 0, runOre = 0;
-let path = [];               // [{c,r}] current dragged chain
-let chainMat = -1;           // material the chain is currently matching
-let wildArmed = false;       // a geode is in the path; next tile may be any colour
+let path = [];               // cell indices
+let chainMat = -1, wildArmed = false;
 let phase = 'title';         // title | play | mine | settle | cleared | failed | done
 let shakeX=0, shakeY=0, shakeMag=0, flash=0, slowmo=0;
 let parts = [], floats = [], rings = [];
 let mineStep = 0, mineTimer = 0, minePlan = null, comboOre = 0;
 let settleTimer = 0, bannerT = 0, bannerText = '', bannerSub = '';
-const idx = (c,r) => r*COLS + c;
 
-/* ---------------- deterministic per-cell texture ---------------------------
-   Rock has to look like rock without any art, so each cell gets a stable
-   pseudo-random speckle keyed on its coordinates. Stable matters: if it
-   re-rolled every frame the board would boil. */
-function hash(c,r,s){
-  let h = (c*374761393 + r*668265263 + s*1442695040) | 0;
-  h = (h ^ (h>>13)) * 1274126177 | 0;
-  return ((h ^ (h>>16)) >>> 0) / 4294967296;
-}
+function shaft(){ return SHAFTS[Math.min(depth, SHAFTS.length-1)]; }
+function newTile(){ return {m: Math.floor(Math.random()*shaft().mats), geode:false, ox:0, oy:0, vy:0}; }
 
-/* ---------------- board build ---------------- */
-function board(){ return BOARDS[Math.min(depth, BOARDS.length-1)]; }
-
-function newTile(){
-  return {m: Math.floor(Math.random()*board().mats), geode:false, yoff:0, pop:0};
-}
-
-function buildBoard(){
-  const b = board();
-  grid = new Array(COLS*ROWS);
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) grid[idx(c,r)] = newTile();
-  // The guy starts in the middle of the top row, standing in a pocket he
-  // clearly made on the way in. Rock under him, sky above.
-  guy.c = COLS>>1; guy.r = 0;
-  grid[idx(guy.c, guy.r)] = null;
-  guy.x = guy.c*TILE; guy.y = guy.r*TILE; guy.sq = 1; guy.swing = 0;
-  ore = 0; swings = b.swings; minedSinceGeode = 0;
+function buildShaft(){
+  const s = shaft();
+  buildMesh(s.shape, s.seed + depth*101, s.pr, s.pc);
+  const cs = mesh.cells;
+  tiles = cs.map(()=> newTile());
+  let top = 0;
+  for(let i=1;i<cs.length;i++) if(cs[i].cy < cs[top].cy) top = i;
+  guy.i = top; tiles[top] = null;
+  guy.x = cs[top].px; guy.y = cs[top].py; guy.sq = 1; guy.swing = 0;
+  ore = 0; swings = s.swings; minedSinceGeode = 0;
   path = []; chainMat = -1; wildArmed = false;
   parts = []; floats = []; rings = [];
-  for(let i=0;i<b.seed;i++) spawnGeode(true);
-  bannerT = 2.4; bannerText = b.name; bannerSub = b.note;
+  for(let i=0;i<s.seed;i++) spawnGeode(true);
+  bannerT = 2.6; bannerText = s.name; bannerSub = s.note;
   phase = 'play';
 }
 
 /* ---------------- chain rules ----------------------------------------------
-   A legal chain starts on a tile touching the guy (eight ways) and every step
-   after that touches the previous one and matches the chain's current colour.
-   A geode is enterable from any colour and re-arms the chain, so the tile
-   after a geode may be anything — and becomes the new colour to match. That
-   one rule is what turns "find the biggest blob" into "find the route". */
-function adj8(a, b){
-  const dc = Math.abs(a.c-b.c), dr = Math.abs(a.r-b.r);
-  return dc<=1 && dr<=1 && (dc+dr)>0;
-}
-function tileAt(c,r){
-  if(c<0||c>=COLS||r<0||r>=ROWS) return null;
-  return grid[idx(c,r)];
-}
-function inPath(c,r){
-  for(let i=0;i<path.length;i++) if(path[i].c===c && path[i].r===r) return i;
-  return -1;
-}
-function canExtend(c,r){
-  const t = tileAt(c,r); if(!t) return false;
-  if(inPath(c,r) >= 0) return false;
-  const from = path.length ? path[path.length-1] : {c:guy.c, r:guy.r};
-  if(!adj8(from, {c,r})) return false;
-  if(t.geode) return true;                       // geodes accept any colour
-  if(path.length === 0) return true;             // first tile sets the colour
-  if(wildArmed) return true;                     // just came off a geode
+   Identical to a square board except "adjacent" is a graph lookup instead of
+   arithmetic. A geode is enterable from any colour and re-arms the chain, so
+   the tile after a geode may be anything and becomes the new colour to match —
+   that is what lets one route cross two colour regions. */
+function inPath(i){ return path.indexOf(i); }
+function canExtend(i){
+  if(i < 0 || !mesh || i >= mesh.cells.length) return false;
+  const t = tiles[i]; if(!t) return false;
+  if(inPath(i) >= 0) return false;
+  const from = path.length ? path[path.length-1] : guy.i;
+  if(mesh.cells[from].nb.indexOf(i) < 0) return false;
+  if(t.geode) return true;
+  if(path.length === 0) return true;
+  if(wildArmed) return true;
   return t.m === chainMat;
 }
-function pushTile(c,r){
-  const t = tileAt(c,r);
-  path.push({c,r});
-  if(t.geode){ wildArmed = true; }
-  else { chainMat = t.m; wildArmed = false; }
-  // The pitch climbs with the length of the chain so far, capped so a huge
-  // chain does not end up inaudible.
-  const step = Math.min(path.length-1, 24);
-  tone(196 * Math.pow(2, step/12), 0.055, 'square', 0.075);
-  const t2 = tileAt(c,r);
-  if(t2 && t2.geode) tone(1200, 0.14, 'triangle', 0.11, 1900);
+function pushCell(i){
+  const t = tiles[i];
+  path.push(i);
+  if(t.geode) wildArmed = true; else { chainMat = t.m; wildArmed = false; }
+  tone(196 * Math.pow(2, Math.min(path.length-1, 24)/12), 0.055, 'square', 0.075);
+  if(t.geode) tone(1200, 0.14, 'triangle', 0.11, 1900);
 }
 function recomputeChainState(){
-  // After a backtrack the colour and the geode arming have to be rebuilt from
-  // whatever is still in the path, or the next step would be judged against a
-  // colour the player already undid.
   chainMat = -1; wildArmed = false;
-  for(const p of path){
-    const t = tileAt(p.c, p.r); if(!t) continue;
-    if(t.geode) wildArmed = true;
-    else { chainMat = t.m; wildArmed = false; }
+  for(const i of path){
+    const t = tiles[i]; if(!t) continue;
+    if(t.geode) wildArmed = true; else { chainMat = t.m; wildArmed = false; }
   }
 }
-// Quadratic pay: a chain of N is worth 1+2+...+N. Doubling the length nearly
-// quadruples the reward, which is the entire reason to hunt for the route
-// instead of taking the first three tiles you see.
+// Doubling the length nearly quadruples the reward. That is the entire reason
+// to hunt for the route instead of taking the first three tiles you see.
 function chainValue(n){ return n*(n+1)/2; }
 
-/* ---------------- input ---------------- */
-let dragging = false;
-function toCell(px, py){
-  const c = Math.floor((px - OX)/TILE), r = Math.floor((py - OY)/TILE);
-  return {c, r};
+/* ---------------- input ----------------------------------------------------
+   Hit testing is an exact point-in-quad scan over ~90 cells. Doing it exactly
+   means the cell under your thumb is never in doubt, which matters far more on
+   an irregular board than it did on a lattice. */
+function inQuad(i, x, y){
+  const c = mesh.cells[i], p = mesh.pts;
+  let inside = false;
+  for(let k=0, j=3; k<4; j=k++){
+    const a = p[c.vi[k]], b = p[c.vi[j]];
+    if((a.y > y) !== (b.y > y) && x < (b.x-a.x)*(y-a.y)/(b.y-a.y) + a.x) inside = !inside;
+  }
+  return inside;
 }
+function cellAt(x, y){
+  for(let i=0;i<mesh.cells.length;i++) if(inQuad(i,x,y)) return i;
+  // Nearest centroid within a cell radius, so a thumb landing in the grout
+  // between two cells still picks the one it is closest to.
+  let best = -1, bd = CELLR*CELLR;
+  for(let i=0;i<mesh.cells.length;i++){
+    const c = mesh.cells[i];
+    const d = (c.px-x)*(c.px-x) + (c.py-y)*(c.py-y);
+    if(d < bd){ bd = d; best = i; }
+  }
+  return best;
+}
+
+let dragging = false;
 function onDown(px, py){
   if(ac() && ac().state === 'suspended') ac().resume();
-  if(phase === 'title'){ depth = 0; runOre = 0; buildBoard(); return; }
-  if(phase === 'cleared'){ depth++; if(depth >= BOARDS.length){ phase = 'done'; } else buildBoard(); return; }
-  if(phase === 'failed'){ buildBoard(); return; }
+  if(phase === 'title'){ depth = 0; runOre = 0; buildShaft(); return; }
+  if(phase === 'cleared'){ depth++; if(depth >= SHAFTS.length) phase = 'done'; else buildShaft(); return; }
+  if(phase === 'failed'){ buildShaft(); return; }
   if(phase === 'done'){ phase = 'title'; return; }
   if(phase !== 'play') return;
-  const {c,r} = toCell(px,py);
-  if(canExtend(c,r)){ dragging = true; path = []; chainMat = -1; wildArmed = false; pushTile(c,r); }
+  const i = cellAt(px, py);
+  if(canExtend(i)){ dragging = true; path = []; chainMat = -1; wildArmed = false; pushCell(i); }
 }
 function onMove(px, py){
   if(!dragging || phase !== 'play') return;
-  const {c,r} = toCell(px,py);
-  if(c<0||c>=COLS||r<0||r>=ROWS) return;
-  // Backtracking: sliding your thumb back onto the second-to-last tile drops
-  // the last one. Without this, one misplaced pixel ruins a twenty-chain and
-  // you would stop trying for long routes at all.
-  if(path.length >= 2){
-    const prev = path[path.length-2];
-    if(prev.c===c && prev.r===r){
-      path.pop(); recomputeChainState();
-      tone(150, 0.04, 'sine', 0.05);
-      return;
-    }
+  const i = cellAt(px, py);
+  if(i < 0) return;
+  // Backtracking. Without it one stray pixel ruins a twenty-chain and you stop
+  // attempting long routes at all.
+  if(path.length >= 2 && path[path.length-2] === i){
+    path.pop(); recomputeChainState(); tone(150, 0.04, 'sine', 0.05); return;
   }
-  if(canExtend(c,r)) pushTile(c,r);
+  if(canExtend(i)) pushCell(i);
 }
 function onUp(){
   if(!dragging) return;
   dragging = false;
-  if(phase !== 'play') return;
-  if(path.length === 0) return;
-  commitChain();
+  if(phase !== 'play' || path.length === 0) return;
+  minePlan = path.slice(); path = [];
+  swings--; mineStep = 0; mineTimer = 0; comboOre = 0;
+  phase = 'mine';
 }
 cv.addEventListener('pointerdown', e=>{ e.preventDefault(); cv.setPointerCapture(e.pointerId); onDown(e.clientX, e.clientY); });
 cv.addEventListener('pointermove', e=>{ e.preventDefault(); onMove(e.clientX, e.clientY); });
@@ -282,109 +566,103 @@ cv.addEventListener('pointerup',   e=>{ e.preventDefault(); onUp(); });
 cv.addEventListener('pointercancel', ()=>{ dragging = false; path = []; });
 cv.addEventListener('contextmenu', e=>e.preventDefault());
 
-/* ---------------- committing a chain ---------------- */
-function commitChain(){
-  minePlan = path.slice();
-  path = [];
-  swings--;
-  mineStep = 0; mineTimer = 0; comboOre = 0;
-  phase = 'mine';
-}
-
-function mineOne(i){
-  const p = minePlan[i];
-  const t = tileAt(p.c, p.r);
-  guy.face = (p.c > guy.c) ? 1 : (p.c < guy.c ? -1 : guy.face);
-  guy.c = p.c; guy.r = p.r;
-  guy.sq = 0.62; guy.swing = 1;
+/* ---------------- mining ---------------- */
+function mineOne(k){
+  const i = minePlan[k], c = mesh.cells[i], t = tiles[i];
+  guy.face = (c.px > mesh.cells[guy.i].px) ? 1 : (c.px < mesh.cells[guy.i].px ? -1 : guy.face);
+  guy.i = i; guy.sq = 0.62; guy.swing = 1;
   if(t){
-    const pal = MATS[t.m].pal;
-    burst(p.c, p.r, pal[0], t.geode ? 20 : 9);
-    if(t.geode){ ring(p.c, p.r, '#ffe872'); shake(7); }
-    grid[idx(p.c,p.r)] = null;
-    minedSinceGeode++;
+    burst(c.px, c.py, MATS[t.m].pal[0], t.geode ? 22 : 10);
+    if(t.geode){ ring(c.px, c.py, '#ffe872'); shake(7); }
+    tiles[i] = null; minedSinceGeode++;
   }
-  const n = i+1;
+  const n = k+1;
   comboOre = chainValue(n);
-  // Rising pitch again on the resolve, and the shake grows with the chain so a
-  // long one physically escalates instead of just lasting longer.
-  const step = Math.min(i, 24);
-  tone(262 * Math.pow(2, step/12), 0.07, 'square', 0.09);
+  tone(262 * Math.pow(2, Math.min(k, 24)/12), 0.07, 'square', 0.09);
   noise(0.04, 0.05);
   shake(1.4 + n*0.32);
   if(n === 5 || n === 10 || n === 15 || n === 20){
     tone(880 * (n/5), 0.20, 'triangle', 0.14);
     flash = Math.min(0.55, 0.18 + n*0.015);
     slowmo = 0.10;
-    floats.push({x:guy.c*TILE+TILE/2, y:guy.r*TILE, t:1.1,
-                 s: n>=20?'INSANE':n>=15?'ENORMOUS':n>=10?'HUGE':'NICE', col:'#ffe872', big:true});
+    floats.push({x:c.px, y:c.py, t:1.1, big:true, col:'#ffe872',
+                 s: n>=20?'INSANE':n>=15?'ENORMOUS':n>=10?'HUGE':'NICE'});
   }
 }
 
 function finishMine(){
-  ore += comboOre;
-  runOre += comboOre;
-  floats.push({x:guy.c*TILE+TILE/2, y:guy.r*TILE-6, t:1.3, s:'+'+comboOre, col:'#9fe8bb', big:comboOre>=40});
-  // Geodes are earned by volume, not luck: mine enough rock and the board hands
-  // you the tool that makes the next chain longer. That is the ramp.
-  while(minedSinceGeode >= board().geode){
-    minedSinceGeode -= board().geode;
-    spawnGeode();
-  }
+  ore += comboOre; runOre += comboOre;
+  const c = mesh.cells[guy.i];
+  floats.push({x:c.px, y:c.py - CELLR*0.4, t:1.3, s:'+'+comboOre, col:'#9fe8bb', big:comboOre>=40});
+  while(minedSinceGeode >= shaft().geode){ minedSinceGeode -= shaft().geode; spawnGeode(); }
   phase = 'settle'; settleTimer = 0;
-  settleBoard();
+  settleShaft();
 }
 
 function spawnGeode(silent){
-  // Placed away from the guy so it reads as something to travel to.
   const cand = [];
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
-    const t = grid[idx(c,r)];
-    if(t && !t.geode && (Math.abs(c-guy.c) + Math.abs(r-guy.r)) > 2) cand.push({c,r});
+  for(let i=0;i<tiles.length;i++){
+    const t = tiles[i];
+    if(t && !t.geode && graphDist(i, guy.i) > 2) cand.push(i);
   }
   if(!cand.length) return;
-  const p = cand[Math.floor(Math.random()*cand.length)];
-  grid[idx(p.c,p.r)].geode = true;
+  const i = cand[Math.floor(Math.random()*cand.length)];
+  tiles[i].geode = true;
   if(silent) return;
-  ring(p.c, p.r, '#ffe872');
+  ring(mesh.cells[i].px, mesh.cells[i].py, '#ffe872');
   tone(1400, 0.22, 'triangle', 0.12, 2200);
 }
+function graphDist(a, b){
+  if(a === b) return 0;
+  const seen = new Uint8Array(mesh.cells.length);
+  let front = [a], d = 0; seen[a] = 1;
+  while(front.length && d < 4){
+    const next = [];
+    for(const i of front) for(const j of mesh.cells[i].nb){
+      if(seen[j]) continue;
+      if(j === b) return d+1;
+      seen[j] = 1; next.push(j);
+    }
+    front = next; d++;
+  }
+  return 99;
+}
 
-/* ---------------- gravity and refill ---------------------------------------
-   The guy is a solid body in the grid, so rock stacks on top of him rather
-   than through him. That is what makes where you end a chain a real decision:
-   finish under an overhang and you have buried yourself in a pocket with only
-   three neighbours to chain from next turn. */
-function settleBoard(){
-  // 1. the guy falls into whatever hole is under him
-  while(guy.r < ROWS-1 && !grid[idx(guy.c, guy.r+1)]) guy.r++;
-  // 2. each column compacts downward around him. Every surviving tile keeps
-  //    the row it came from so it can be drawn falling from there rather than
-  //    teleporting into its new slot.
-  for(let c=0;c<COLS;c++){
-    const stack = [];
-    for(let r=ROWS-1;r>=0;r--){
-      const t = grid[idx(c,r)];
-      if(t){ t.fromRow = r; stack.push(t); }
-      grid[idx(c,r)] = null;
+/* ---------------- gravity on the graph -------------------------------------
+   This is the thing a colour-matching game does not have, and it is why the
+   cavern shape is mechanical rather than decorative. Rock falls along the
+   `down` links until nothing can move; the player is a solid body, so rock
+   stacks ON him; and any ceiling cell left empty pulls in new rock. Cutting a
+   neck therefore drops everything hanging off it and the cavern reshapes.
+   ========================================================================= */
+function settleShaft(){
+  const cs = mesh.cells;
+  // The guy falls first, through whatever he opened under himself.
+  while(cs[guy.i].down >= 0 && !tiles[cs[guy.i].down]) guy.i = cs[guy.i].down;
+
+  // Bottom-up relaxation: ordering by depth means a falling column resolves in
+  // one pass instead of one cell per pass.
+  const order = cs.map((c,i)=>i).sort((a,b)=> cs[b].cy - cs[a].cy);
+  let moved = true, guard = 0;
+  while(moved && guard++ < 400){
+    moved = false;
+    for(const i of order){
+      if(tiles[i] || i === guy.i) continue;          // only empty cells pull
+      for(const u of cs[i].up){
+        if(u === guy.i || !tiles[u]) continue;
+        const t = tiles[u];
+        t.ox += cs[u].px - cs[i].px;                 // animate from where it was
+        t.oy += cs[u].py - cs[i].py;
+        tiles[i] = t; tiles[u] = null;
+        moved = true; break;
+      }
     }
-    let write = ROWS-1, si = 0;
-    while(si < stack.length && write >= 0){
-      if(c === guy.c && write === guy.r){ write--; continue; }
-      const t = stack[si++];
-      grid[idx(c,write)] = t;
-      t.yoff = (t.fromRow - write) * TILE;   // negative: it starts up where it was
-      t.vy = 0;
-      write--;
-    }
-    // 3. everything left above is fresh rock sliding in from off-screen
-    let slide = 1;
-    for(let r=write; r>=0; r--){
-      if(c === guy.c && r === guy.r) continue;
+    // Ceiling cells — nothing can ever fall into them — draw in fresh rock.
+    for(const i of order){
+      if(tiles[i] || i === guy.i || cs[i].up.length) continue;
       const t = newTile();
-      t.yoff = -TILE * (slide++ + 1.2);
-      t.vy = 0;
-      grid[idx(c,r)] = t;
+      t.oy = -(CELLR*3.2);
+      tiles[i] = t; moved = true;
     }
   }
   noise(0.10, 0.07);
@@ -392,26 +670,19 @@ function settleBoard(){
 }
 
 function settleDone(){
-  const b = board();
-  if(ore >= b.quota && guy.r === ROWS-1){
-    phase = 'cleared';
-    flash = 0.6; shake(16);
-    tone(392,0.14,'triangle',0.16); setTimeout(()=>tone(523,0.14,'triangle',0.16),110);
+  const s = shaft();
+  if(ore >= s.quota && mesh.cells[guy.i].floor){
+    phase = 'cleared'; flash = 0.6; shake(16);
+    tone(392,0.14,'triangle',0.16);
+    setTimeout(()=>tone(523,0.14,'triangle',0.16),110);
     setTimeout(()=>tone(659,0.26,'triangle',0.16),220);
-    bannerT = 3; bannerText = 'SHAFT CLEARED'; bannerSub = 'DEPTH ' + (depth+2) + ' BELOW';
     return;
   }
   if(swings <= 0){
-    if(ore >= b.quota){
-      // Quota met but stranded off the bottom row — the shaft is right there
-      // and you cannot reach it. That is a real loss and it should sting.
-      phase = 'failed';
-      bannerText = 'SO CLOSE'; bannerSub = 'QUOTA MET. YOU NEVER REACHED THE FLOOR.';
-    } else {
-      phase = 'failed';
-      bannerText = 'OUT OF SWINGS'; bannerSub = ore + ' / ' + b.quota + ' — TAP TO RETRY';
-    }
-    bannerT = 99;
+    phase = 'failed';
+    bannerText = ore >= s.quota ? 'SO CLOSE' : 'OUT OF SWINGS';
+    bannerSub  = ore >= s.quota ? 'QUOTA MET. YOU NEVER REACHED THE FLOOR.'
+                                : ore + ' / ' + s.quota;
     tone(180,0.3,'sawtooth',0.12,70); shake(10);
     return;
   }
@@ -420,92 +691,111 @@ function settleDone(){
 
 /* ---------------- juice ---------------- */
 function shake(m){ shakeMag = Math.min(20, Math.max(shakeMag, m)); }
-function burst(c, r, col, n){
-  const cx = c*TILE + TILE/2, cy = r*TILE + TILE/2;
+function burst(x, y, col, n){
   for(let i=0;i<n;i++){
     const a = Math.random()*Math.PI*2, sp = 40 + Math.random()*170;
-    parts.push({x:cx, y:cy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 60,
+    parts.push({x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 60,
                 t:0.35+Math.random()*0.45, mt:0.8, col, s: 2 + Math.random()*3});
   }
 }
-function ring(c, r, col){ rings.push({x:c*TILE+TILE/2, y:r*TILE+TILE/2, t:1, col}); }
+function ring(x, y, col){ rings.push({x, y, t:1, col}); }
 
 /* ---------------- drawing ---------------- */
-function drawTile(t, x, y, hi, dim){
-  const pal = MATS[t.m].pal;
-  const s = TILE;
-  ctx.fillStyle = pal[2]; ctx.fillRect(x, y, s, s);
-  ctx.fillStyle = pal[0]; ctx.fillRect(x+1, y+1, s-2, s-3);
-  ctx.fillStyle = pal[1]; ctx.fillRect(x+1, y+1, s-2, Math.max(2, s*0.16));
-  // speckle — cheap, stable, and it stops eight flat squares reading as a UI
-  const px = Math.max(2, Math.floor(s/7));
-  ctx.fillStyle = pal[2];
-  for(let i=0;i<4;i++){
-    const hx = hash(x/s|0, y/s|0, i*7+1), hy = hash(x/s|0, y/s|0, i*7+2);
-    if(hx > 0.45) ctx.fillRect(x + 2 + hx*(s-6), y + 3 + hy*(s-8), px, px);
+function cellPath(i, inset, dx, dy){
+  const c = mesh.cells[i], p = mesh.pts;
+  ctx.beginPath();
+  for(let k=0;k<4;k++){
+    const v = p[c.vi[k]];
+    const ux = c.px - v.x, uy = c.py - v.y;
+    const d = Math.hypot(ux, uy) || 1;
+    const x = v.x + ux/d*inset + (dx||0), y = v.y + uy/d*inset + (dy||0);
+    if(k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
-  ctx.fillStyle = 'rgba(255,255,255,.13)';
-  ctx.fillRect(x+1, y+1, s-2, 1);
+  ctx.closePath();
+}
+
+function drawCell(i, hi, dim){
+  const t = tiles[i]; if(!t) return;
+  const pal = MATS[t.m].pal, c = mesh.cells[i];
+  const dx = t.ox, dy = t.oy;
+  // Dark body, lit face, highlight band across the top — the same three-tone
+  // read the square tiles had, but following the cell's own shape.
+  cellPath(i, 1.5, dx, dy); ctx.fillStyle = pal[2]; ctx.fill();
+  cellPath(i, 4.0, dx, dy); ctx.fillStyle = pal[0]; ctx.fill();
+  ctx.save(); ctx.clip();
+  ctx.fillStyle = pal[1];
+  ctx.fillRect(c.px - CELLR*1.5 + dx, c.py - CELLR*1.35 + dy, CELLR*3, CELLR*0.55);
+  ctx.restore();
+  if(dim){ cellPath(i, 1.5, dx, dy); ctx.fillStyle = 'rgba(8,5,14,.40)'; ctx.fill(); }
+  // Geodes are drawn AFTER the dim pass. A geode you cannot currently reach is
+  // still the most important thing on the board — it is what your next route
+  // has to get to — so it must never be greyed into the rock.
   if(t.geode){
     const g = 0.55 + 0.45*Math.sin(performance.now()/160);
-    ctx.fillStyle = 'rgba(255,232,114,'+(0.35+0.35*g)+')';
-    ctx.fillRect(x+2, y+2, s-4, s-4);
-    ctx.fillStyle = '#fff8d0';
-    const q = Math.max(3, s*0.22);
-    ctx.fillRect(x + s/2 - q/2, y + s/2 - q/2, q, q);
-    ctx.fillStyle = '#ffe872';
-    ctx.fillRect(x + s/2 - q*0.9, y + s/2 - 1, q*1.8, 2);
-    ctx.fillRect(x + s/2 - 1, y + s/2 - q*0.9, 2, q*1.8);
+    cellPath(i, 4.0, dx, dy);
+    ctx.fillStyle = 'rgba(255,214,64,'+(0.34+0.30*g)+')'; ctx.fill();
+    cellPath(i, 2.5, dx, dy);
+    ctx.strokeStyle = 'rgba(255,240,150,'+(0.55+0.45*g)+')'; ctx.lineWidth = 2.5; ctx.stroke();
+    const q = CELLR*0.44;
+    ctx.save(); ctx.translate(c.px+dx, c.py+dy); ctx.rotate(Math.PI/4);
+    ctx.fillStyle = '#fffbe0'; ctx.fillRect(-q/2, -q/2, q, q);
+    ctx.restore();
   }
-  if(dim){ ctx.fillStyle = 'rgba(8,5,14,.5)'; ctx.fillRect(x, y, s, s); }
   if(hi){
-    ctx.fillStyle = 'rgba(255,255,255,.30)'; ctx.fillRect(x, y, s, s);
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-    ctx.strokeRect(x+1, y+1, s-2, s-2);
+    cellPath(i, 1.5, dx, dy);
+    ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
   }
 }
 
-function drawGuy(x, y){
-  const s = TILE, u = Math.max(1, Math.floor(s/9));
-  const sq = guy.sq, w = s*sq, h = s*(2-sq);
-  const gx = x + (s-w)/2, gy = y + s - h;
+function drawGuy(){
+  const sq = guy.sq, w = CELLR*1.15*sq, h = CELLR*1.15*(2-sq), s = w/9;
   ctx.save();
-  ctx.translate(gx + w/2, gy + h/2);
+  ctx.translate(guy.x, guy.y + h*0.08);
   ctx.scale(guy.face, 1);
   ctx.translate(-w/2, -h/2);
-  const P = (px,py,pw,ph,col)=>{ ctx.fillStyle=col; ctx.fillRect(Math.round(px*u), Math.round(py*u), Math.ceil(pw*u), Math.ceil(ph*u)); };
-  P(2.2,0.6,4.4,3.2,'#f0c98a');            // head
-  P(2.0,0.2,4.8,1.1,'#d64a2a');            // helmet
-  P(6.0,1.4,1.4,1.1,'#fff4c0');            // lamp
-  P(3.0,2.1,0.9,0.9,'#20141c'); P(5.0,2.1,0.9,0.9,'#20141c'); // eyes
-  P(2.4,3.8,4.0,3.4,'#2f7fd6');            // body
+  const P = (px,py,pw,ph,col)=>{ ctx.fillStyle=col; ctx.fillRect(px*s, py*s, pw*s, ph*s); };
+  P(2.2,0.6,4.4,3.2,'#f0c98a');
+  P(2.0,0.2,4.8,1.1,'#d64a2a');
+  P(6.0,1.4,1.4,1.1,'#fff4c0');
+  P(3.0,2.1,0.9,0.9,'#20141c'); P(5.0,2.1,0.9,0.9,'#20141c');
+  P(2.4,3.8,4.0,3.4,'#2f7fd6');
   P(2.4,3.8,4.0,0.9,'#5fa8f0');
-  P(2.6,7.2,1.5,1.6,'#20141c'); P(4.7,7.2,1.5,1.6,'#20141c'); // legs
-  // the pickaxe swings on the beat of the chain, which is most of why mining
-  // a long route reads as work rather than as a highlight animation
-  const sw = guy.swing;
-  const ang = -0.9 + sw*2.2;
+  P(2.6,7.2,1.5,1.6,'#20141c'); P(4.7,7.2,1.5,1.6,'#20141c');
   ctx.save();
-  ctx.translate(6.2*u, 4.4*u); ctx.rotate(ang);
-  ctx.fillStyle = '#8a6a3a'; ctx.fillRect(0, -0.4*u, 3.6*u, 0.8*u);
-  ctx.fillStyle = '#cfd8e6'; ctx.fillRect(3.0*u, -1.5*u, 1.2*u, 3.0*u);
+  ctx.translate(6.2*s, 4.4*s); ctx.rotate(-0.9 + guy.swing*2.2);
+  ctx.fillStyle = '#8a6a3a'; ctx.fillRect(0, -0.4*s, 3.6*s, 0.8*s);
+  ctx.fillStyle = '#cfd8e6'; ctx.fillRect(3.0*s, -1.5*s, 1.2*s, 3.0*s);
   ctx.restore();
+  ctx.restore();
+}
+
+// Centre to centre, because on an irregular board the line IS the statement of
+// what counts as connected. The player must never have to judge it.
+function drawPathLine(){
+  if(!path.length) return;
+  ctx.save();
+  ctx.lineWidth = Math.max(3, CELLR*0.30);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,.78)';
+  ctx.beginPath();
+  ctx.moveTo(mesh.cells[guy.i].px, mesh.cells[guy.i].py);
+  for(const i of path) ctx.lineTo(mesh.cells[i].px, mesh.cells[i].py);
+  ctx.stroke();
   ctx.restore();
 }
 
 function drawHUD(){
-  const b = board();
+  const s = shaft();
   ctx.fillStyle = '#0a0710'; ctx.fillRect(0, 0, W, HUD);
   ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(0, HUD-1, W, 1);
   const pad = 12, fs = Math.max(10, Math.round(HUD*0.15));
   ctx.textBaseline = 'top';
-
   ctx.font = 'bold '+fs+'px ui-monospace,monospace';
   ctx.fillStyle = '#6b5f7d'; ctx.textAlign = 'left';
   ctx.fillText('DEPTH', pad, 10);
   ctx.fillStyle = '#fff'; ctx.font = 'bold '+Math.round(fs*1.7)+'px ui-monospace,monospace';
   ctx.fillText(String(depth+1), pad, 10+fs+2);
-
   ctx.textAlign = 'right';
   ctx.font = 'bold '+fs+'px ui-monospace,monospace';
   ctx.fillStyle = swings <= 2 ? '#ff7089' : '#6b5f7d';
@@ -514,72 +804,36 @@ function drawHUD(){
   ctx.font = 'bold '+Math.round(fs*1.7)+'px ui-monospace,monospace';
   ctx.fillText(String(swings), W-pad, 10+fs+2);
 
-  // The quota bar is the only readout that matters, so it gets the middle.
   const bw = W - pad*2 - 130, bx = pad + 65, by = HUD - 20, bh = 10;
   const live = ore + (dragging ? chainValue(path.length) : 0);
-  const frac = Math.max(0, Math.min(1, live / b.quota));
+  const frac = Math.max(0, Math.min(1, live / s.quota));
   ctx.fillStyle = '#221a2e'; ctx.fillRect(bx, by, bw, bh);
   ctx.fillStyle = frac >= 1 ? '#ffe872' : '#9fe8bb';
   ctx.fillRect(bx, by, bw*frac, bh);
   if(dragging && path.length){
-    const base = Math.max(0, Math.min(1, ore / b.quota));
+    const base = Math.max(0, Math.min(1, ore / s.quota));
     ctx.fillStyle = 'rgba(255,255,255,.55)';
     ctx.fillRect(bx + bw*base, by, bw*(frac-base), bh);
   }
   ctx.font = 'bold '+Math.max(9, Math.round(fs*0.85))+'px ui-monospace,monospace';
   ctx.textAlign = 'center';
   ctx.fillStyle = frac >= 1 ? '#ffe872' : '#c9bfd8';
-  ctx.fillText(live + ' / ' + b.quota, W/2, by - fs - 2);
+  ctx.fillText(live + ' / ' + s.quota, W/2, by - fs - 2);
 }
 
 function drawChainReadout(){
-  if(!dragging || path.length < 1) return;
-  const p = path[path.length-1];
+  if(!dragging || !path.length) return;
+  const c = mesh.cells[path[path.length-1]];
   const n = path.length, v = chainValue(n);
-  const fs = Math.max(16, Math.round(TILE*0.72));
+  const fs = Math.max(15, Math.round(CELLR*0.62));
   ctx.font = 'bold '+fs+'px ui-monospace,monospace';
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-  // Clamped into the viewport: the readout follows your thumb, and a chain
-  // ending in column 0 or on the top row would otherwise print off-screen
-  // exactly when the number is most worth reading.
-  const half = ctx.measureText(n + '  +' + v).width/2 + 6;
-  const x = Math.max(half, Math.min(W - half, OX + p.c*TILE + TILE/2));
-  const y = Math.max(HUD + fs + 6, OY + p.r*TILE - 8);
-  ctx.lineWidth = 4; ctx.strokeStyle = '#12091c';
-  const s = n + '  +' + v;
-  ctx.strokeText(s, x, y);
-  ctx.fillStyle = n >= 10 ? '#ffe872' : '#fff';
-  ctx.fillText(s, x, y);
-}
-
-// Drawn inside the board transform, so these are board-local coordinates —
-// adding OX/OY here would offset the line by a whole board from its tiles.
-function drawPathLine(){
-  if(path.length < 1) return;
-  ctx.save();
-  ctx.lineWidth = Math.max(3, TILE*0.16);
-  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(255,255,255,.75)';
-  ctx.beginPath();
-  ctx.moveTo(guy.c*TILE + TILE/2, guy.r*TILE + TILE/2);
-  for(const p of path) ctx.lineTo(p.c*TILE + TILE/2, p.r*TILE + TILE/2);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawBanner(){
-  if(bannerT <= 0) return;
-  const a = Math.min(1, bannerT);
-  ctx.save(); ctx.globalAlpha = a;
-  const fs = Math.max(16, Math.round(W*0.062));
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = 'bold '+fs+'px ui-monospace,monospace';
-  ctx.fillStyle = 'rgba(10,7,16,.82)';
-  ctx.fillRect(0, H/2 - fs*1.6, W, fs*3.2);
-  ctx.fillStyle = '#ffe872'; ctx.fillText(bannerText, W/2, H/2 - fs*0.45);
-  ctx.font = 'bold '+Math.round(fs*0.42)+'px ui-monospace,monospace';
-  ctx.fillStyle = '#c9bfd8'; ctx.fillText(bannerSub, W/2, H/2 + fs*0.75);
-  ctx.restore();
+  const txt = n + '  +' + v;
+  const half = ctx.measureText(txt).width/2 + 6;
+  const x = Math.max(half, Math.min(W - half, c.px));
+  const y = Math.max(HUD + fs + 6, c.py - CELLR*0.9);
+  ctx.lineWidth = 4; ctx.strokeStyle = '#12091c'; ctx.strokeText(txt, x, y);
+  ctx.fillStyle = n >= 10 ? '#ffe872' : '#fff'; ctx.fillText(txt, x, y);
 }
 
 function drawScreenText(title, lines, cta){
@@ -587,14 +841,28 @@ function drawScreenText(title, lines, cta){
   const fs = Math.max(20, Math.round(W*0.085));
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold '+fs+'px ui-monospace,monospace';
-  ctx.fillStyle = '#ffe872';
-  ctx.fillText(title, W/2, H*0.30);
+  ctx.fillStyle = '#ffe872'; ctx.fillText(title, W/2, H*0.28);
   ctx.font = 'bold '+Math.round(fs*0.30)+'px ui-monospace,monospace';
   ctx.fillStyle = '#c9bfd8';
-  lines.forEach((l,i)=> ctx.fillText(l, W/2, H*0.44 + i*fs*0.46));
-  ctx.font = 'bold '+Math.round(fs*0.36)+'px ui-monospace,monospace';
-  ctx.fillStyle = (performance.now()%1000 < 620) ? '#fff' : '#6b5f7d';
-  ctx.fillText(cta, W/2, H*0.80);
+  lines.forEach((l,i)=> ctx.fillText(l, W/2, H*0.42 + i*fs*0.46));
+  if(cta){
+    ctx.font = 'bold '+Math.round(fs*0.36)+'px ui-monospace,monospace';
+    ctx.fillStyle = (performance.now()%1000 < 620) ? '#fff' : '#6b5f7d';
+    ctx.fillText(cta, W/2, H*0.82);
+  }
+}
+
+function drawBanner(){
+  if(bannerT <= 0) return;
+  ctx.save(); ctx.globalAlpha = Math.min(1, bannerT);
+  const fs = Math.max(16, Math.round(W*0.062));
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(10,7,16,.82)'; ctx.fillRect(0, H/2 - fs*1.6, W, fs*3.2);
+  ctx.font = 'bold '+fs+'px ui-monospace,monospace';
+  ctx.fillStyle = '#ffe872'; ctx.fillText(bannerText, W/2, H/2 - fs*0.45);
+  ctx.font = 'bold '+Math.round(fs*0.42)+'px ui-monospace,monospace';
+  ctx.fillStyle = '#c9bfd8'; ctx.fillText(bannerSub, W/2, H/2 + fs*0.75);
+  ctx.restore();
 }
 
 /* ---------------- loop ---------------- */
@@ -603,37 +871,42 @@ function frame(now){
   let dt = Math.min(0.05, (now - last)/1000); last = now;
   if(slowmo > 0){ slowmo -= dt; dt *= 0.35; }
 
-  // ----- update -----
   if(phase === 'mine'){
     mineTimer += dt*1000;
     while(phase === 'mine' && mineTimer >= MINE_MS){
       mineTimer -= MINE_MS;
-      if(mineStep < minePlan.length){ mineOne(mineStep++); }
-      else { finishMine(); }
+      if(mineStep < minePlan.length) mineOne(mineStep++); else finishMine();
     }
   } else if(phase === 'settle'){
     settleTimer += dt;
     let moving = false;
-    for(const t of grid){ if(t && t.yoff < 0){ moving = true; break; } }
-    if(!moving || settleTimer > 1.2){
-      for(const t of grid) if(t) t.yoff = 0;
+    for(const t of tiles){ if(t && (Math.abs(t.ox) > 0.5 || Math.abs(t.oy) > 0.5)){ moving = true; break; } }
+    if(!moving || settleTimer > 1.4){
+      for(const t of tiles) if(t){ t.ox = 0; t.oy = 0; t.vy = 0; }
       settleDone();
     }
   }
 
-  // tile fall easing — accelerating, then it just stops, which reads as weight
-  for(const t of grid){
-    if(t && t.yoff < 0){
-      t.vy = (t.vy || 0) + 2600*dt;
-      t.yoff += t.vy*dt;
-      if(t.yoff >= 0){ t.yoff = 0; t.vy = 0; }
+  // Tiles travel back to their cell along the vector they fell, accelerating,
+  // which reads as weight rather than as a slide.
+  for(const t of tiles){
+    if(!t) continue;
+    const d = Math.hypot(t.ox, t.oy);
+    if(d > 0.01){
+      t.vy = (t.vy||0) + 3400*dt;
+      const step = t.vy*dt;
+      if(d <= step){ t.ox = 0; t.oy = 0; t.vy = 0; }
+      else { t.ox -= t.ox/d*step; t.oy -= t.oy/d*step; }
     }
   }
 
+  if(mesh){
+    const gc = mesh.cells[guy.i];
+    guy.x += (gc.px - guy.x) * Math.min(1, dt*20);
+    guy.y += (gc.py - guy.y) * Math.min(1, dt*20);
+  }
   guy.sq += (1 - guy.sq) * Math.min(1, dt*14);
   guy.swing *= Math.pow(0.0006, dt);
-  guy.x += (guy.c*TILE - guy.x) * Math.min(1, dt*22);
-  guy.y += (guy.r*TILE - guy.y) * Math.min(1, dt*22);
 
   shakeMag *= Math.pow(0.0016, dt);
   if(shakeMag < 0.05) shakeMag = 0;
@@ -649,20 +922,17 @@ function frame(now){
     const f = floats[i]; f.y -= 34*dt; f.t -= dt;
     if(f.t <= 0) floats.splice(i,1);
   }
-  for(let i=rings.length-1;i>=0;i--){
-    rings[i].t -= dt*2.2; if(rings[i].t <= 0) rings.splice(i,1);
-  }
-  if(bannerT > 0 && bannerT < 90) bannerT -= dt;
+  for(let i=rings.length-1;i>=0;i--){ rings[i].t -= dt*2.2; if(rings[i].t <= 0) rings.splice(i,1); }
+  if(bannerT > 0) bannerT -= dt;
 
   // ----- draw -----
-  const b = board();
   ctx.fillStyle = '#0a0710'; ctx.fillRect(0,0,W,H);
 
-  // A twelve-row board cannot give 44 CSS px thumb targets on a landscape
-  // phone — twelve times forty-four is 528, and a landscape phone is 390 tall.
-  // Shrinking the tiles to 25px to make it "fit" would be shipping a control
-  // surface too small to drag accurately, so the game asks for portrait instead.
-  if(W > H && H < ROWS*44 + HUD){
+  // A cavern is about 3.5 units tall by 2 wide, so a landscape phone fits it by
+  // height and leaves it ~177px across — cells around 20px, far under the 44px
+  // a thumb needs. Shrinking to "fit" would be shipping a board you cannot
+  // accurately drag on, so the game asks for portrait instead.
+  if(W > H && (H - HUD) < 560){
     drawScreenText('TURN IT UPRIGHT', [
       'DOWNSHAFT IS PLAYED IN PORTRAIT.',
       'THE SHAFT GOES DOWN, NOT ACROSS.'
@@ -672,77 +942,58 @@ function frame(now){
 
   if(phase === 'title'){
     drawScreenText('DOWNSHAFT', [
-      'DRAG A PATH THROUGH MATCHING ROCK.',
-      'DIAGONALS COUNT. LONGER PAYS MUCH MORE.',
+      'DRAG A ROUTE THROUGH MATCHING ROCK.',
+      'THE LONGER THE ROUTE, THE MORE IT PAYS.',
       '',
-      'MEET THE QUOTA, THEN END A CHAIN',
-      'ON THE FLOOR TO DROP A LEVEL.',
+      'CUT THE ROCK AND IT FALLS.',
+      'MAKE QUOTA, THEN FALL OUT THE BOTTOM.',
       '',
-      'THREE SHAFTS. TWELVE SWINGS EACH.'
+      'THREE SHAFTS.'
     ], 'TAP TO DIG');
     requestAnimationFrame(frame); return;
   }
   if(phase === 'done'){
-    drawScreenText('BOTTOM REACHED', [
-      'THREE SHAFTS CLEARED.',
-      '',
-      'TOTAL ORE  ' + runOre
-    ], 'TAP TO RUN IT AGAIN');
+    drawScreenText('BOTTOM REACHED', ['THREE SHAFTS CLEARED.','','TOTAL ORE  ' + runOre], 'TAP TO RUN IT AGAIN');
     requestAnimationFrame(frame); return;
   }
+  if(!mesh){ requestAnimationFrame(frame); return; }
 
+  const s = shaft();
   ctx.save();
   ctx.translate(Math.round(shakeX), Math.round(shakeY));
+  ctx.fillStyle = s.wall; ctx.fillRect(0, HUD, W, H-HUD);
 
-  // shaft walls
-  ctx.fillStyle = b.wall;
-  ctx.fillRect(0, HUD, W, H-HUD);
-  ctx.fillStyle = 'rgba(0,0,0,.35)';
-  ctx.fillRect(OX-8, OY, 8, TILE*ROWS);
-  ctx.fillRect(OX+TILE*COLS, OY, 8, TILE*ROWS);
-
-  // the floor opens once the quota is met, so the way out is a thing you can
-  // see arrive rather than a message you have to read
-  const quotaMet = ore >= b.quota;
-  if(quotaMet){
+  // The floor cells light up when the quota is met, so the way out is a thing
+  // you watch arrive rather than a message you have to read.
+  if(ore >= s.quota){
     const g = 0.5 + 0.5*Math.sin(now/220);
-    ctx.fillStyle = 'rgba(255,232,114,'+(0.20+0.28*g)+')';
-    ctx.fillRect(OX, OY + TILE*(ROWS-1), TILE*COLS, TILE);
-    ctx.fillStyle = 'rgba(255,232,114,'+(0.5+0.5*g)+')';
-    ctx.fillRect(OX, OY + TILE*ROWS - 3, TILE*COLS, 3);
+    ctx.fillStyle = 'rgba(255,232,114,'+(0.16+0.26*g)+')';
+    for(let i=0;i<mesh.cells.length;i++) if(mesh.cells[i].floor){ cellPath(i, 0, 0, 0); ctx.fill(); }
   }
 
-  ctx.save();
-  ctx.translate(OX, OY);
-
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
-    const t = grid[idx(c,r)]; if(!t) continue;
-    const pi = inPath(c,r);
-    // Anything you cannot currently add to the chain is dimmed while dragging.
-    // That is the whole readability of the mechanic: the board sorts itself
-    // into "route" and "not route" the instant your thumb goes down.
-    const dim = dragging && pi < 0 && !canExtend(c,r);
-    drawTile(t, c*TILE, r*TILE + t.yoff, pi >= 0, dim);
+  for(let i=0;i<mesh.cells.length;i++){
+    const pi = inPath(i);
+    // Everything you cannot add to the route dims the moment your thumb lands.
+    // On an irregular board that is not a nicety — it is how the topology gets
+    // communicated at all.
+    drawCell(i, pi >= 0, dragging && pi < 0 && !canExtend(i));
   }
 
   drawPathLine();
-  drawGuy(guy.x, guy.y);
+  drawGuy();
 
   for(const p of parts){
-    const a = Math.max(0, p.t/p.mt);
-    ctx.globalAlpha = a; ctx.fillStyle = p.col;
+    ctx.globalAlpha = Math.max(0, p.t/p.mt); ctx.fillStyle = p.col;
     ctx.fillRect(p.x - p.s/2, p.y - p.s/2, p.s, p.s);
   }
   ctx.globalAlpha = 1;
   for(const rg of rings){
-    const rad = (1 - rg.t) * TILE * 2.4;
-    ctx.globalAlpha = rg.t; ctx.strokeStyle = rg.col;
-    ctx.lineWidth = 3; ctx.beginPath();
-    ctx.arc(rg.x, rg.y, rad, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = rg.t; ctx.strokeStyle = rg.col; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(rg.x, rg.y, (1-rg.t)*CELLR*3, 0, Math.PI*2); ctx.stroke();
   }
   ctx.globalAlpha = 1;
   for(const f of floats){
-    ctx.font = 'bold '+Math.round(TILE*(f.big?0.62:0.44))+'px ui-monospace,monospace';
+    ctx.font = 'bold '+Math.round(CELLR*(f.big?0.95:0.68))+'px ui-monospace,monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.globalAlpha = Math.min(1, f.t);
     ctx.lineWidth = 4; ctx.strokeStyle = '#12091c'; ctx.strokeText(f.s, f.x, f.y);
@@ -750,29 +1001,22 @@ function frame(now){
   }
   ctx.globalAlpha = 1;
   ctx.restore();
-  ctx.restore();
 
   drawChainReadout();
   drawHUD();
   drawBanner();
 
   if(phase === 'cleared'){
-    drawScreenText('SHAFT CLEARED', [
-      'ORE THIS SHAFT  ' + ore,
-      'SWINGS LEFT  ' + swings,
-      '',
-      'RUN TOTAL  ' + runOre
-    ], depth+1 >= BOARDS.length ? 'TAP TO FINISH' : 'TAP TO GO DEEPER');
+    drawScreenText('SHAFT CLEARED',
+      ['ORE THIS SHAFT  ' + ore, 'SWINGS LEFT  ' + swings, '', 'RUN TOTAL  ' + runOre],
+      depth+1 >= SHAFTS.length ? 'TAP TO FINISH' : 'TAP TO GO DEEPER');
   }
-  if(phase === 'failed'){
-    drawScreenText(bannerText, [bannerSub], 'TAP TO RETRY');
-  }
+  if(phase === 'failed') drawScreenText(bannerText, [bannerSub], 'TAP TO RETRY');
 
   if(flash > 0.01){
     ctx.fillStyle = 'rgba(255,255,255,'+Math.min(0.7, flash)+')';
     ctx.fillRect(0,0,W,H);
   }
-
   requestAnimationFrame(frame);
 }
 
@@ -781,113 +1025,3 @@ requestAnimationFrame(frame);
 </script>
 </body>
 </html>
-
-
-**Yes. I think *Grindstone* would work extremely well on a Stålberg-style grid.** It would still be grid-based; the grid would simply be an **irregular graph rather than a rectangular lattice**.
-
-At a systems level, *Grindstone* is already basically:
-
-* each tile = a node;
-* neighboring tiles = connections between nodes;
-* a chain = a path through connected nodes of the same color.
-
-None of that fundamentally requires straight rows or square cells.
-
-## The important distinction
-
-There are two ways to do it:
-
-### Merely distort the existing square board
-
-Keep exactly the same underlying neighbors, but move the tile centers and bend the cell boundaries.
-
-```text
-Regular appearance       Irregular appearance
-same topology      →      same topology
-```
-
-This would preserve *Grindstone* almost perfectly. It would feel organic, but the geometry would mainly be visual.
-
-### Use a true irregular Stålberg topology
-
-The Townscaper-style technique creates a mesh from triangles and quadrilaterals, subdivides it and relaxes the vertices into an organic-looking grid. That can produce curved flows and much less obvious rows and columns. ([andersource][1])
-
-Here, the actual neighbor relationships could vary:
-
-```text
-        A
-      /   \
-     B — C — D
-     | \ |   |
-     E — F — G
-```
-
-Now the shape of the board becomes mechanically meaningful. You can create:
-
-* bottlenecks;
-* circular routes;
-* pockets and peninsulas;
-* highly connected “junction” cells;
-* isolated regions opened by keys or grindstones;
-* boards shaped like caverns, creatures or terrain.
-
-That would make individual levels considerably more distinctive.
-
-## The main problem: *Grindstone* has diagonal adjacency
-
-On its square board, *Grindstone* lets chains travel horizontally, vertically and diagonally, giving an ordinary interior tile up to eight possible neighbors. ([Ladies Gamers][2])
-
-On a Stålberg grid, you must explicitly decide what “adjacent” means.
-
-**Shared-edge only**
-
-```text
-┌─────┐
-│  A  │── B is adjacent
-└─────┘
-```
-
-This is visually clear, but most cells may have only around four exits. Chains would be more constrained and the game would feel closer to navigating corridors.
-
-**Shared-edge or shared-corner**
-
-This more closely reproduces *Grindstone’s* eight-direction movement, but irregular corners can become ambiguous. Two cells touching at a tiny point may not look obviously connected.
-
-My recommendation is to allow both, but render the underlying connection clearly while the player drags:
-
-* eligible neighbors brighten;
-* a faint line connects cell centers;
-* invalid cells dim;
-* the chain snaps decisively from center to center.
-
-The player should never have to guess whether two shapes count as adjacent.
-
-## What would need redesigning
-
-The chain mechanic itself needs almost no conceptual change. The surrounding systems do.
-
-**Spawning and gravity:** A rectangular board naturally has columns and a downward direction. An organic grid does not. You would need a flow field—perhaps enemies enter from the upper boundary and travel along predefined graph connections toward empty cells.
-
-**Line-based attacks:** Anything currently described as attacking a row, column or diagonal would need to become “follow this directional lane,” “attack all graph neighbors,” or “attack within two steps.”
-
-**Level generation:** You could no longer balance levels using coordinates alone. You would evaluate connectivity, graph distance, bottlenecks, color clusters and reachable chain lengths.
-
-**Cell size:** Stålberg cells can differ visually in area. Large cells must not accidentally appear more important or become much easier to select unless that is intentional.
-
-## The version I would make
-
-I would use a **true irregular grid**, not just warp a square one, but constrain it carefully:
-
-* roughly 45–55 playable cells;
-* most cells have six to eight selectable neighbors;
-* very few unusually connected cells;
-* visible connection feedback during chaining;
-* an intentional entrance-to-exit flow;
-* occasional narrow regions where geometry becomes part of the puzzle.
-
-That would preserve the long, fluid chain-making pleasure while adding something the original *Grindstone* barely uses: **board topology as level design**.
-
-The result could feel like *Grindstone* taking place across an organic cave network rather than on a spreadsheet. The mechanic would survive; it would probably become deeper.
-
-[1]: https://andersource.dev/2020/11/06/organic-grid.html "Generating an organic grid | andersource"
-[2]: https://ladiesgamers.com/grindstone-review-nintendo-switch/?utm_source=chatgpt.com "Grindstone Review (Nintendo Switch) - LadiesGamers"
