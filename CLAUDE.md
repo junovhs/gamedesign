@@ -26,7 +26,12 @@ not type commands. He has said outright he is never going to.
 - Screenshot a running GUI with `DISPLAY=:1 import -window $(DISPLAY=:1 xdotool search
   --name goxel | head -1) out.png` to check what he is actually seeing.
 - Never `pkill -f "goxel art/"` or similar — the pattern matches the launching shell's own
-  command line and kills the script mid-run. Match on the pid instead.
+  command line and kills the script mid-run. Use `pkill -x goxel`, which matches the
+  process name exactly.
+- **Close the window when the task is done.** Do not leave goxel instances stacked up on
+  Juno's desktop, and never leave two open at once — he cannot tell which one is live, and
+  a save from a stale window silently overwrites newer work. One window, closed when
+  finished.
 
 Asset work is handed over **one object at a time** through `art/assets.json`, fully
 specified. If a task cannot be stated as one object with exact numbers, the task is wrong;
