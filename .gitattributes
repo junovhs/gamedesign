@@ -1,2 +1,4 @@
-*.ishoo binary
-.ishoo/** binary
+* text=auto eol=lf
+*.vox binary
+*.gox binary
+*.png binary

@@ -1,0 +1,41 @@
+{
+  "_comment": "The whole game's palette. 32 colours, no more. Adding one is a decision, not a convenience. Guide colours are reserved and stripped automatically at build time.",
+  "guide": {
+    "guide_primary": "#ff00ff",
+    "guide_secondary": "#00ffff"
+  },
+  "palette": {
+    "ink": "#14121c",
+    "shadow": "#2a2438",
+    "skin_light": "#f0c8a0",
+    "skin_mid": "#c98e63",
+    "skin_dark": "#8a5a3b",
+    "hair_dark": "#2b1d18",
+    "hair_brown": "#7a4a22",
+    "hair_blond": "#d9b25f",
+    "white": "#ffffff",
+    "bone": "#cfc9bd",
+    "grey_light": "#9a948a",
+    "grey_mid": "#6b6660",
+    "grey_dark": "#403c38",
+    "wood_light": "#a9713f",
+    "wood_mid": "#7a4c2a",
+    "wood_dark": "#4e2f1b",
+    "concrete": "#b8aa93",
+    "concrete_dark": "#8e8272",
+    "asphalt": "#3a3a3e",
+    "asphalt_light": "#55524f",
+    "brick": "#8c5a4a",
+    "grass": "#7ab547",
+    "grass_dark": "#4f8a30",
+    "foliage_dark": "#2f5f2a",
+    "foliage_light": "#a8d45c",
+    "water": "#4aa8c8",
+    "water_dark": "#2b6f92",
+    "glass": "#bfe4ef",
+    "red": "#e04b3c",
+    "orange": "#f0a832",
+    "blue": "#3b5fb0",
+    "purple": "#8a4fb0"
+  }
+}

@@ -1,0 +1,324 @@
+{
+ "_generated_by": "tools/gen_lab.py \u2014 do not edit, edit art/assets.json",
+ "voxels_per_metre": 8,
+ "camera_tilt_degrees": 15.0,
+ "batches": {
+  "lab": "Phase 1 \u2014 the scale lab. Everything needed to answer 'does this scale read?' Nothing here is final art; it is production-quality blockout that we keep if it reads.",
+  "kit": "Phase 3 \u2014 the modular kit proper. Not started until the lab passes.",
+  "slice": "Phase 4 \u2014 one house, one yard, one street segment."
+ },
+ "assets": [
+  {
+   "name": "ground_grass_1x1m",
+   "title": "Grass ground tile",
+   "batch": "lab",
+   "order": 1,
+   "size": [
+    8,
+    8,
+    2
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "char_civilian_base",
+   "title": "Base civilian character",
+   "batch": "lab",
+   "order": 2,
+   "size": [
+    5,
+    4,
+    14
+   ],
+   "pivot": "feet",
+   "fit": "within"
+  },
+  {
+   "name": "wall_exterior_doorway_2m",
+   "title": "Exterior wall with doorway (2 m)",
+   "batch": "lab",
+   "order": 3,
+   "size": [
+    16,
+    2,
+    22
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "wall_exterior_straight_1m",
+   "title": "Exterior wall, straight (1 m)",
+   "batch": "lab",
+   "order": 4,
+   "size": [
+    8,
+    2,
+    22
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "floor_wood_1x1m",
+   "title": "Wood floor tile",
+   "batch": "lab",
+   "order": 5,
+   "size": [
+    8,
+    8,
+    2
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "wall_interior_straight_1m",
+   "title": "Interior wall, straight (1 m)",
+   "batch": "lab",
+   "order": 6,
+   "size": [
+    8,
+    1,
+    22
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "door_exterior",
+   "title": "Exterior door leaf",
+   "batch": "lab",
+   "order": 7,
+   "size": [
+    8,
+    1,
+    16
+   ],
+   "pivot": "hinge",
+   "fit": "exact"
+  },
+  {
+   "name": "chair_dining",
+   "title": "Dining chair",
+   "batch": "lab",
+   "order": 8,
+   "size": [
+    4,
+    4,
+    7
+   ],
+   "pivot": "footprint_center",
+   "fit": "within"
+  },
+  {
+   "name": "table_dining_small",
+   "title": "Dining table",
+   "batch": "lab",
+   "order": 9,
+   "size": [
+    8,
+    12,
+    6
+   ],
+   "pivot": "footprint_center",
+   "fit": "within"
+  },
+  {
+   "name": "bed_single",
+   "title": "Single bed",
+   "batch": "lab",
+   "order": 10,
+   "size": [
+    8,
+    16,
+    5
+   ],
+   "pivot": "footprint_center",
+   "fit": "within"
+  },
+  {
+   "name": "sofa_two_seat",
+   "title": "Two-seat sofa",
+   "batch": "lab",
+   "order": 11,
+   "size": [
+    16,
+    7,
+    7
+   ],
+   "pivot": "footprint_center",
+   "fit": "within"
+  },
+  {
+   "name": "kitchen_counter_1m",
+   "title": "Kitchen counter (1 m)",
+   "batch": "lab",
+   "order": 12,
+   "size": [
+    8,
+    5,
+    7
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "wall_exterior_window_2m",
+   "title": "Exterior wall with window (2 m)",
+   "batch": "lab",
+   "order": 13,
+   "size": [
+    16,
+    2,
+    22
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "stairs_straight_full",
+   "title": "Straight staircase (full storey)",
+   "batch": "lab",
+   "order": 14,
+   "size": [
+    8,
+    28,
+    22
+   ],
+   "pivot": "corner",
+   "fit": "within"
+  },
+  {
+   "name": "ground_asphalt_1x1m",
+   "title": "Asphalt road tile",
+   "batch": "lab",
+   "order": 15,
+   "size": [
+    8,
+    8,
+    2
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "sidewalk_straight_1m",
+   "title": "Sidewalk section (1 m run)",
+   "batch": "lab",
+   "order": 16,
+   "size": [
+    8,
+    12,
+    2
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "curb_straight_1m",
+   "title": "Curb (1 m)",
+   "batch": "lab",
+   "order": 17,
+   "size": [
+    8,
+    2,
+    2
+   ],
+   "pivot": "corner",
+   "fit": "exact"
+  },
+  {
+   "name": "fence_wood_straight_1m",
+   "title": "Wood fence (1 m)",
+   "batch": "lab",
+   "order": 18,
+   "size": [
+    8,
+    2,
+    10
+   ],
+   "pivot": "corner",
+   "fit": "within"
+  },
+  {
+   "name": "hedge_straight_1m",
+   "title": "Hedge (1 m)",
+   "batch": "lab",
+   "order": 19,
+   "size": [
+    8,
+    8,
+    10
+   ],
+   "pivot": "corner",
+   "fit": "within"
+  },
+  {
+   "name": "bush_large",
+   "title": "Large bush (hiding spot)",
+   "batch": "lab",
+   "order": 20,
+   "size": [
+    12,
+    12,
+    10
+   ],
+   "pivot": "footprint_center",
+   "fit": "within"
+  },
+  {
+   "name": "tree_deciduous_small",
+   "title": "Small deciduous tree",
+   "batch": "lab",
+   "order": 21,
+   "size": [
+    24,
+    24,
+    32
+   ],
+   "pivot": "footprint_center",
+   "fit": "within"
+  },
+  {
+   "name": "mailbox",
+   "title": "Mailbox",
+   "batch": "lab",
+   "order": 22,
+   "size": [
+    3,
+    4,
+    8
+   ],
+   "pivot": "footprint_center",
+   "fit": "within"
+  },
+  {
+   "name": "car_sedan",
+   "title": "Sedan",
+   "batch": "lab",
+   "order": 23,
+   "size": [
+    14,
+    32,
+    12
+   ],
+   "pivot": "vehicle",
+   "fit": "within"
+  },
+  {
+   "name": "wall_exterior_broken_a",
+   "title": "Exterior wall, broken (variant A)",
+   "batch": "lab",
+   "order": 24,
+   "size": [
+    8,
+    2,
+    22
+   ],
+   "pivot": "corner",
+   "fit": "within"
+  }
+ ]
+}

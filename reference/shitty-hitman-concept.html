@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Room Service — Social Stealth Prototype</title>
+<style>
+  :root{
+    --ink:#ece6d6; --muted:#aaa38f; --gold:#d0a84e; --danger:#e05b54;
+    --panel:#17181d; --panel2:#202127; --line:#383a43; --bg:#0d0e12;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow:hidden}
+  body{display:grid;place-items:center;background:
+    radial-gradient(circle at 50% 18%,#22232a 0,#111218 45%,#090a0d 100%)}
+  #shell{width:min(1120px,100vw);height:min(760px,100vh);display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:12px;padding:12px}
+  #gameWrap{position:relative;min-width:0;display:flex;align-items:center;justify-content:center;background:#090a0d;border:1px solid #343640;box-shadow:0 18px 60px #0008,inset 0 0 0 3px #111217}
+  canvas{width:100%;height:auto;max-height:100%;aspect-ratio:3/2;image-rendering:pixelated;image-rendering:crisp-edges;background:#111;display:block}
+  #side{display:flex;flex-direction:column;gap:10px;min-height:0}
+  .panel{background:linear-gradient(#1c1d23,#15161b);border:1px solid var(--line);box-shadow:inset 0 0 0 2px #0d0e12;padding:10px}
+  .eyebrow{font-size:10px;letter-spacing:.18em;color:var(--gold);text-transform:uppercase}
+  h1{font-size:21px;line-height:1;margin:5px 0 3px;letter-spacing:.06em;text-transform:uppercase}
+  .sub{font-size:11px;color:var(--muted)}
+  #objective{font-size:12px;line-height:1.55}
+  #objective b{color:#fff}
+  .meter{height:10px;background:#090a0d;border:1px solid #3a3c45;margin-top:6px;position:relative}
+  .meter>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#d0a84e,#e05b54)}
+  .row{display:flex;justify-content:space-between;gap:10px;font-size:11px;line-height:1.7}
+  .row span:last-child{text-align:right;color:#fff}
+  .sectionTitle{font-size:10px;color:var(--gold);letter-spacing:.14em;text-transform:uppercase;border-bottom:1px solid #353741;padding-bottom:5px;margin-bottom:5px}
+  #log{font-size:10px;line-height:1.5;color:#c4bead;overflow:auto;min-height:80px;flex:1}
+  #log div{padding:3px 0;border-bottom:1px dotted #2c2e35}
+  kbd{font:inherit;font-size:10px;border:1px solid #555865;background:#0c0d10;padding:1px 4px;color:#fff;box-shadow:inset 0 -1px #000}
+  #prompt{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);background:#08090de8;border:1px solid #5c5f6d;color:#fff;padding:5px 9px;font-size:11px;pointer-events:none;white-space:nowrap;display:none}
+  #toast{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#13151bdc;border:1px solid #5b5f6c;padding:6px 10px;font-size:11px;opacity:0;transition:opacity .15s;pointer-events:none}
+  #overlay{position:absolute;inset:0;background:linear-gradient(#08090bda,#0d0e12f2);display:flex;align-items:center;justify-content:center;padding:26px;z-index:5}
+  .card{max-width:650px;width:100%;background:#17181e;border:1px solid #4b4e5a;box-shadow:0 20px 80px #000,inset 0 0 0 3px #0d0e12;padding:22px}
+  .card h2{font-size:30px;letter-spacing:.14em;text-transform:uppercase;margin:4px 0 8px}
+  .card p{font-size:12px;line-height:1.65;color:#c9c3b2;margin:8px 0}
+  .contracts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}
+  button{font:inherit;color:#fff;background:#25272f;border:1px solid #555966;padding:9px 8px;cursor:pointer;text-align:left}
+  button:hover,button:focus{outline:none;border-color:#d0a84e;background:#30323c}
+  button strong{display:block;color:#d0a84e;font-size:11px;margin-bottom:4px}
+  button small{display:block;color:#b7b1a2;font-size:9px;line-height:1.35}
+  .controls{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:10px;color:#aaa38f}
+  .controls div{border-top:1px solid #343641;padding-top:6px}
+  #restart{display:none;margin-top:auto;width:100%;text-align:center}
+  .good{color:#7fd18b}.bad{color:#ef6e67}.warn{color:#e0bd60}
+  @media(max-width:850px){#shell{grid-template-columns:1fr;height:100vh;padding:6px}#side{display:none}.card{max-width:560px}.contracts{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="shell">
+  <div id="gameWrap">
+    <canvas id="game" width="720" height="480" aria-label="Room Service game"></canvas>
+    <div id="prompt"></div><div id="toast"></div>
+    <div id="overlay">
+      <div class="card">
+        <div class="eyebrow">Freelance contract // Hotel Caligo</div>
+        <h2>Room Service</h2>
+        <p>Eliminate <b>Victor Vale</b>, then leave through the rear alley. Read the hotel, borrow a role, change the routine, and act when the opening appears.</p>
+        <div class="contracts">
+          <button data-mode="standard"><strong>1 — Standard</strong><small>Vale alternates between Room 101 and the bar. Security follows a normal patrol.</small></button>
+          <button data-mode="restless"><strong>2 — Restless</strong><small>Vale changes rooms after suspicious events. The camera recovers quickly.</small></button>
+          <button data-mode="alert"><strong>3 — Forewarned</strong><small>Security begins wary. Complete the contract without harming hotel staff.</small></button>
+        </div>
+        <div class="controls">
+          <div><kbd>WASD</kbd> / arrows — move</div><div><kbd>E</kbd> — interact / hide</div>
+          <div><kbd>F</kbd> — direct takedown</div><div><kbd>Shift</kbd> — move quickly</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside id="side">
+    <div class="panel">
+      <div class="eyebrow">Contract 01</div><h1>Room Service</h1>
+      <div class="sub" id="variant">Hotel Caligo // Standard</div>
+    </div>
+    <div class="panel" id="objective">
+      <div class="sectionTitle">Objective</div>
+      <div id="objectiveText"><b>Eliminate Victor Vale</b><br>Escape through the rear alley.</div>
+    </div>
+    <div class="panel">
+      <div class="sectionTitle">Status</div>
+      <div class="row"><span>Disguise</span><span id="disguise">Guest</span></div>
+      <div class="row"><span>Power</span><span id="power">Online</span></div>
+      <div class="row"><span>Camera</span><span id="camera">Active</span></div>
+      <div class="row"><span>Target</span><span id="targetState">Room 101</span></div>
+      <div class="row"><span>Inventory</span><span id="inventory">Wire</span></div>
+      <div class="row"><span>Suspicion</span><span id="susText">0%</span></div>
+      <div class="meter"><i id="susBar"></i></div>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column;min-height:0;flex:1">
+      <div class="sectionTitle">Hotel feed</div>
+      <div id="log"></div>
+    </div>
+    <button id="restart">Restart contract</button>
+  </aside>
+</div>
+<script>
+(() => {
+'use strict';
+const C=document.getElementById('game'), X=C.getContext('2d'); X.imageSmoothingEnabled=false;
+const S=1.5, W=480,H=320; X.setTransform(S,0,0,S,0,0);
+const ui={overlay:document.getElementById('overlay'),prompt:document.getElementById('prompt'),toast:document.getElementById('toast'),variant:document.getElementById('variant'),disguise:document.getElementById('disguise'),power:document.getElementById('power'),camera:document.getElementById('camera'),targetState:document.getElementById('targetState'),inventory:document.getElementById('inventory'),susText:document.getElementById('susText'),susBar:document.getElementById('susBar'),log:document.getElementById('log'),objectiveText:document.getElementById('objectiveText'),restart:document.getElementById('restart')};
+const keys={}, just={};
+addEventListener('keydown',e=>{ if(!keys[e.key.toLowerCase()]) just[e.key.toLowerCase()]=true; keys[e.key.toLowerCase()]=true; if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault(); });
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+let G=null,last=0;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y), rnd=(a,b)=>a+Math.random()*(b-a);
+function rectHit(a,b){return a.x-a.r<b.x+b.w&&a.x+a.r>b.x&&a.y-a.r<b.y+b.h&&a.y+a.r>b.y}
+function pointIn(p,r){return p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h}
+function lineClear(a,b){ const n=Math.ceil(dist(a,b)/4); for(let i=1;i<n;i++){const p={x:a.x+(b.x-a.x)*i/n,y:a.y+(b.y-a.y)*i/n}; if(G.walls.some(w=>pointIn(p,w))) return false;} return true; }
+function zoneAt(p){return Object.entries(G.zones).find(([,r])=>pointIn(p,r))?.[0]||'outside'}
+function log(msg,cls=''){const d=document.createElement('div');d.className=cls;d.textContent=msg;ui.log.prepend(d);while(ui.log.children.length>10)ui.log.lastChild.remove()}
+function toast(msg){ui.toast.textContent=msg;ui.toast.style.opacity=1;clearTimeout(toast.t);toast.t=setTimeout(()=>ui.toast.style.opacity=0,1300)}
+function beep(freq=420,d=.05){try{const a=beep.a||(beep.a=new (AudioContext||webkitAudioContext)());const o=a.createOscillator(),g=a.createGain();o.frequency.value=freq;o.type='square';g.gain.value=.025;o.connect(g);g.connect(a.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+d);o.stop(a.currentTime+d)}catch{}}
+
+const C0={wall:'#28262a',wallTop:'#4b4547',trim:'#695c55',lobby:'#6d4e45',hall:'#756b59',room:'#62515a',staff:'#4d5a5c',kitchen:'#5c665f',alley:'#30333a',dark:'#1b1b22',gold:'#d0a84e'};
+function newGame(mode){
+  G={mode,time:0,done:false,failed:false,method:'',power:true,cameraOn:true,cameraRecover:0,suspicion:mode==='alert'?28:0,alarm:false,targetDead:false,escapeOpen:false,poisoned:false,cartDelivered:false,rigged:false,wrench:false,poison:false,uniformTaken:false,hidden:false,staffHarmed:false,noise:null,events:[],variationRoom:'room101'};
+  G.zones={lobby:{x:8,y:112,w:192,h:180},kitchen:{x:8,y:8,w:112,h:96},hall:{x:208,y:112,w:248,h:88},closet:{x:208,y:8,w:84,h:96},room101:{x:300,y:8,w:156,h:96},room102:{x:300,y:208,w:156,h:84},alley:{x:8,y:300,w:448,h:20}};
+  G.walls=[
+    {x:0,y:0,w:480,h:8},{x:0,y:312,w:480,h:8},{x:0,y:0,w:8,h:320},{x:472,y:0,w:8,h:320},
+    {x:200,y:8,w:8,h:128},{x:200,y:168,w:8,h:112},{x:200,y:296,w:8,h:16},
+    {x:8,y:104,w:64,h:8},{x:88,y:104,w:112,h:8},{x:120,y:8,w:8,h:96},
+    {x:208,y:104,w:32,h:8},{x:256,y:104,w:104,h:8},{x:376,y:104,w:80,h:8},
+    {x:292,y:8,w:8,h:40},{x:292,y:64,w:8,h:40},
+    {x:208,y:200,w:152,h:8},{x:376,y:200,w:80,h:8},
+    {x:456,y:8,w:16,h:288}
+  ];
+  G.doors=[
+    {name:'Kitchen door',x:72,y:102,w:16,h:12,allow:p=>p.disguise==='housekeeping'},
+    {name:'Maintenance closet',x:240,y:102,w:16,h:12,allow:p=>p.disguise==='housekeeping'},
+    {name:'Room 101',x:360,y:102,w:16,h:12,allow:p=>p.disguise==='housekeeping'||G.targetDead},
+    {name:'Room 102',x:360,y:198,w:16,h:12,allow:p=>p.disguise==='housekeeping'},
+    {name:'Rear exit',x:198,y:280,w:12,h:16,allow:p=>G.escapeOpen}
+  ];
+  G.player={x:76,y:238,r:5,dir:0,disguise:'guest',speed:55,hidden:false,stun:0};
+  G.objects=[
+    {id:'uniform',x:260,y:156,type:'cart',label:'Housekeeping cart'},
+    {id:'bell',x:160,y:128,type:'bell',label:'Front desk bell'},
+    {id:'poison',x:38,y:38,type:'bottle',label:'Cleaning poison'},
+    {id:'wrench',x:235,y:38,type:'wrench',label:'Wrench'},
+    {id:'fuse',x:216,y:26,type:'fuse',label:'Fuse box'},
+    {id:'lamp',x:430,y:47,type:'lamp',label:'Faulty lamp'},
+    {id:'tray',x:95,y:76,type:'tray',label:'Room service tray'},
+    {id:'ventA',x:289,y:56,type:'vent',label:'Service vent'},
+    {id:'ventB',x:303,y:56,type:'vent',label:'Service vent'},
+    {id:'exit',x:203,y:288,type:'exit',label:'Rear alley'},
+    {id:'wardrobe',x:443,y:82,type:'wardrobe',label:'Wardrobe'}
+  ];
+  G.npcs=[];
+  addNPC('target','Victor Vale',425,69,'#7e2d35',targetRoute(mode));
+  addNPC('guard','Security',235,150,'#334e6a',[P(235,150,4),P(332,150,3),P(420,150,3),P(330,180,2),P(235,180,3)]);
+  addNPC('housekeeper','Head Housekeeper',270,178,'#6e5981',[P(270,178,3),P(330,150,2),P(415,150,2),P(365,188,2),P(270,178,2)]);
+  addNPC('bartender','Bartender',48,220,'#72533d',[P(48,220,8),P(95,220,5),P(48,220,5)]);
+  addNPC('waiter','Waiter',82,78,'#5e5547',[P(82,78,7),P(80,108,.2),P(150,145,4),P(112,178,5),P(80,108,.2),P(82,78,6)]);
+  addNPC('reception','Receptionist',165,142,'#644b57',[P(165,142,12),P(178,142,5)]);
+  G.camera={x:330,y:118,dir:Math.PI/2,phase:0};
+  ui.log.innerHTML=''; ui.restart.style.display='none'; ui.overlay.style.display='none';
+  ui.variant.textContent='Hotel Caligo // '+({standard:'Standard',restless:'Restless Target',alert:'Forewarned'}[mode]);
+  ui.objectiveText.innerHTML='<b>Eliminate Victor Vale</b><br>Escape through the rear alley.'+(mode==='alert'?'<br><span class="warn">Condition: no staff harmed.</span>':'');
+  log('Contract active. Vale is in Room 101.');
+  log('Observe routines before committing.');
+  last=performance.now(); requestAnimationFrame(loop);
+}
+function P(x,y,wait=1){return{x,y,wait}}
+function targetRoute(mode){
+  if(mode==='restless')return[P(425,68,7),P(368,108,.2),P(365,150,.2),P(200,150,.2),P(142,170,.2),P(82,254,8),P(142,170,.2),P(200,150,.2),P(365,150,.2),P(368,108,.2),P(425,68,6)];
+  return[P(425,68,9),P(368,108,.2),P(365,150,.2),P(200,150,.2),P(142,170,.2),P(82,254,10),P(142,170,.2),P(200,150,.2),P(365,150,.2),P(368,108,.2)];
+}
+function addNPC(role,name,x,y,color,route){G.npcs.push({role,name,x,y,r:5,color,route,i:0,wait:route[0].wait,dir:0,state:'routine',investigate:null,dead:false,stunned:0,alert:0,carrying:false})}
+function currentTarget(){return G.npcs.find(n=>n.role==='target')}
+function setNoise(x,y,str=1){G.noise={x,y,t:2.1,str}; for(const n of G.npcs){if(n.dead||n.role==='target'&&str<.8)continue;if(Math.hypot(n.x-x,n.y-y)<105*str&&lineClear(n,{x,y})){n.investigate={x,y,t:6};n.state='investigate'}}}
+function illegalAt(x,y,severity=40){let seen=false;for(const n of G.npcs){if(n.dead||n.stunned>0)continue;if(canSee(n,{x,y},80)){seen=true;n.alert+=severity;if(n.role==='guard')G.suspicion+=severity*.9;else G.suspicion+=severity*.45}} if(seen){toast('Someone saw that');beep(170,.12)}}
+function canSee(n,p,range=70){const dx=p.x-n.x,dy=p.y-n.y,d=Math.hypot(dx,dy);if(d>range)return false;const a=Math.atan2(dy,dx),diff=Math.atan2(Math.sin(a-n.dir),Math.cos(a-n.dir));return Math.abs(diff)<1.05&&lineClear(n,p)}
+function tickNPC(n,dt){
+  if(n.dead)return; if(n.stunned>0){n.stunned-=dt;return}
+  let dest=null;
+  if(G.alarm&&n.role==='guard'){dest=G.player;n.state='chase'}
+  else if(n.investigate){dest=n.investigate;n.investigate.t-=dt;if(n.investigate.t<=0||dist(n,n.investigate)<7){n.investigate=null;n.state='routine';n.wait=1}}
+  else{const p=n.route[n.i];dest=p;if(dist(n,p)<5){n.wait-=dt;if(n.wait<=0){n.i=(n.i+1)%n.route.length;n.wait=n.route[n.i].wait}}}
+  const dx=dest.x-n.x,dy=dest.y-n.y,d=Math.hypot(dx,dy);if(d>2){n.dir=Math.atan2(dy,dx);const sp=n.role==='guard'&&G.alarm?52:23;n.x+=dx/d*sp*dt;n.y+=dy/d*sp*dt}
+  if(n.role==='target')targetLogic(n,dt);
+}
+function targetLogic(t,dt){
+  const z=zoneAt(t); const waiter=G.npcs.find(n=>n.role==='waiter');
+  if(G.poisoned&&!G.cartDelivered&&z==='room101'&&waiter&&dist(t,waiter)<18){G.cartDelivered=true;waiter.carrying=false;log('Room service reaches Vale.'); schedule(3.2,()=>killTarget('poisoned room service'))}
+  if(G.rigged&&G.power&&z==='room101'&&dist(t,{x:430,y:47})<28){scheduleOnce('shock',1.1,()=>killTarget('electrical accident'))}
+  if(!G.power&&z==='room101'&&!t.investigate){t.i=1;t.wait=0;log('Vale leaves the dark room for the bar.','warn')}
+  if(G.mode==='restless'&&G.suspicion>45&&G.variationRoom!=='room102'&&!G.targetDead){G.variationRoom='room102';t.route=[P(405,248,8),P(368,204,.2),P(365,150,.2),P(200,150,.2),P(142,170,.2),P(82,254,6),P(142,170,.2),P(200,150,.2),P(365,150,.2),P(368,204,.2)];t.i=0;t.wait=0;log('Vale changes rooms after noticing trouble.','bad')}
+}
+function schedule(t,fn){G.events.push({t,fn})}
+function scheduleOnce(k,t,fn){if(G.events.some(e=>e.k===k))return;G.events.push({k,t,fn})}
+function updateEvents(dt){for(const e of G.events)e.t-=dt;const ready=G.events.filter(e=>e.t<=0);G.events=G.events.filter(e=>e.t>0);ready.forEach(e=>e.fn())}
+function killTarget(method){if(G.targetDead)return;const t=currentTarget();t.dead=true;G.targetDead=true;G.escapeOpen=true;G.method=method;log('Target eliminated: '+method+'.','good');log('Rear alley escape is now available.');toast('TARGET DOWN — ESCAPE');beep(110,.22)}
+function fail(msg){if(G.done||G.failed)return;G.failed=true;ui.overlay.style.display='flex';ui.overlay.innerHTML=`<div class="card"><div class="eyebrow">Contract failed</div><h2>Compromised</h2><p>${msg}</p><button onclick="location.reload()"><strong>Restart</strong><small>Reload the contract selection.</small></button></div>`;beep(70,.4)}
+function win(){if(G.done)return;G.done=true;const clean=G.suspicion<55&&!G.alarm&&!G.staffHarmed;const rating=clean?'Silent Operator':G.alarm?'Hotel Fire Drill':'Professional';ui.overlay.style.display='flex';ui.overlay.innerHTML=`<div class="card"><div class="eyebrow">Contract complete</div><h2>${rating}</h2><p>Method: <b>${G.method}</b><br>Final suspicion: <b>${Math.round(G.suspicion)}%</b><br>Disguise used: <b>${G.uniformTaken?'Housekeeping':'Guest only'}</b></p><div class="contracts"><button onclick="location.reload()"><strong>Replay</strong><small>Try a cleaner, stranger, or riskier solution.</small></button></div></div>`;beep(660,.08);setTimeout(()=>beep(880,.12),100)}
+function attemptMove(nx,ny){const p=G.player, old={x:p.x,y:p.y};p.x=nx;p.y=ny; if(G.walls.some(w=>rectHit(p,w))){p.x=old.x;p.y=old.y;return}
+  for(const d of G.doors){if(rectHit(p,d)&&!d.allow(p)){p.x=old.x;p.y=old.y;toast(d.name+': access denied');return}}
+}
+function updatePlayer(dt){const p=G.player;if(p.stun>0){p.stun-=dt;return}if(p.hidden){if(just.e){p.hidden=false;G.hidden=false;toast('You leave cover')}return}
+  let dx=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),dy=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0);const d=Math.hypot(dx,dy);if(d){dx/=d;dy/=d;p.dir=Math.atan2(dy,dx);const sp=p.speed*(keys.shift?1.55:1);attemptMove(p.x+dx*sp*dt,p.y);attemptMove(p.x,p.y+dy*sp*dt)}
+  const obj=nearestObject();ui.prompt.style.display=obj?'block':'none';if(obj){ui.prompt.textContent=contextText(obj);if(just.e)interact(obj)}
+  const t=currentTarget();if(!t.dead&&dist(p,t)<13){ui.prompt.style.display='block';ui.prompt.textContent='F — Use wire';if(just.f)directKill(t)}
+}
+function nearestObject(){let best=null,bd=17;for(const o of G.objects){const d=dist(G.player,o);if(d<bd){best=o;bd=d}}return best}
+function contextText(o){switch(o.id){case'uniform':return G.uniformTaken?(G.player.hidden?'E — Leave linen cart':'E — Hide in linen cart'):'E — Steal housekeeping uniform';case'bell':return'E — Ring desk bell';case'poison':return G.poison?'Poison taken':'E — Take cleaning poison';case'wrench':return G.wrench?'Wrench taken':'E — Take wrench';case'fuse':return G.power?'E — Cut hotel power':'E — Restore hotel power';case'lamp':return G.rigged?'Lamp rigged':'E — Rig faulty lamp';case'tray':return G.poisoned?'Tray poisoned':'E — Poison room service';case'ventA':case'ventB':return'E — Crawl through service vent';case'exit':return G.escapeOpen?'E — Escape through alley':'Rear exit locked';case'wardrobe':return G.player.hidden?'E — Leave wardrobe':'E — Hide in wardrobe'}return o.label}
+function interact(o){const p=G.player;
+  if(o.id==='uniform'){
+    if(!G.uniformTaken){G.uniformTaken=true;p.disguise='housekeeping';log('Housekeeping uniform acquired.');toast('DISGUISE: HOUSEKEEPING');illegalAt(o.x,o.y,18)}else{p.hidden=!p.hidden;G.hidden=p.hidden;toast(p.hidden?'Hidden in linen cart':'You leave cover')}return}
+  if(o.id==='bell'){setNoise(o.x,o.y,1.3);log('The desk bell pulls staff toward reception.');toast('A sharp bell echoes through the lobby');beep(900,.06);return}
+  if(o.id==='poison'){if(p.disguise!=='housekeeping'){toast('Staff area — find a disguise');return}if(!G.poison){G.poison=true;log('Cleaning poison acquired.');toast('POISON ACQUIRED')}return}
+  if(o.id==='wrench'){if(p.disguise!=='housekeeping'){toast('Staff area — find a disguise');return}if(!G.wrench){G.wrench=true;log('Wrench acquired.');toast('WRENCH ACQUIRED')}return}
+  if(o.id==='fuse'){if(p.disguise!=='housekeeping'){toast('Only staff can work here');return}if(!G.wrench){toast('You need a wrench');return}G.power=!G.power;G.cameraOn=G.power;if(!G.power){G.cameraRecover=G.mode==='restless'?14:999;log('Power cut. Camera offline; routines disrupted.','warn');setNoise(o.x,o.y,.8)}else{log('Power restored.');}toast(G.power?'POWER RESTORED':'HOTEL POWER CUT');illegalAt(o.x,o.y,15);return}
+  if(o.id==='lamp'){if(zoneAt(p)!=='room101'){return}if(!G.wrench){toast('You need a wrench');return}if(G.power){toast('Cut the power first');return}if(!G.rigged){G.rigged=true;log('The room lamp is rigged to fail when power returns.');toast('ACCIDENT PREPARED');illegalAt(o.x,o.y,25)}return}
+  if(o.id==='tray'){if(!G.poison){toast('You need poison');return}if(!G.poisoned){G.poisoned=true;G.poison=false;const w=G.npcs.find(n=>n.role==='waiter');if(w){w.carrying=true;w.route=[P(95,76,.4),P(80,108,.2),P(150,145,.2),P(200,150,.2),P(365,150,.2),P(368,108,.2),P(410,70,14),P(368,108,.2),P(365,150,.2),P(200,150,.2),P(150,145,.2),P(80,108,.2),P(82,78,4)];w.i=0;w.wait=0}log('Room service has been poisoned. The waiter starts his delivery route.');toast('POISON ADDED TO TRAY');illegalAt(o.x,o.y,45)}return}
+  if(o.id==='ventA'||o.id==='ventB'){if(p.disguise!=='housekeeping'){toast('The panel is secured');return}if(o.id==='ventA'){p.x=307;p.y=56}else{p.x=286;p.y=56}toast('Hidden route: service vent');beep(260,.06);return}
+  if(o.id==='exit'){if(G.escapeOpen)win();else toast('Complete the contract first');return}
+  if(o.id==='wardrobe'){p.hidden=!p.hidden;G.hidden=p.hidden;toast(p.hidden?'Hidden in wardrobe':'You leave cover');return}
+}
+function directKill(t){const p=G.player;const witnesses=G.npcs.filter(n=>n!==t&&!n.dead&&canSee(n,p,65));if(witnesses.length){G.suspicion+=60;G.alarm=true;log('The direct attack was witnessed.','bad')}killTarget('fiber wire');t.x=p.x+Math.cos(p.dir)*4;t.y=p.y+Math.sin(p.dir)*4}
+function detection(dt){const p=G.player;if(p.hidden||G.done||G.failed)return;let seenViolation=false;
+  for(const n of G.npcs){if(n.dead||n.stunned>0||n.role==='target')continue;const z=zoneAt(p);let bad=false,rate=0;
+    if(canSee(n,p,n.role==='guard'?82:64)){
+      if((z==='closet'||z==='kitchen')&&p.disguise!=='housekeeping'){bad=true;rate=38}
+      if((z==='room101'||z==='room102')&&p.disguise==='guest'){bad=true;rate=42}
+      if(n.role==='housekeeper'&&p.disguise==='housekeeping'){bad=true;rate=28}
+      if(n.role==='guard'&&G.mode==='alert'&&dist(n,p)<40){rate+=7}
+      if(bad){seenViolation=true;G.suspicion+=rate*dt;n.alert+=rate*dt}
+    }
+  }
+  if(G.cameraOn&&cameraSees(p)){const z=zoneAt(p);if(z==='room101'||z==='closet'||z==='room102'){seenViolation=true;G.suspicion+=32*dt}}
+  if(!seenViolation)G.suspicion-=11*dt;G.suspicion=clamp(G.suspicion,0,120);
+  if(G.suspicion>=100&&!G.alarm){G.alarm=true;log('Security identifies you. The hotel is locking down.','bad');toast('COMPROMISED');beep(120,.2)}
+  const guard=G.npcs.find(n=>n.role==='guard');if(G.alarm&&dist(guard,p)<10)fail('Security caught you before you reached the exit.');
+}
+function cameraSees(p){const c=G.camera,dx=p.x-c.x,dy=p.y-c.y,d=Math.hypot(dx,dy);if(d>90)return false;const a=Math.atan2(dy,dx),diff=Math.atan2(Math.sin(a-c.dir),Math.cos(a-c.dir));return Math.abs(diff)<.34&&lineClear(c,p)}
+function update(dt){G.time+=dt;updatePlayer(dt);for(const n of G.npcs)tickNPC(n,dt);updateEvents(dt);detection(dt);if(!G.power&&G.cameraRecover<999){G.cameraRecover-=dt;if(G.cameraRecover<=0){G.power=true;G.cameraOn=true;log('Emergency power restores the hallway camera.','bad');toast('CAMERA BACK ONLINE')}}
+  ui.disguise.textContent=G.player.disguise==='guest'?'Guest':'Housekeeping';ui.power.textContent=G.power?'Online':'Offline';ui.power.className=G.power?'':'bad';ui.camera.textContent=G.cameraOn?'Active':'Offline';ui.targetState.textContent=G.targetDead?'Eliminated':({room101:'Room 101',room102:'Room 102',lobby:'Bar',hall:'Hallway'}[zoneAt(currentTarget())]||'Moving');ui.inventory.textContent=['Wire',G.wrench&&'Wrench',G.poison&&'Poison'].filter(Boolean).join(', ');ui.susText.textContent=Math.round(G.suspicion)+'%';ui.susBar.style.width=clamp(G.suspicion,0,100)+'%';
+  for(const k in just)delete just[k];
+}
+function draw(){X.clearRect(0,0,W,H);drawMap();drawObjects();drawCamera();for(const n of G.npcs)drawNPC(n);drawPlayer();drawFX();drawLabels()}
+function floor(r,c,accent){X.fillStyle=c;X.fillRect(r.x,r.y,r.w,r.h);X.globalAlpha=.13;X.fillStyle=accent||'#fff';for(let y=r.y+4;y<r.y+r.h;y+=8)for(let x=r.x+((y/8)%2?4:0);x<r.x+r.w;x+=8)X.fillRect(x,y,1,1);X.globalAlpha=1}
+function drawMap(){X.fillStyle=C0.alley;X.fillRect(0,0,W,H);floor(G.zones.lobby,C0.lobby,'#d1b49a');floor(G.zones.kitchen,C0.kitchen,'#cbd6c9');floor(G.zones.hall,C0.hall,'#ede2ba');floor(G.zones.closet,C0.staff,'#bcd1cf');floor(G.zones.room101,C0.room,'#d5b6c2');floor(G.zones.room102,C0.room,'#d5b6c2');floor(G.zones.alley,C0.alley,'#9297a5');
+  if(!G.power){X.fillStyle='#08091399';X.fillRect(208,8,248,284)}
+  for(const w of G.walls){X.fillStyle=C0.wallTop;X.fillRect(w.x,w.y,w.w,w.h);X.fillStyle=C0.wall;X.fillRect(w.x,w.y+3,w.w,Math.max(0,w.h-3))}
+  // Rugs and furniture
+  X.fillStyle='#492f32';X.fillRect(25,145,135,56);X.fillStyle='#7c6453';X.fillRect(30,150,125,46);X.fillStyle='#4a3035';for(let x=38;x<150;x+=12)X.fillRect(x,154,5,38);
+  // bar
+  X.fillStyle='#2d2321';X.fillRect(20,205,95,13);X.fillStyle='#8a6545';X.fillRect(20,202,95,7);for(let x=30;x<108;x+=18){X.fillStyle='#3a2c28';X.fillRect(x,232,7,7)}
+  // reception desk
+  X.fillStyle='#2d2725';X.fillRect(135,123,60,12);X.fillStyle='#8b6d52';X.fillRect(135,121,60,6);
+  // kitchen counters
+  X.fillStyle='#363f3d';X.fillRect(18,18,10,72);X.fillRect(56,18,54,10);X.fillRect(56,88,54,8);X.fillStyle='#9aa29b';X.fillRect(58,30,50,16);
+  // closet shelves
+  X.fillStyle='#30393b';X.fillRect(214,75,70,15);for(let x=217;x<282;x+=13){X.fillStyle='#788789';X.fillRect(x,77,7,9)}
+  // beds / rooms
+  bed(314,26);bed(314,226);X.fillStyle='#372e31';X.fillRect(408,30,34,14);X.fillStyle='#8b6f59';X.fillRect(410,32,30,10);
+  X.fillStyle='#3b3135';X.fillRect(410,236,32,14);
+  // doors
+  for(const d of G.doors){const open=d.allow(G.player);X.fillStyle=open?'#2f503b':'#573234';X.fillRect(d.x,d.y,d.w,d.h);X.fillStyle='#d0a84e';X.fillRect(d.x+d.w-3,d.y+Math.floor(d.h/2),1,1)}
+  // alley markings
+  X.fillStyle='#17191e';X.fillRect(0,298,W,2);for(let x=14;x<470;x+=22){X.fillStyle='#474b55';X.fillRect(x,306,13,2)}
+}
+function bed(x,y){X.fillStyle='#292328';X.fillRect(x,y,70,42);X.fillStyle='#b8a8a3';X.fillRect(x+3,y+3,64,36);X.fillStyle='#e5ddd0';X.fillRect(x+5,y+5,16,11);X.fillStyle='#7e5e67';X.fillRect(x+3,y+19,64,20)}
+function drawObjects(){for(const o of G.objects){if(o.id==='poison'&&G.poison)continue;if(o.id==='wrench'&&G.wrench)continue;const x=o.x,y=o.y;switch(o.type){case'cart':X.fillStyle='#d6d1c3';X.fillRect(x-8,y-6,16,10);X.fillStyle='#5e5a55';X.fillRect(x-6,y+4,3,3);X.fillRect(x+4,y+4,3,3);X.fillStyle='#7b6387';X.fillRect(x-5,y-8,10,5);break;case'bell':X.fillStyle='#d0a84e';X.fillRect(x-3,y-2,6,4);X.fillRect(x-1,y-5,2,3);break;case'bottle':X.fillStyle='#b9d581';X.fillRect(x-2,y-4,4,7);X.fillStyle='#263b2f';X.fillRect(x-1,y-6,2,2);break;case'wrench':X.fillStyle='#c4c7c9';X.fillRect(x-1,y-5,2,10);X.fillRect(x-3,y-5,6,2);break;case'fuse':X.fillStyle='#20242a';X.fillRect(x-5,y-7,10,14);X.fillStyle=G.power?'#7fd18b':'#e05b54';X.fillRect(x-2,y-3,4,3);break;case'lamp':X.fillStyle=G.rigged?'#e05b54':'#e6c878';X.fillRect(x-4,y-5,8,6);X.fillStyle='#54483c';X.fillRect(x-1,y+1,2,6);break;case'tray':X.fillStyle=G.poisoned?'#8fbf70':'#c9c4b5';X.fillRect(x-7,y-2,14,4);X.fillStyle='#e4ded2';X.fillRect(x-2,y-6,4,4);break;case'vent':X.fillStyle='#1b1d21';X.fillRect(x-4,y-7,8,14);X.fillStyle='#5f646b';for(let i=-4;i<5;i+=3)X.fillRect(x-3,y+i,6,1);break;case'exit':X.fillStyle=G.escapeOpen?'#5a9c6b':'#6c3e3c';X.fillRect(x-4,y-6,8,12);break;case'wardrobe':X.fillStyle='#403439';X.fillRect(x-6,y-9,12,18);X.fillStyle='#aa8e66';X.fillRect(x-1,y,1,1)}}}
+function drawNPC(n){if(n.dead){X.fillStyle='#25181a';X.fillRect(n.x-6,n.y-2,12,5);X.fillStyle=n.color;X.fillRect(n.x-3,n.y-5,7,6);return} if(n.stunned>0){X.fillStyle='#3e3e46';X.fillRect(n.x-5,n.y-2,10,5);return} drawPerson(n.x,n.y,n.color,n.dir,n.role==='guard'?'#1c2633':'#d5b496');if(n.carrying){X.fillStyle=G.poisoned?'#8fbf70':'#c9c4b5';X.fillRect(Math.round(n.x)-6,Math.round(n.y)+1,12,2)}if(n.investigate){X.fillStyle='#e0bd60';X.fillRect(n.x-1,n.y-13,2,2)}if(G.alarm&&n.role==='guard'){X.fillStyle='#e05b54';X.fillRect(n.x-2,n.y-14,4,3)}}
+function drawPlayer(){if(G.player.hidden)return;drawPerson(G.player.x,G.player.y,G.player.disguise==='guest'?'#24262e':'#765d84',G.player.dir,'#d4af8f');X.strokeStyle='#f6e7b8';X.strokeRect(Math.floor(G.player.x-5)+.5,Math.floor(G.player.y-7)+.5,10,13)}
+function drawPerson(x,y,body,dir,skin){x=Math.round(x);y=Math.round(y);X.fillStyle='#15161b';X.fillRect(x-4,y+5,3,4);X.fillRect(x+1,y+5,3,4);X.fillStyle=body;X.fillRect(x-4,y-3,8,9);X.fillStyle=skin;X.fillRect(x-3,y-8,6,5);X.fillStyle='#2a211f';X.fillRect(x-3,y-9,6,2);X.fillStyle='#111';const ex=x+Math.round(Math.cos(dir)*2),ey=y-6+Math.round(Math.sin(dir)*1);X.fillRect(ex,ey,1,1)}
+function drawCamera(){const c=G.camera;if(!G.cameraOn)return;c.phase+=.015;c.dir=Math.PI/2+Math.sin(c.phase)*.8;X.save();X.globalAlpha=.12;X.fillStyle='#e9d76e';X.beginPath();X.moveTo(c.x,c.y);X.arc(c.x,c.y,90,c.dir-.34,c.dir+.34);X.closePath();X.fill();X.restore();X.fillStyle='#1d2026';X.fillRect(c.x-4,c.y-3,8,5);X.fillStyle='#e05b54';X.fillRect(c.x+2,c.y-2,1,1)}
+function drawFX(){if(G.noise){G.noise.t-=1/60;X.strokeStyle='#e7d693';X.globalAlpha=clamp(G.noise.t/2,0,1);for(let i=0;i<3;i++){X.beginPath();X.arc(G.noise.x,G.noise.y,(2.1-G.noise.t)*22+i*5,0,Math.PI*2);X.stroke()}X.globalAlpha=1;if(G.noise.t<=0)G.noise=null}
+  if(G.alarm){X.fillStyle=`rgba(190,30,35,${.04+.03*Math.sin(G.time*8)})`;X.fillRect(0,0,W,H)}
+}
+function drawLabels(){X.font='6px monospace';X.textAlign='center';X.fillStyle='#e9e1ce';const labels=[['KITCHEN',64,101],['LOBBY / BAR',100,289],['MAINT.',250,101],['ROOM 101',378,101],['HALLWAY',332,197],['ROOM 102',378,289],['REAR ALLEY',325,309]];for(const [t,x,y]of labels){X.fillStyle='#09090caa';X.fillRect(x-X.measureText(t).width/2-2,y-6,X.measureText(t).width+4,8);X.fillStyle='#e9e1ce';X.fillText(t,x,y)}X.textAlign='left'}
+function loop(t){if(!G||G.done||G.failed)return;const dt=Math.min(.033,(t-last)/1000||0);last=t;update(dt);draw();requestAnimationFrame(loop)}
+
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>newGame(b.dataset.mode));
+ui.restart.onclick=()=>location.reload();
+})();
+</script>
+</body>
+</html>

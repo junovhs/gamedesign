@@ -1,0 +1,38 @@
+GIMP Palette
+Name: Grapeghost
+Columns: 8
+#
+ 20  18  28	ink
+ 42  36  56	shadow
+240 200 160	skin_light
+201 142  99	skin_mid
+138  90  59	skin_dark
+ 43  29  24	hair_dark
+122  74  34	hair_brown
+217 178  95	hair_blond
+255 255 255	white
+207 201 189	bone
+154 148 138	grey_light
+107 102  96	grey_mid
+ 64  60  56	grey_dark
+169 113  63	wood_light
+122  76  42	wood_mid
+ 78  47  27	wood_dark
+184 170 147	concrete
+142 130 114	concrete_dark
+ 58  58  62	asphalt
+ 85  82  79	asphalt_light
+140  90  74	brick
+122 181  71	grass
+ 79 138  48	grass_dark
+ 47  95  42	foliage_dark
+168 212  92	foliage_light
+ 74 168 200	water
+ 43 111 146	water_dark
+191 228 239	glass
+224  75  60	red
+240 168  50	orange
+ 59  95 176	blue
+138  79 176	purple
+255   0 255	GUIDE-guide_primary
+  0 255 255	GUIDE-guide_secondary

@@ -1,65 +1,47 @@
-<!-- ishoo:begin -->
-This repository is managed by Ishoo and mapped by SEMMAP. Before handling the first user request, call the `ishoo_brief` and `semmap_brief` MCP tools. Drive all issue, plan, and decision work through the `ishoo_*` MCP tools and code navigation through the `semmap_*` tools — do not substitute the Ishoo or SEMMAP command-line interfaces. If either MCP server or its brief tool is unavailable, stop and tell the user which server must be enabled before continuing.
-<!-- ishoo:end -->
+# Grapeghost — house rules
 
-## DOWNSHAFT — house rules
+**Read [`docs/PLAN.md`](docs/PLAN.md) first, every time.** It names the current phase.
+Only the current phase is live; everything else is recorded, not started.
 
-**Right now we are building M0 — THE PUZZLE IS THE GAME (DEC-19).** Read
-[`docs/current-milestone.md`](docs/current-milestone.md) first, every time. It is the only
-planning document that is current. The wider plan is frozen: no 500-hour spine, no depth-band
-content, no camps, no wiki site, no art importer, no crafting, clothing or shops, no Rust, until
-M0 answers whether the collapse puzzle is deep. Those ideas are all recorded. File new ones;
-do not start them.
+**[`docs/SCALE.md`](docs/SCALE.md) is the authority on every dimension.** If a number
+appears in code, a scene, or an asset and contradicts SCALE.md, SCALE.md wins and the
+other thing is a bug. If a number is not in SCALE.md, it is not a rule — add it there
+before relying on it.
 
-**The game is DOWNSHAFT (DEC-09).** A guy in his backyard with a pickaxe, digging down, and it
-gets stranger the deeper he goes. Read [`docs/design.md`](docs/design.md) before designing
-anything, and [`docs/north-star-catalogue.md`](docs/north-star-catalogue.md) before proposing
-content. If something in the tree contradicts an ACCEPTED ADR, it is stale — say so and fix it.
+**We are in Phase 1: the scale lab.** Its only job is to decide whether the numbers in
+SCALE.md produce a legible game. Do not build kit assets, levels, NPC systems, disguises,
+routines, destruction systems or editor tooling until Phase 1's exit checklist passes.
+File the idea in `docs/concept/`; do not start it.
 
-**Phone-native or it does not count (DEC-07).** The designer tests on a phone browser during
-the day; that is the only testing opportunity that exists. Everything must be openable on a
-phone at a URL and playable with thumbs. Touch controls, resolution that adapts to the screen
-shape, and a frame-rate budget for phone hardware are part of building it, never a later port.
-Do not propose desktop-only spikes, installs, or build steps.
+**Juno is the artist. Claude is the pipeline, the plan and the engineering.** Asset work is
+handed over one object at a time through `art/assets.json` and `tools/task.py` — fully
+specified, with a starting file already generated. If a task cannot be stated that
+atomically, the task is wrong; split it.
 
-**The one file (DEC-13).** `index.html` is the whole game: no dependencies, no build, no asset
-fetches, published to GitHub Pages on push to `main`. It is the codebase, not a sketch — code
-quality in it counts. Rust/wasm is a later port of a proven design, never a reason to defer a
-fix.
+**Godot 4, never a custom engine.** We roll our own game systems, asset pipeline, editor
+tooling and level format. We never roll our own renderer, physics, importer or scene
+serialisation. Rust is not on the table.
 
-**Feel ships with the mechanic (DEC-16).** A feature is not done when it works, it is done
-when doing it feels good on a phone. Impact, particles, shake, sound and palette response
-belong in the same change as the mechanic. There is no later polish pass. Candy Crush is the
-bar.
+**No art assets in the build that were not authored in goxel.** Every model is voxel data
+exported through `tools/build.py`. No downloaded meshes, no textures, no image files
+outside `docs/concept/`.
 
-**Deeper is funnier (DEC-15).** Every layer down is stranger than the one above. Colourful,
-absurd, never grim, never horror. `docs/north-star.png` is the reference of record.
+**Destruction is authored and event-based, in three tiers** (SCALE.md § destruction).
+Never a per-voxel rigid-body simulation. This decision is settled; do not reopen it.
 
-**One board is the atom (DEC-17).** Three minutes to pick up, five hundred hours deep — but the
-unit is one compact structural board, not one descent. A session counts if the player left one
-board permanently changed. Camps are rare expedition milestones, not landings every few screens.
+**Author modularly, place as prefabs.** No house, room or yard is ever a single unique
+model. Walls take colour variants, not new meshes.
 
-**The board is the readout (DEC-18).** The HUD is depth, picks, distance to the next camp in
-metres, a persistent inventory hotbar, money, and a designed menu control. Carried things stay
-visible and usable on the board — never a bag-fullness bar that opens a separate screen. Never a
-minimap, an ore radar, a stability meter or an arrow to the good stuff.
+**The concept image is a brief, not a blueprint.** `docs/concept/image-ref.png` says what
+*categories* of thing the game needs. It is never reproduced tile for tile, and its
+proportions are not production scale.
 
-**The preview is a promise.** Before a consequential action commits, the game shows its exact
-immediate result. Difficulty comes from evaluating consequences, not from fighting an opaque
-simulation. Breaking that promise damages the entire game.
+**Verify by rendering, not by assuming.** `godot --path game -s res://tools/capture.gd --
+<scene> <out.png>` renders the real 640 x 360 viewport to a PNG. Use it before claiming a
+visual change works.
 
-**No art assets (DEC-14).** Every tile is pixel data drawn by code. No image files in the
-build, nothing 3-D. Authored pixel art will eventually reach the game through the importer
-(TOOL-01), which is a separate page, never a build step — and is parked until M0 answers.
+**Reserved colours.** `#ff00ff` and `#00ffff` are build guides and are stripped at export.
+They can never appear in real art, and nothing may repurpose them.
 
-**Before designing anything**, read the ACCEPTED ADRs via `ishoo_decision` (`op:list`). DEC-19
-(prove the board first) and DEC-15 (deeper is funnier) decide most arguments before they start.
-
-**Verify on a phone-shaped viewport — but measure it, do not trust `--window-size`.** Chrome
-on this machine refuses to make a window narrower than about 504 CSS px, so
-`--headless --window-size=390,844 --screenshot` silently renders a 504px-wide page into a
-390px image: everything looks clipped and nothing is. Drive the page over CDP with
-`Emulation.setDeviceMetricsOverride` instead and assert `innerWidth` is what you asked for
-before you believe a single measurement. Check 390x844 and 844x390, and measure real
-`getBoundingClientRect()` values rather than reading pixels off a screenshot. Thumb targets
-are 44 CSS px on their shortest side.
+**Things already proven not to work** are listed at the bottom of `docs/PIPELINE.md`.
+Read that before debugging the goxel pipeline; do not rediscover them.

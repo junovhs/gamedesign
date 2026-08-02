@@ -1,0 +1,56 @@
+[gd_scene load_steps=4 format=3 uid="uid://bgg0scalelab001"]
+
+[ext_resource type="Script" path="res://scripts/scale_lab.gd" id="1_lab"]
+
+[sub_resource type="Environment" id="Env_1"]
+background_mode = 1
+background_color = Color(0.13, 0.15, 0.18, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.62, 0.66, 0.78, 1)
+ambient_light_energy = 1.2
+tonemap_mode = 2
+ssao_enabled = true
+ssao_intensity = 0.9
+ssao_radius = 0.6
+
+[sub_resource type="Theme" id="Theme_1"]
+default_font_size = 12
+
+[node name="ScaleLab" type="Node3D"]
+script = ExtResource("1_lab")
+
+[node name="Stations" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.2588, 0.9659, 0, -0.9659, 0.2588, 0, 96.59, 25.88)
+projection = 1
+size = 6.0
+near = 0.05
+far = 400.0
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.81915, 0.00000, 0.57358, 0.49673, 0.50000, -0.70941, -0.28679, 0.86603, 0.40958, 0.00000, 25.00000, 0.00000)
+light_energy = 1.6
+shadow_enabled = true
+directional_shadow_mode = 0
+directional_shadow_max_distance = 40.0
+shadow_bias = 0.08
+shadow_normal_bias = 1.5
+shadow_blur = 0.4
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_1")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Readout" type="Label" parent="UI"]
+theme = SubResource("Theme_1")
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 6.0
+offset_top = -84.0
+offset_right = 460.0
+offset_bottom = -4.0
+grow_vertical = 0
+text = "loading manifest..."

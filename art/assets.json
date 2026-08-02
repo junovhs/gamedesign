@@ -1,0 +1,361 @@
+{
+  "_comment": "Source of truth for every asset. `tools/task.py next` reads this and hands you one job. Sizes are VOXELS (8 vox = 1 m). See docs/SCALE.md.",
+
+  "batches": {
+    "lab": "Phase 1 — the scale lab. Everything needed to answer 'does this scale read?' Nothing here is final art; it is production-quality blockout that we keep if it reads.",
+    "kit": "Phase 3 — the modular kit proper. Not started until the lab passes.",
+    "slice": "Phase 4 — one house, one yard, one street segment."
+  },
+
+  "assets": [
+    {
+      "name": "ground_grass_1x1m",
+      "title": "Grass ground tile",
+      "batch": "lab", "order": 1,
+      "pivot": "corner", "fit": "exact",
+      "size": [8, 8, 2],
+      "brief": "The single most repeated object in the game. A 1 m square of lawn, 0.25 m thick so it can sit proud of a road surface. Top face is the only face that will ever be seen; the sides matter only where the tile meets a road or a creek bank.",
+      "must": [
+        "Fills the full 8 x 8 x 2 box with no gaps — tiles must butt seamlessly on all four sides",
+        "Top surface uses at least two greens so a field of these is not a flat colour, but no single-voxel speckle noise",
+        "Any variation must tile with ITSELF rotated 90/180/270 without an obvious seam"
+      ],
+      "palette_hint": ["grass", "grass_dark", "foliage_light"]
+    },
+    {
+      "name": "char_civilian_base",
+      "title": "Base civilian character",
+      "batch": "lab", "order": 2,
+      "pivot": "feet", "fit": "within",
+      "size": [5, 4, 14],
+      "brief": "The body every character in the game is built from. Neutral clothing, neutral pose, standing straight, arms at sides, facing -Y (toward the camera). This is not a character, it is the mannequin. Roles get added later as colour and accessories on top of this exact silhouette.",
+      "must": [
+        "Exactly 14 voxels tall (1.75 m) — this is the number the entire game is calibrated to",
+        "Head roughly 4 x 4 x 4 at the top",
+        "Shoulders 5 wide, body 4 deep",
+        "Readable as a person at 23 screen pixels tall — test by squinting",
+        "Face detail is a waste at this size; a suggestion of eyes at most",
+        "Feet centred on the model's X/Y centre so the pivot lands between them"
+      ],
+      "palette_hint": ["skin_mid", "hair_dark", "grey_mid", "blue", "ink"]
+    },
+    {
+      "name": "wall_exterior_doorway_2m",
+      "title": "Exterior wall with doorway (2 m)",
+      "batch": "lab", "order": 3,
+      "pivot": "corner", "fit": "exact",
+      "size": [16, 2, 22],
+      "brief": "A 2 m run of exterior house wall with a standard doorway punched through it. This is 2 m wide, not 1 m, because a 1 m module with a 1 m opening would be nothing but a hole. Includes the door frame; the door leaf itself is a separate asset.",
+      "must": [
+        "Opening is exactly 8 wide x 16 tall (1 x 2 m), centred in X, sitting on the floor (z = 0)",
+        "Wall is exactly 2 voxels thick and exactly 22 tall",
+        "Left and right edges are flat and full-height so it butts against wall_exterior_straight_1m seamlessly",
+        "Frame reads clearly from the game camera — this is how the player finds entrances",
+        "Interior face and exterior face may differ in colour"
+      ],
+      "palette_hint": ["bone", "wood_mid", "grey_light", "ink"]
+    },
+    {
+      "name": "wall_exterior_straight_1m",
+      "title": "Exterior wall, straight (1 m)",
+      "batch": "lab", "order": 4,
+      "pivot": "corner", "fit": "exact",
+      "size": [8, 2, 22],
+      "brief": "The plain 1 m run of exterior wall. The most-repeated structural piece. Boring on purpose — all the personality comes from colour variants and from the window and doorway modules breaking it up.",
+      "must": [
+        "Fills 8 x 2 x 22 exactly, with flat left/right/top edges so runs tile seamlessly",
+        "Siding or texture pattern must repeat cleanly every 8 voxels",
+        "Do not model a baseboard or trim into this piece — it must work as both a ground-floor and upper-floor wall"
+      ],
+      "palette_hint": ["bone", "grey_light", "brick", "wood_light"]
+    },
+    {
+      "name": "floor_wood_1x1m",
+      "title": "Wood floor tile",
+      "batch": "lab", "order": 5,
+      "pivot": "corner", "fit": "exact",
+      "size": [8, 8, 2],
+      "brief": "Interior floorboards, 1 m square, 0.25 m slab. Seen constantly through cutaway roofs, so it sets the interior mood more than any prop does.",
+      "must": [
+        "Fills 8 x 8 x 2 exactly and tiles seamlessly on all four sides",
+        "Board direction runs along +X so a room reads as having a floor grain direction",
+        "Must still read as floor when 80 percent covered by furniture"
+      ],
+      "palette_hint": ["wood_light", "wood_mid", "wood_dark"]
+    },
+    {
+      "name": "wall_interior_straight_1m",
+      "title": "Interior wall, straight (1 m)",
+      "batch": "lab", "order": 6,
+      "pivot": "corner", "fit": "exact",
+      "size": [8, 1, 22],
+      "brief": "Room divider. Half the thickness of an exterior wall so interiors do not eat floor space. Seen mostly as a thin line from above plus one visible face.",
+      "must": [
+        "Exactly 1 voxel thick — this is the thinnest thing in the game and it must still read",
+        "Both faces may be different colours (different rooms)",
+        "Flat left/right/top edges for seamless tiling"
+      ],
+      "palette_hint": ["bone", "white", "grey_light"]
+    },
+    {
+      "name": "door_exterior",
+      "title": "Exterior door leaf",
+      "batch": "lab", "order": 7,
+      "pivot": "hinge", "fit": "exact",
+      "size": [8, 1, 16],
+      "brief": "The swinging leaf that fills a standard doorway. Modelled closed, in its own file, so the game can rotate it around its hinge edge. The hinge is the -X edge.",
+      "must": [
+        "Exactly 8 x 1 x 16 — must exactly fill the doorway opening",
+        "Hinge edge is the -X (left) edge; the handle is on the +X edge",
+        "Handle is readable from the game camera even though it is 1 voxel"
+      ],
+      "palette_hint": ["wood_mid", "wood_dark", "orange", "ink"]
+    },
+    {
+      "name": "chair_dining",
+      "title": "Dining chair",
+      "batch": "lab", "order": 8,
+      "pivot": "footprint_center", "fit": "within",
+      "size": [4, 4, 7],
+      "brief": "The smallest piece of real furniture in the game, and therefore the hardest legibility test. If a chair does not read at this scale, the scale is wrong.",
+      "must": [
+        "Seat surface at exactly 4 voxels (0.5 m) high",
+        "Back rises to 7 voxels total",
+        "Legs may be 1 voxel but the seat and back must be at least 2 voxels thick",
+        "Faces -Y (a person sitting in it looks toward the camera)"
+      ],
+      "palette_hint": ["wood_mid", "wood_dark", "red"]
+    },
+    {
+      "name": "table_dining_small",
+      "title": "Dining table",
+      "batch": "lab", "order": 9,
+      "pivot": "footprint_center", "fit": "within",
+      "size": [8, 12, 6],
+      "brief": "A four-seat dining table, 1 x 1.5 m. Pairs with chair_dining — the two together are the main readability test for interiors.",
+      "must": [
+        "Top surface at exactly 6 voxels (0.75 m) high",
+        "Top is at least 2 voxels thick",
+        "Four chairs must be able to tuck under it without intersecting the legs"
+      ],
+      "palette_hint": ["wood_light", "wood_mid", "wood_dark"]
+    },
+    {
+      "name": "bed_single",
+      "title": "Single bed",
+      "batch": "lab", "order": 10,
+      "pivot": "footprint_center", "fit": "within",
+      "size": [8, 16, 5],
+      "brief": "1 x 2 m bed. Beds are the anchor object that tells the player 'this is a bedroom' in one glance from directly above, so the top-down silhouette matters far more than the sides.",
+      "must": [
+        "Mattress top at 5 voxels (0.625 m)",
+        "Pillow at the +Y end, clearly readable from directly above",
+        "Blanket colour must contrast with floor_wood_1x1m"
+      ],
+      "palette_hint": ["white", "blue", "wood_mid", "bone"]
+    },
+    {
+      "name": "sofa_two_seat",
+      "title": "Two-seat sofa",
+      "batch": "lab", "order": 11,
+      "pivot": "footprint_center", "fit": "within",
+      "size": [16, 7, 7],
+      "brief": "2 m sofa. The living-room anchor, and a likely cover object, so its silhouette needs to read as something you could crouch behind.",
+      "must": [
+        "Seat surface at 4 voxels, back and arms to 7",
+        "Faces -Y",
+        "Back is at least 2 voxels thick so it reads as solid cover"
+      ],
+      "palette_hint": ["red", "purple", "grey_mid", "wood_dark"]
+    },
+    {
+      "name": "kitchen_counter_1m",
+      "title": "Kitchen counter (1 m)",
+      "batch": "lab", "order": 12,
+      "pivot": "corner", "fit": "exact",
+      "size": [8, 5, 7],
+      "brief": "A 1 m run of kitchen counter with cabinet below and worktop above. Tiles in runs along +X, so treat it as architecture rather than as a prop.",
+      "must": [
+        "Exactly 8 wide so runs tile seamlessly — flat, full left and right edges",
+        "Worktop at exactly 7 voxels (0.875 m), at least 1 voxel thick, in a contrasting colour to the cabinet",
+        "Cabinet front faces -Y",
+        "Toe-kick recess at the bottom front is worth the 1 voxel it costs"
+      ],
+      "palette_hint": ["bone", "wood_mid", "grey_dark", "white"]
+    },
+    {
+      "name": "wall_exterior_window_2m",
+      "title": "Exterior wall with window (2 m)",
+      "batch": "lab", "order": 13,
+      "pivot": "corner", "fit": "exact",
+      "size": [16, 2, 22],
+      "brief": "2 m exterior wall run with a window punched through. Windows are a primary stealth affordance — the player will look for them as climb-in routes — so the opening must be obvious at a glance.",
+      "must": [
+        "Opening exactly 8 wide x 10 tall, centred in X, sill top at z = 7 (0.875 m)",
+        "Glass filled with the glass colour, 1 voxel thick, set into the middle of the wall",
+        "Frame reads clearly from the game camera",
+        "Left/right/top edges flat and full so it tiles with the straight wall"
+      ],
+      "palette_hint": ["bone", "glass", "white", "wood_mid"]
+    },
+    {
+      "name": "stairs_straight_full",
+      "title": "Straight staircase (full storey)",
+      "batch": "lab", "order": 14,
+      "pivot": "corner", "fit": "within",
+      "size": [8, 28, 22],
+      "brief": "A full-storey straight run: 11 steps of 0.25 m rise and 0.3125 m run, climbing 2.75 m over 3.5 m of depth. Stairs are the trickiest thing to read from a near-overhead camera, so this asset is a genuine test of the camera angle.",
+      "must": [
+        "Exactly 11 steps, each 2 voxels rise and 2.5 voxels run (alternate 2 and 3 voxel runs to average 2.5)",
+        "Bottom step starts at z = 0 at the -Y end; top step surface lands at exactly z = 22",
+        "1 m wide (8 voxels)",
+        "Step nosings need enough colour contrast to count the steps from above"
+      ],
+      "palette_hint": ["wood_light", "wood_mid", "wood_dark", "bone"]
+    },
+    {
+      "name": "ground_asphalt_1x1m",
+      "title": "Asphalt road tile",
+      "batch": "lab", "order": 15,
+      "pivot": "corner", "fit": "exact",
+      "size": [8, 8, 2],
+      "brief": "Road surface, 1 m square. Road markings are decals added later, not modelled into this tile.",
+      "must": [
+        "Fills 8 x 8 x 2 exactly, tiles seamlessly and rotation-invariantly",
+        "Noticeably darker than sidewalk and grass so the road reads as a distinct region from above",
+        "No markings, no cracks that would repeat visibly across a 6 m road"
+      ],
+      "palette_hint": ["asphalt", "asphalt_light", "grey_dark"]
+    },
+    {
+      "name": "sidewalk_straight_1m",
+      "title": "Sidewalk section (1 m run)",
+      "batch": "lab", "order": 16,
+      "pivot": "corner", "fit": "exact",
+      "size": [8, 12, 2],
+      "brief": "1 m of sidewalk, full 1.5 m depth. Runs along +X. Sidewalks are the main NPC pathing spine of the level, so they need to read as a walkable channel from directly above.",
+      "must": [
+        "Exactly 8 (run) x 12 (depth) x 2",
+        "A slab joint line every 1 m along the run, so a long sidewalk shows rhythm",
+        "Clearly lighter than asphalt and clearly distinct from grass"
+      ],
+      "palette_hint": ["concrete", "concrete_dark", "bone"]
+    },
+    {
+      "name": "curb_straight_1m",
+      "title": "Curb (1 m)",
+      "batch": "lab", "order": 17,
+      "pivot": "corner", "fit": "exact",
+      "size": [8, 2, 2],
+      "brief": "The 0.25 m lip between sidewalk and road. Tiny, but it is what makes the street cross-section read as a real street instead of two flat colours.",
+      "must": [
+        "Exactly 8 x 2 x 2",
+        "Top face and road-facing face in different values so the lip catches the eye from above"
+      ],
+      "palette_hint": ["concrete", "bone", "concrete_dark"]
+    },
+    {
+      "name": "fence_wood_straight_1m",
+      "title": "Wood fence (1 m)",
+      "batch": "lab", "order": 18,
+      "pivot": "corner", "fit": "within",
+      "size": [8, 2, 10],
+      "brief": "1 m of picket fence, 1.25 m tall — chest height on a 1.75 m character, i.e. climbable. Fences define lot boundaries and therefore define most of the level's routing.",
+      "must": [
+        "Exactly 8 wide with flat left/right edges so runs tile",
+        "10 tall (1.25 m) — must read as climbable, not as a wall",
+        "Gaps between pickets must be visible from the game camera, because you can see through a fence and that matters for stealth",
+        "Posts at the tile edges so a run does not show doubled posts"
+      ],
+      "palette_hint": ["wood_light", "wood_mid", "wood_dark"]
+    },
+    {
+      "name": "hedge_straight_1m",
+      "title": "Hedge (1 m)",
+      "batch": "lab", "order": 19,
+      "pivot": "corner", "fit": "within",
+      "size": [8, 8, 10],
+      "brief": "1 m of trimmed hedge, 1 m deep and 1.25 m tall. The opaque counterpart to the fence: same height, but you cannot see through it. That contrast is a gameplay rule expressed purely in art.",
+      "must": [
+        "Exactly 8 wide with flat left/right edges for tiling",
+        "Visually solid — no see-through gaps, this is the whole point versus the fence",
+        "Silhouette must be slightly irregular on top so a long run does not read as an extruded rectangle",
+        "Irregularity must still tile with itself"
+      ],
+      "palette_hint": ["foliage_dark", "grass_dark", "foliage_light"]
+    },
+    {
+      "name": "bush_large",
+      "title": "Large bush (hiding spot)",
+      "batch": "lab", "order": 20,
+      "pivot": "footprint_center", "fit": "within",
+      "size": [12, 12, 10],
+      "brief": "A 1.5 m round bush big enough for a character to hide inside. This is a gameplay object dressed as scenery, so it must be visually distinguishable from decorative shrubs — the player has to learn 'that shape means I can hide there'.",
+      "must": [
+        "At least 12 x 12 footprint and 10 tall so a 14-voxel character crouching is plausibly concealed",
+        "Rounded silhouette, distinct from the flat-topped hedge",
+        "Lighter or more saturated than hedge_straight_1m so it reads as a different class of object"
+      ],
+      "palette_hint": ["foliage_light", "foliage_dark", "grass_dark"]
+    },
+    {
+      "name": "tree_deciduous_small",
+      "title": "Small deciduous tree",
+      "batch": "lab", "order": 21,
+      "pivot": "footprint_center", "fit": "within",
+      "size": [24, 24, 32],
+      "brief": "A 3 x 3 m, 4 m tall tree. Trees will be faded or cut away when they cover the player, so build the canopy as one or two solid masses — never as individual leaves.",
+      "must": [
+        "Trunk and canopy as separate simple masses; no per-leaf modelling",
+        "Canopy silhouette irregular enough to not read as a sphere",
+        "Trunk centred on the footprint so the pivot lands in it",
+        "Must look acceptable when the canopy is faded to 40 percent opacity"
+      ],
+      "palette_hint": ["wood_dark", "foliage_dark", "foliage_light", "grass_dark"]
+    },
+    {
+      "name": "mailbox",
+      "title": "Mailbox",
+      "batch": "lab", "order": 22,
+      "pivot": "footprint_center", "fit": "within",
+      "size": [3, 4, 8],
+      "brief": "Roadside mailbox on a post, 1 m tall. The smallest prop in the lab, included specifically to find the floor of what is worth modelling at this scale.",
+      "must": [
+        "Exactly 8 tall (1 m)",
+        "Box reads as a box from above, not as a blob",
+        "If this does not read, say so — that is a useful result, not a failure"
+      ],
+      "palette_hint": ["grey_mid", "red", "wood_dark", "ink"]
+    },
+    {
+      "name": "car_sedan",
+      "title": "Sedan",
+      "batch": "lab", "order": 23,
+      "pivot": "vehicle", "fit": "within",
+      "size": [14, 32, 12],
+      "brief": "1.75 x 4 x 1.5 m family car. Cars are the largest props in the level and set the upper bound on prop legibility. Recolours will provide all the variety, so keep the body shape neutral.",
+      "must": [
+        "Exactly 32 long (4 m) and no more than 12 tall (1.5 m)",
+        "Windows in the glass colour so it reads as a car and not a loaf, from directly above",
+        "Faces +Y (front of car toward +Y)",
+        "Body colour confined to a small number of voxels' worth of distinct regions so recolouring is trivial"
+      ],
+      "palette_hint": ["blue", "glass", "ink", "grey_light"]
+    },
+    {
+      "name": "wall_exterior_broken_a",
+      "title": "Exterior wall, broken (variant A)",
+      "batch": "lab", "order": 24,
+      "pivot": "corner", "fit": "within",
+      "size": [8, 2, 22],
+      "brief": "The blown-out version of wall_exterior_straight_1m, built now rather than months later. Swapping straight-to-broken is the entire Tier 2/3 destruction mechanic, and the swap only sells if the two pieces share exact footprint and colour.",
+      "must": [
+        "Same 8 x 2 footprint and same colours as wall_exterior_straight_1m",
+        "Roughly the lower third survives; the break edge is jagged and irregular",
+        "Break must not extend past the 8 x 2 footprint — no debris modelled in, debris is separate",
+        "Exposed interior structure (studs, brick core) in a contrasting colour sells the damage more than the jagged edge does"
+      ],
+      "palette_hint": ["bone", "wood_mid", "grey_dark", "ink"]
+    }
+  ]
+}
