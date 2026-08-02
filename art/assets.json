@@ -27,12 +27,12 @@
       "title": "Base civilian character",
       "batch": "lab", "order": 2,
       "pivot": "feet", "fit": "within",
-      "size": [5, 4, 14],
+      "size": [5, 3, 14],
       "brief": "The body every character in the game is built from. Neutral clothing, neutral pose, standing straight, arms at sides, facing -Y (toward the camera). This is not a character, it is the mannequin. Roles get added later as colour and accessories on top of this exact silhouette.",
       "must": [
         "Exactly 14 voxels tall (1.75 m) — this is the number the entire game is calibrated to",
         "Head roughly 4 x 4 x 4 at the top",
-        "Shoulders 5 wide, body 4 deep",
+        "Shoulders 5 wide, body 3 deep — 4 makes the legs read as slabs",
         "Readable as a person at 23 screen pixels tall — test by squinting",
         "Face detail is a waste at this size; a suggestion of eyes at most",
         "Feet centred on the model's X/Y centre so the pivot lands between them"

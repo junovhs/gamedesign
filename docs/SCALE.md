@@ -106,9 +106,12 @@ things, not for surveying the whole board.
 | Short adult | 13 | 1.625 |
 | Tall adult | 15 | 1.875 |
 | Shoulder width | 5 | 0.625 |
-| Body depth | 4 | 0.5 |
+| Body depth | **3** | 0.375 |
 | Head | ~4 x 4 x 4 | 0.5 cube |
 | Head clearance under a door | 2 | 0.25 |
+
+Body depth is **3, not 4**. Four was tried on 2026-08-02 and the legs read as slabs — a
+1-voxel-wide leg 4 deep is a plank. Three gives enough solidity from above without that.
 
 One shared body and one shared skeleton for every character in the game. Role identity
 comes from **colour, silhouette and accessories** — never from a unique body model.
