@@ -142,8 +142,11 @@ def check(asset, model, palette, strict, preview=False):
             raise Problem(msg)
         warnings.append(msg)
 
-    if name == "char_civilian_base" and got[2] != 14:
-        fail(f"character is {got[2]} voxels tall; it must be exactly 14")
+    # The base character's height is the number every other dimension in the
+    # game is calibrated against, so it is exact even though its fit is
+    # "within" (the body may be narrower and shallower than its box).
+    if name == "char_civilian_base" and got[2] != want[2]:
+        fail(f"character is {got[2]} voxels tall; it must be exactly {want[2]}")
 
     return warnings
 

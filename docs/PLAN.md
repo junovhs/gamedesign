@@ -37,8 +37,13 @@ readability and pacing, not for art.
 
 ## Phase 1 — the scale lab  ← WE ARE HERE
 
-**The question:** does 8 voxels per metre, a 14-voxel character, and a near-overhead
-orthographic camera produce a level that is legible and appealing at 640 x 360?
+**The question:** does 20 voxels per metre, a 36-voxel character, and an orbiting overhead
+orthographic camera produce a level that is legible and appealing at 1920 x 1080?
+
+> Revised 2026-08-02. The original spec's 8 vox/m at 640 x 360 was chosen before anything
+> had been rendered. It could not express a hat brim, a collar or a badge — there were no
+> voxels to put them in — and its 14-voxel character was half the size of the reference art
+> Juno actually wants to make. 20 vox/m makes his 36-row grid art map 1:1.
 
 **What exists already:**
 
@@ -64,8 +69,10 @@ at it in the lab.
 
 **Exit checklist.** Phase 1 ends when, looking at the lab at 640 x 360:
 
-- [x] A character reads as a person and does not look miniature — at 35 degrees, with a
-      4-voxel body depth. Confirmed 2026-08-02 on char_civilian_base.
+- [x] A character reads as a person and does not look miniature — at 35 degrees, with body
+      depth near 0.22 of height. Confirmed 2026-08-02.
+- [ ] Re-confirm character readability at 20 vox/m, on art authored at that density rather
+      than resampled up from the old grid.
 - [ ] A dining chair is identifiable as a chair.
 - [ ] A doorway is obvious without a marker on it.
 - [ ] Furniture does not overwhelm a 4 x 5 m room.

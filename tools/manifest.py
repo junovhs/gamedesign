@@ -19,7 +19,7 @@ PIVOTS = {
     "vehicle": "centre of footprint, at ground level",
 }
 
-VOXELS_PER_METRE = 8
+VOXELS_PER_METRE = 20
 
 
 def hex_to_rgba(h):

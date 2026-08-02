@@ -14,16 +14,22 @@ scene, or script may contradict it.
 | Thing | Value |
 |---|---|
 | Godot world unit | **1 unit = 1 metre** |
-| Art voxel | **0.125 m** |
-| Voxel density | **8 voxels per metre** |
-| Structural grid (walls, floors, rooms) | 0.5 m |
-| Architecture module increments | 1 m |
-| Fine prop placement grid | 0.25 m |
-| Vertical elevation increments | 0.25 m |
+| Art voxel | **0.05 m** |
+| Voxel density | **20 voxels per metre** |
+| Structural grid (walls, floors, rooms) | 0.5 m = 10 vox |
+| Architecture module increments | 1 m = 20 vox |
+| Fine prop placement grid | 0.25 m = 5 vox |
+| Vertical elevation increments | 0.25 m = 5 vox |
 | Architecture rotation | 90° only |
 | Loose-prop rotation | 45° allowed |
 
-An object 8 voxels long is exactly 1 metre in game.
+An object 20 voxels long is exactly 1 metre in game.
+
+> **20 was chosen to match the artist's grid.** Juno's reference characters are 36 rows
+> tall (2026-08-02); at 20 vox/m that is exactly 1.8 m, so pixel-grid art maps to voxels
+> 1:1 with no re-derivation. 16 and 24 vox/m were both checked: 16 gives only a 28-voxel
+> character, and 24 cannot express 1.8 m in whole voxels. The one casualty is the old
+> 0.125 m interior wall, which becomes 0.15 m (3 voxels).
 
 **Voxels are visual only.** Navigation, interaction radii, sound, and all gameplay logic
 work in metres. Never write a rule in voxels.
@@ -31,14 +37,15 @@ work in metres. Never write a rule in voxels.
 ## 2. Render target and camera
 
 ```
-Internal render resolution   640 x 360
-Upscale                      nearest-neighbour, integer where possible
+Internal render resolution   1920 x 1080  (native; no pixel-art downsample)
+Anti-aliasing                MSAA 4x
 Projection                   orthographic
 Default camera pitch         -55deg  (35deg off straight down)   DECIDED 2026-08-02
 Pitch range                  -70deg .. -25deg  (20deg .. 65deg off straight down)
 Yaw                          free; snaps to 90deg steps for level authoring
 Roll                         0, always
-Orthographic size            27 (vertical units; = 48 m of screen width)
+Default orthographic size    18 (= 32 m of screen width)
+Zoom range                   12 .. 27 (21 m .. 48 m of screen width)
 Near / far                   0.05 / 200
 ```
 
@@ -65,18 +72,24 @@ three-quarter angle is a thing we want. 35° is the *default resting* angle, not
 - Judge assets at the default 35° *and* at a low three-quarter angle before accepting them.
   `tools/` renders any tilt; use it.
 
-Derived **at the default camera** (640 x 360, orthographic size 27, 55° below horizontal).
-These shift as the camera tilts, so treat them as the resting case, not as invariants:
+Derived **at the default camera** (1920 x 1080, orthographic size 18, 55° below horizontal).
+These shift as the camera zooms and tilts, so treat them as the resting case:
 
 | | |
 |---|---|
-| Visible ground area | **48 m wide x 33 m deep** |
-| 1 m horizontally (screen X) | **13.3 px** |
-| 1 m of *height* (vertical faces) | **7.7 px** — foreshortened by cos 55° |
-| 1 m of ground *depth* | **10.9 px** — foreshortened by sin 55° |
-| A 1.75 m character | **13 px** of body height, plus ~5 px of head top ≈ **19 px** overall |
-| 1 art voxel, top face | **~1.4 px** |
-| 1 art voxel, vertical face | **~1.0 px** |
+| Visible ground area | **32 m wide x 22 m deep** |
+| 1 m horizontally (screen X) | **60 px** |
+| 1 m of *height* (vertical faces) | **34 px** — foreshortened by cos 55° |
+| 1 m of ground *depth* | **49 px** — foreshortened by sin 55° |
+| A 1.8 m character | **62 px** of body height, plus the head top |
+| 1 art voxel, top face | **~2.5 px** |
+| 1 art voxel, vertical face | **~1.7 px** |
+
+> **Resolution and density only pay off together, and only if the camera comes closer.**
+> Raising density 2.5x and resolution 3x while still showing 48 m of level would have left
+> voxels at ~2 px — barely different from before. The default view is therefore **32 m
+> wide, not 48**. The full 48 m level still fits when zoomed out (orthographic size 27);
+> that is a survey view, not the resting one.
 
 > **At the default angle, top faces read almost 50% larger than vertical ones** — a
 > 1-voxel feature on a wall is one screen pixel. So the *first* place to spend detail is
@@ -88,8 +101,9 @@ These shift as the camera tilts, so treat them as the resting case, not as invar
 
 | | Metres | Art voxels |
 |---|---|---|
-| Target first-level footprint | 48 x 27 | 384 x 216 |
-| Maximum that fits the frame at the default angle | 48 x 33 | 384 x 264 |
+| Target first-level footprint | 48 x 27 | 960 x 540 |
+| Default *view* (orthographic size 18) | 32 x 22 | 640 x 440 |
+| Survey view, whole level (orthographic size 27) | 48 x 33 | 960 x 660 |
 
 Width is the binding constraint: 48 m is exactly the screen width at orthographic size 27.
 The 35 degree default tilt buys depth for free — 33 m of ground fits in the same 27 units of
@@ -102,16 +116,17 @@ things, not for surveying the whole board.
 
 | Element | Voxels | Metres |
 |---|---:|---:|
-| Average adult height | 14 | 1.75 |
-| Short adult | 13 | 1.625 |
-| Tall adult | 15 | 1.875 |
-| Shoulder width | 5 | 0.625 |
-| Body depth | **3** | 0.375 |
-| Head | ~4 x 4 x 4 | 0.5 cube |
-| Head clearance under a door | 2 | 0.25 |
+| Average adult height | **36** | 1.80 |
+| Short adult | 34 | 1.70 |
+| Tall adult | 38 | 1.90 |
+| Shoulder width | 14 | 0.70 |
+| Body depth | **8** | 0.40 |
+| Head | ~8 x 8 x 8 | 0.40 cube |
+| Head clearance under a door | 5 | 0.25 |
 
-Body depth is **3, not 4**. Four was tried on 2026-08-02 and the legs read as slabs — a
-1-voxel-wide leg 4 deep is a plank. Three gives enough solidity from above without that.
+Body depth is **8, about 0.22 of height**. That ratio was found the hard way at the old
+density: 4-in-14 made the legs read as slabs, 3-in-14 was right. Keep the ratio, not the
+old number.
 
 One shared body and one shared skeleton for every character in the game. Role identity
 comes from **colour, silhouette and accessories** — never from a unique body model.
@@ -145,7 +160,7 @@ Nothing below 3 x 3 m except closets, toilets and utility spaces — NPC routine
 to pass furniture without navigation fights.
 
 > **Doorway modules are 2 m wide, not 1 m.** A 1 m module with a 1 m opening is not a wall.
-> `wall_*_doorway_2m` = 16 voxels wide with the 8-voxel opening centred.
+> `wall_*_doorway_2m` = 40 voxels wide with the 20-voxel opening centred.
 
 ## 6. Residential lot
 
@@ -200,9 +215,17 @@ The class is declared per asset in `art/assets.json`; the build reads it.
 
 ## 9. Detail and materials
 
-- Anything **gameplay-relevant** is at least **2 voxels thick** or carries strong colour contrast.
-- 1-voxel detail is fine for handles, trim, buttons, highlights, clothing accents, signs.
-- Do **not** cover surfaces in 1-voxel noise. At ~1 screen px per voxel it becomes static.
+**Density is a budget you spend selectively, not an obligation.** 20 vox/m exists so that
+detail is *available* where it earns its place — a hat brim with a curve, a badge, a
+collar, a door handle — while everything else stays deliberately blocky. A chunky wall next
+to a finely-made hat is the intended look, not an inconsistency. Resist the urge to detail
+a surface just because there is now room to.
+
+- Anything **gameplay-relevant** reads by silhouette and colour first, detail second.
+- Spend detail on: faces, hats, uniforms and insignia, door furniture, anything the player
+  must identify at a glance to make a decision.
+- Keep blocky: walls, floors, ground, hedges, plain furniture, bulk architecture.
+- Do **not** cover surfaces in 1-voxel noise. It still becomes static, just finer static.
 - **Never put distinguishing detail inside a 1 m ground tile.** Measured 2026-08-02: four
   dark voxels in an 8x8 grass tile stamped a plainly visible 1 m grid across a 12 x 12 m
   field, and random 90-degree rotation did not break it up. A repeated tile can only carry
@@ -217,17 +240,17 @@ The class is declared per asset in `art/assets.json`; the build reads it.
 
 | Prop | Voxels (X x Y x Z) | Metres |
 |---|---:|---:|
-| Dining chair | 4 x 4 x 7 | 0.5 x 0.5 x 0.875 |
-| Dining table | 8 x 12 x 6 | 1 x 1.5 x 0.75 |
-| Single bed | 8 x 16 x 5 | 1 x 2 x 0.625 |
-| Double bed | 12 x 16 x 5 | 1.5 x 2 x 0.625 |
-| Sofa (2-seat) | 16 x 7 x 7 | 2 x 0.875 x 0.875 |
-| Kitchen counter (1 m) | 8 x 5 x 7 | 1 x 0.625 x 0.875 |
-| Wardrobe | 8 x 5 x 16 | 1 x 0.625 x 2 |
-| Trash bin | 4 x 4 x 7 | 0.5 x 0.5 x 0.875 |
-| Mailbox | 3 x 4 x 8 | 0.375 x 0.5 x 1 |
-| Sedan | 14 x 32 x 12 | 1.75 x 4 x 1.5 |
-| Service van | 16 x 40 x 18 | 2 x 5 x 2.25 |
+| Dining chair | 10 x 10 x 18 | 0.5 x 0.5 x 0.9 |
+| Dining table | 20 x 30 x 15 | 1 x 1.5 x 0.75 |
+| Single bed | 20 x 40 x 13 | 1 x 2 x 0.65 |
+| Double bed | 30 x 40 x 13 | 1.5 x 2 x 0.65 |
+| Sofa (2-seat) | 40 x 18 x 18 | 2 x 0.9 x 0.9 |
+| Kitchen counter (1 m) | 20 x 13 x 18 | 1 x 0.65 x 0.9 |
+| Wardrobe | 20 x 13 x 40 | 1 x 0.65 x 2 |
+| Trash bin | 10 x 10 x 18 | 0.5 x 0.5 x 0.9 |
+| Mailbox | 8 x 10 x 20 | 0.4 x 0.5 x 1 |
+| Sedan | 35 x 80 x 30 | 1.75 x 4 x 1.5 |
+| Service van | 40 x 100 x 45 | 2 x 5 x 2.25 |
 
 The model need not fill its box, but its **declared footprint and pivot must match** the box.
 

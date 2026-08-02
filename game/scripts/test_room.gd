@@ -18,7 +18,7 @@ const PALETTE := "res://assets/palette.json"
 
 const WALL_H := 2.75          ## docs/SCALE.md section 5
 const WALL_EXT := 0.25
-const WALL_INT := 0.125
+const WALL_INT := 0.15
 const SLAB := 0.25
 
 ## House occupies x 0..7, z -12..-3. Street runs along +z from the front yard.
@@ -36,7 +36,7 @@ func _ready() -> void:
 	var tilt: float = float(args[3]) if args.size() > 3 else 35.0
 	var yaw: float = float(args[4]) if args.size() > 4 else 0.0
 	var roof_on: bool = args.size() > 5 and args[5] == "roof"
-	var zoom: float = float(args[6]) if args.size() > 6 else 16.0
+	var zoom: float = float(args[6]) if args.size() > 6 else 18.0
 
 	_load_palette()
 	_build_ground()
