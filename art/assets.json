@@ -38,18 +38,19 @@
       "pivot": "feet",
       "fit": "within",
       "size": [
-        14,
-        8,
+        15,
+        9,
         36
       ],
-      "brief": "The body every character in the game is built from. Neutral clothing, neutral pose, standing straight, arms at sides, facing -Y (toward the camera). This is not a character, it is the mannequin. Roles get added later as colour and accessories on top of this exact silhouette.",
+      "brief": "The body every character in the game is built from. Deliberately chunky: one solid 9-voxel head block, plain slab limbs, no sculpted face. Detail arrives later as separate modular pieces \u2014 hats, hair, collars, accessories \u2014 not by carving this. Neutral clothing, standing straight, arms at sides, facing -Y. This is the mannequin, not a character.",
       "must": [
-        "Exactly 14 voxels tall (1.75 m) \u2014 this is the number the entire game is calibrated to",
-        "Head roughly 8 x 8 x 8 at the top",
-        "Shoulders 5 wide, body 3 deep \u2014 4 makes the legs read as slabs",
-        "Readable as a person at 23 screen pixels tall \u2014 test by squinting",
-        "Face detail is a waste at this size; a suggestion of eyes at most",
-        "Feet centred on the model's X/Y centre so the pivot lands between them"
+        "Exactly 36 voxels tall (1.8 m) \u2014 this is the number the entire game is calibrated to",
+        "Head is a solid 9 x 9 x 9 block, about a quarter of total height. Chunky on purpose",
+        "Face carries at most two eye voxels. No nose, no jaw shading, no brow \u2014 that is the 'advanced shit' and it is not wanted here",
+        "Shoulders 15 wide, torso 7 wide, arms 3 wide each side",
+        "Leave real air between arm and torso below the shoulder \u2014 that gap is what makes the figure read as a person",
+        "Legs are two plain blocks with a gap; shoes are two plain blocks",
+        "Readable as a person at ~60 screen pixels tall by silhouette alone"
       ],
       "palette_hint": [
         "skin_mid",

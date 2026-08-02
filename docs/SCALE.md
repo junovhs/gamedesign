@@ -119,14 +119,21 @@ things, not for surveying the whole board.
 | Average adult height | **36** | 1.80 |
 | Short adult | 34 | 1.70 |
 | Tall adult | 38 | 1.90 |
-| Shoulder width | 14 | 0.70 |
+| Shoulder width | 15 | 0.75 |
 | Body depth | **8** | 0.40 |
-| Head | ~8 x 8 x 8 | 0.40 cube |
+| Head | **9 x 9 x 9, solid** | 0.45 cube |
 | Head clearance under a door | 5 | 0.25 |
 
 Body depth is **8, about 0.22 of height**. That ratio was found the hard way at the old
 density: 4-in-14 made the legs read as slabs, 3-in-14 was right. Keep the ratio, not the
 old number.
+
+**The base body is deliberately chunky and stays that way.** The head is one solid block
+at about a quarter of total height, limbs are plain slabs, and the face carries at most two
+eye voxels. A sculpted face was tried on 2026-08-02 and rejected: it is fiddly to author,
+it fights the blocky architecture, and it is not what the reference art looks like.
+Character identity comes from **separate modular pieces** — hats, hair, collars,
+accessories, colour — added on top, never by carving the base.
 
 One shared body and one shared skeleton for every character in the game. Role identity
 comes from **colour, silhouette and accessories** — never from a unique body model.
