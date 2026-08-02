@@ -20,9 +20,13 @@ not type commands. He has said outright he is never going to.
 - To hand over an art task: `python3 tools/open_task.py <name>` — it copies the guide to
   its final path in `art/src/` and spawns the goxel window on `DISPLAY=:1`. Juno draws
   inside the magenta cage and presses **Ctrl+S**. No save-as dialog, ever.
-- Then Claude runs `tools/build.py`, renders, and **shows him a picture**. If you want him
-  to look at something, produce an image and put it in front of him. Never say "open the
-  lab and have a look".
+- Then Claude runs `tools/build.py`, renders, and **shows him the picture**:
+  `python3 tools/show.py <img>:<caption> ...` builds a labelled contact sheet and opens it
+  in his image viewer.
+  **Markdown image links in the terminal show him nothing.** Embedding `![](path)` in a
+  reply is the same as showing him nothing at all, and citing a file path is worse — he is
+  not going to go and open it. If there is something to look at, `tools/show.py` it.
+  Never say "open the lab and have a look".
 - Screenshot a running GUI with `DISPLAY=:1 import -window $(DISPLAY=:1 xdotool search
   --name goxel | head -1) out.png` to check what he is actually seeing.
 - Never `pkill -f "goxel art/"` or similar — the pattern matches the launching shell's own
