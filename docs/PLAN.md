@@ -55,7 +55,8 @@ at it in the lab.
 
 **Exit checklist.** Phase 1 ends when, looking at the lab at 640 x 360:
 
-- [x] A character reads as a person and does not look miniature — at 35 degrees.
+- [x] A character reads as a person and does not look miniature — at 35 degrees, with a
+      4-voxel body depth. Confirmed 2026-08-02 on char_civilian_base.
 - [ ] A dining chair is identifiable as a chair.
 - [ ] A doorway is obvious without a marker on it.
 - [ ] Furniture does not overwhelm a 4 x 5 m room.

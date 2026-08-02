@@ -55,12 +55,21 @@ SRC_EXTENSIONS = (".gox", ".vox")
 
 
 def src_path(a):
-    """Where the artist's file lives — .gox if present, else the .vox guide copy."""
-    for ext in SRC_EXTENSIONS:
-        p = os.path.join(SRC, a["name"] + ext)
-        if os.path.exists(p):
-            return p
-    return os.path.join(SRC, a["name"] + SRC_EXTENSIONS[0])
+    """The artist's current file for this asset: whichever candidate is newest.
+
+    Both extensions legitimately coexist — a .vox working copy planted by
+    open_task, a .gox saved over it by goxel, a .vox written back by a tool like
+    thicken.py. Newest-wins is the only rule that stays right in all three cases;
+    preferring an extension silently resurrects stale work.
+    """
+    existing = [
+        p
+        for p in (os.path.join(SRC, a["name"] + e) for e in SRC_EXTENSIONS)
+        if os.path.exists(p)
+    ]
+    if not existing:
+        return os.path.join(SRC, a["name"] + SRC_EXTENSIONS[0])
+    return max(existing, key=os.path.getmtime)
 
 
 def guide_path(a):
