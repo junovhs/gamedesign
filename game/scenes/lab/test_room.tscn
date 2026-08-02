@@ -1,0 +1,82 @@
+[gd_scene load_steps=5 format=3 uid="uid://bgg0testroom01"]
+
+[ext_resource type="Script" path="res://scripts/test_room.gd" id="1_tr"]
+
+[sub_resource type="ProceduralSkyMaterial" id="Sky_1"]
+sky_top_color = Color(0.35, 0.52, 0.78, 1)
+sky_horizon_color = Color(0.72, 0.78, 0.84, 1)
+sky_curve = 0.18
+ground_bottom_color = Color(0.28, 0.3, 0.28, 1)
+ground_horizon_color = Color(0.64, 0.66, 0.62, 1)
+sun_angle_max = 12.0
+sun_curve = 0.12
+
+[sub_resource type="Sky" id="SkyRes_1"]
+sky_material = SubResource("Sky_1")
+
+[sub_resource type="Environment" id="Env_1"]
+background_mode = 2
+sky = SubResource("SkyRes_1")
+ambient_light_source = 3
+ambient_light_sky_contribution = 0.35
+ambient_light_color = Color(0.85, 0.86, 0.88, 1)
+ambient_light_energy = 0.9
+tonemap_mode = 2
+tonemap_white = 2.0
+ssao_enabled = true
+ssao_radius = 0.5
+ssao_intensity = 2.2
+ssao_power = 1.6
+ssao_detail = 0.6
+glow_enabled = false
+
+[node name="TestRoom" type="Node3D"]
+script = ExtResource("1_tr")
+
+[node name="Ground" type="Node3D" parent="."]
+[node name="Street" type="Node3D" parent="."]
+[node name="House" type="Node3D" parent="."]
+[node name="Furniture" type="Node3D" parent="."]
+[node name="Yard" type="Node3D" parent="."]
+[node name="Destruction" type="Node3D" parent="."]
+[node name="People" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+projection = 1
+size = 22.0
+near = 0.05
+far = 400.0
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.81915, 0, 0.57358, 0.49673, 0.5, -0.70941, -0.28679, 0.86603, 0.40958, 0, 30, 0)
+light_color = Color(1, 0.96, 0.89, 1)
+light_energy = 1.9
+shadow_enabled = true
+directional_shadow_mode = 2
+directional_shadow_split_1 = 0.05
+directional_shadow_split_2 = 0.15
+directional_shadow_split_3 = 0.4
+directional_shadow_blend_splits = true
+shadow_bias = 0.04
+shadow_normal_bias = 1.0
+shadow_blur = 0.6
+directional_shadow_max_distance = 60.0
+
+[node name="InteriorLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.6, 2.4, -5.5)
+light_color = Color(1, 0.85, 0.62, 1)
+light_energy = 3.5
+omni_range = 8.0
+omni_attenuation = 1.6
+shadow_enabled = true
+
+[node name="BedroomLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.2, 2.4, -10.0)
+light_color = Color(1, 0.82, 0.6, 1)
+light_energy = 2.4
+omni_range = 6.0
+omni_attenuation = 1.6
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_1")

@@ -44,10 +44,17 @@ orthographic camera produce a level that is legible and appealing at 640 x 360?
 
 - `docs/SCALE.md` — provisional numbers for everything.
 - The Godot project (`game/`) at the real render resolution and camera.
-- The scale lab scene, which draws a **ghost box at the declared size for every asset in
-  the manifest**, with a 1.75 m reference figure at each station. So the lab is useful
-  *before any art exists* — you can already walk the board and judge whether the sizes
-  are sane.
+- **`scenes/lab/test_room.tscn` — the scale-lock test scene the brief asks for.** One
+  assembled corner of the world at the exact SCALE.md dimensions: a 7 x 9 m house with a
+  1.5 m corridor and two rooms, doorway and window openings, a staircase, furniture, the
+  full street cross-section, a yard, a car, and an intact/broken wall pair. Real models
+  are used where they exist; everything else is a flat box at its exact specified size, so
+  the scene works now and sharpens as assets land. Renders with or without its roof, at
+  any tilt and yaw.
+- `scenes/lab/tile_field.tscn` — one asset laid out as a 12 x 12 m field with a subject on
+  it, for judging tiling and single-asset readability.
+- `scenes/lab/scale_lab.tscn` — every asset in the manifest as a ghost box at its declared
+  size, useful for sanity-checking dimensions before art exists.
 - The goxel → glTF pipeline, verified end to end (`docs/PIPELINE.md`).
 - 24 asset guide files, one per lab asset, pre-built with brackets and a scale figure.
 
