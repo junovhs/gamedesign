@@ -35,7 +35,7 @@ def show(a, batches):
     print(BAR)
     print()
     print(f"  SIZE      {w} x {d} x {h} voxels   ({mw} x {md} x {mh} m)")
-    print(f"            X = width, Y = depth, Z = up.  8 voxels = 1 metre.")
+    print(f"            X = width, Y = depth, Z = up.  {manifest.VOXELS_PER_METRE} voxels = 1 metre.")
     print(f"  FIT       {a['fit']}", end="")
     if a["fit"] == "exact":
         print("  — must fill the box on all three axes, no more, no less")
@@ -68,7 +68,7 @@ def show(a, batches):
     print()
     print("  JUNO: draw it")
     print(f"    Build inside the magenta brackets. The cyan figure beside the box")
-    print(f"    is 1.75 m tall; the cyan floor lines are 1 m apart. Leave the guide")
+    print(f"    is 1.8 m tall; the cyan floor lines are 1 m apart. Leave the guide")
     print(f"    colours alone — they are stripped automatically.")
     print(f"    Save over:  {rel(manifest.src_path(a))}")
     print()
