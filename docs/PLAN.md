@@ -55,13 +55,14 @@ at it in the lab.
 
 **Exit checklist.** Phase 1 ends when, looking at the lab at 640 x 360:
 
-- [ ] A character reads as a person and does not look miniature.
+- [x] A character reads as a person and does not look miniature — at 35 degrees.
 - [ ] A dining chair is identifiable as a chair.
 - [ ] A doorway is obvious without a marker on it.
 - [ ] Furniture does not overwhelm a 4 x 5 m room.
 - [ ] Individual voxels are still visible — it does not mush into smooth shapes.
 - [ ] Uniform colours are distinguishable at character size.
-- [ ] The camera tilt is decided (sweep it with `[` and `]`).
+- [x] **The camera tilt is decided: 35 degrees off straight down** (2026-08-02). Measured,
+      not chosen — at the brief's suggested 15 degrees a character is an unreadable blob.
 - [ ] A 48 x 27 m boundary fits on screen and still reads.
 - [ ] Walls do not hide the activity behind them.
 - [ ] The intact/broken wall swap is convincing.

@@ -13,7 +13,7 @@ extends Node3D
 
 const MODEL_DIR := "res://assets/models/"
 const FIELD := 12          ## metres per side of the ground field
-const DEFAULT_TILT := 15.0
+const DEFAULT_TILT := 35.0
 const DEFAULT_GROUND := "ground_grass_1x1m"
 
 ## Where subject copies stand, in metres from the field's near-left corner.

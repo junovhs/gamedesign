@@ -1,7 +1,7 @@
 {
  "_generated_by": "tools/gen_lab.py \u2014 do not edit, edit art/assets.json",
  "voxels_per_metre": 8,
- "camera_tilt_degrees": 15.0,
+ "camera_tilt_degrees": 35.0,
  "batches": {
   "lab": "Phase 1 \u2014 the scale lab. Everything needed to answer 'does this scale read?' Nothing here is final art; it is production-quality blockout that we keep if it reads.",
   "kit": "Phase 2 \u2014 the minimum modular kit. Not started until the lab passes.",

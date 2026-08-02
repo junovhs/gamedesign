@@ -28,7 +28,7 @@ var _manifest: Dictionary = {}
 var _stations: Array[Dictionary] = []
 var _focus := 0
 var _overview := false
-var _tilt_degrees := 15.0    ## degrees off straight down
+var _tilt_degrees := 35.0    ## degrees off straight down
 var _ortho_size := 6.0
 
 
@@ -51,7 +51,7 @@ func _load_manifest() -> void:
 		push_error("%s is not valid JSON" % MANIFEST)
 		return
 	_manifest = parsed
-	_tilt_degrees = float(_manifest.get("camera_tilt_degrees", 15.0))
+	_tilt_degrees = float(_manifest.get("camera_tilt_degrees", 35.0))
 
 
 # -- construction ----------------------------------------------------------

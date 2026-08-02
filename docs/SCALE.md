@@ -34,34 +34,49 @@ work in metres. Never write a rule in voxels.
 Internal render resolution   640 x 360
 Upscale                      nearest-neighbour, integer where possible
 Projection                   orthographic
-Camera pitch                 -75deg  (15deg off straight down)
+Camera pitch                 -55deg  (35deg off straight down)   DECIDED 2026-08-02
 Camera yaw                   0deg    axis-aligned, never rotated by the player
 Camera roll                  0
-Orthographic size            27 (vertical metres visible)
+Orthographic size            27 (vertical units; = 48 m of screen width)
 Near / far                   0.05 / 200
 ```
 
-> A small tilt off straight-down is what lets you see the *fronts* of characters,
-> counters, beds and cars while keeping the level legible as a map. Yaw is zero so the
-> level grid stays axis-aligned to the screen, matching `docs/concept/image-ref.png`.
+> **35° was measured, not chosen.** The source brief recommended 12-15° off straight
+> overhead. Rendering the first real character through the actual camera showed that at
+> 15° a 1.75 m person is the top of a head and nothing else — unreadable. A body only
+> resolves from about 25° and reads clearly at 35°. See the sweep that settled it.
 >
-> **The exact tilt is the one number the scale lab exists to decide.** 15° is the starting
-> guess. The lab has a live tilt sweep (`[` and `]`) from 0° to 45°; pick the angle where
-> a chair still reads and a doorway is still obvious, then write it here and stop.
-> Every asset is authored to read at that one angle.
+> The cost is occlusion: at 35° tall walls hide a lot of what is behind them, so
+> **cutaway roofs and wall-hiding are load-bearing systems, not polish.**
+>
+> Yaw is zero so the level grid stays axis-aligned to the screen, matching
+> `docs/concept/image-ref.png`. Every asset is authored to read at this one angle.
 
-Derived, at 48 x 27 m on a 640 x 360 render:
+Derived, at 640 x 360 with orthographic size 27 and 55° below horizontal:
 
-- 1 metre ≈ **13.3 screen pixels**
-- a 1.75 m character ≈ **23 px tall**
-- 1 art voxel ≈ **1.6 screen pixels**
+| | |
+|---|---|
+| Visible ground area | **48 m wide x 33 m deep** |
+| 1 m horizontally (screen X) | **13.3 px** |
+| 1 m of *height* (vertical faces) | **7.7 px** — foreshortened by cos 55° |
+| 1 m of ground *depth* | **10.9 px** — foreshortened by sin 55° |
+| A 1.75 m character | **13 px** of body height, plus ~5 px of head top ≈ **19 px** overall |
+| 1 art voxel, top face | **~1.4 px** |
+| 1 art voxel, vertical face | **~1.0 px** |
+
+> **Detail on vertical faces is nearly invisible; top faces read almost 50% larger.**
+> Spend detail on what faces the sky. A 1-voxel feature on a wall is one screen pixel.
 
 ## 3. Level footprint
 
 | | Metres | Art voxels |
 |---|---|---|
 | Target first-level footprint | 48 x 27 | 384 x 216 |
-| Hard maximum single-screen level | 56 x 31.5 | 448 x 252 |
+| Maximum that still fits the frame | 48 x 33 | 384 x 264 |
+
+Width is the binding constraint: 48 m is exactly the screen width at orthographic size 27.
+The 35 degree tilt buys depth for free — 33 m of ground fits in the same 27 units of screen
+height — so a level may be deeper than it is wide-looking, but never wider than 48 m.
 
 ## 4. Character scale
 
@@ -146,9 +161,8 @@ Canonical residential cross-section (building face to building face = **15.5 m**
 ## 8. Pivots — get these right or you will rebuild everything
 
 Goxel has no pivot control, so the pivot is defined by **where the model sits in the goxel
-grid**. The export tool (`tools/export.sh`) reads the model's bounding box and applies the
-rule below. Author with the model's footprint starting at goxel origin `(0,0,0)` and growing
-in `+X`, `+Y`, `+Z`, and the tool does the rest.
+grid**. `tools/build.py` reads the model's bounding box and applies the rule below. Build
+inside the guide cage and the build does the rest.
 
 | Asset class | Pivot |
 |---|---|
@@ -159,19 +173,19 @@ in `+X`, `+Y`, `+Z`, and the tool does the rest.
 | Characters | centre between the feet |
 | Vehicles | centre of footprint, at ground level |
 
-Declare the class in the asset's `.spec` file (see `docs/PIPELINE.md`); the exporter reads it.
+The class is declared per asset in `art/assets.json`; the build reads it.
 
 ## 9. Detail and materials
 
 - Anything **gameplay-relevant** is at least **2 voxels thick** or carries strong colour contrast.
 - 1-voxel detail is fine for handles, trim, buttons, highlights, clothing accents, signs.
-- Do **not** cover surfaces in 1-voxel noise. At 1.6 screen px per voxel it becomes static.
+- Do **not** cover surfaces in 1-voxel noise. At ~1 screen px per voxel it becomes static.
 - **Never put distinguishing detail inside a 1 m ground tile.** Measured 2026-08-02: four
   dark voxels in an 8x8 grass tile stamped a plainly visible 1 m grid across a 12 x 12 m
   field, and random 90-degree rotation did not break it up. A repeated tile can only carry
   flat colour. Ground variety comes from **2-3 whole-tile variants placed randomly**, plus
   scattered detail props and decals — never from detail within the repeating unit.
-- Palette: **~32 colours total, for the whole game.** See `art/palette.md` (built in Phase 1).
+- Palette: **~32 colours total, for the whole game.** See `art/palette.json`.
 - Material families: painted wood, bare wood, brick, concrete, asphalt, grass, foliage,
   water, glass, metal, fabric, skin. 8–12 total.
 - One sun, soft ambient, moderate AO, high roughness, minimal metal, restrained specular.

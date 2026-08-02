@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import manifest
 
-CAMERA_TILT_DEGREES = 15.0  # keep in step with docs/SCALE.md section 2
+CAMERA_TILT_DEGREES = 35.0  # DECIDED 2026-08-02; see docs/SCALE.md section 2
 
 
 def main():
