@@ -11,3 +11,7 @@ game/assets/models/*.png
 # Verification captures
 lab.png
 *.tmp.png
+
+# Python
+__pycache__/
+*.pyc

@@ -44,7 +44,7 @@ editor:
 	@godot --path game --editor
 
 shot: manifest
-	@godot --path game -s res://tools/capture.gd -- res://scenes/lab/scale_lab.tscn lab.png 40
+	@godot --path game -s res://tools/capture.gd -- res://scenes/lab/scale_lab.tscn $(CURDIR)/lab.png 40
 
 palette:
 	@mkdir -p $(GOXEL_PALETTES)
