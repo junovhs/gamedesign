@@ -34,25 +34,39 @@ work in metres. Never write a rule in voxels.
 Internal render resolution   640 x 360
 Upscale                      nearest-neighbour, integer where possible
 Projection                   orthographic
-Camera pitch                 -55deg  (35deg off straight down)   DECIDED 2026-08-02
-Camera yaw                   0deg    axis-aligned, never rotated by the player
-Camera roll                  0
+Default camera pitch         -55deg  (35deg off straight down)   DECIDED 2026-08-02
+Pitch range                  -70deg .. -25deg  (20deg .. 65deg off straight down)
+Yaw                          free; snaps to 90deg steps for level authoring
+Roll                         0, always
 Orthographic size            27 (vertical units; = 48 m of screen width)
 Near / far                   0.05 / 200
 ```
 
-> **35° was measured, not chosen.** The source brief recommended 12-15° off straight
-> overhead. Rendering the first real character through the actual camera showed that at
-> 15° a 1.75 m person is the top of a head and nothing else — unreadable. A body only
-> resolves from about 25° and reads clearly at 35°. See the sweep that settled it.
->
-> The cost is occlusion: at 35° tall walls hide a lot of what is behind them, so
-> **cutaway roofs and wall-hiding are load-bearing systems, not polish.**
->
-> Yaw is zero so the level grid stays axis-aligned to the screen, matching
-> `docs/concept/image-ref.png`. Every asset is authored to read at this one angle.
+**The camera moves.** This is a 3-D game viewed from above, not a 2-D game. The player can
+orbit and tilt — dollhouse angles are expected, and looking into a house from a low,
+three-quarter angle is a thing we want. 35° is the *default resting* angle, not a lock.
 
-Derived, at 640 x 360 with orthographic size 27 and 55° below horizontal:
+> **35° as the default was measured, not chosen.** The source brief recommended 12-15° off
+> straight overhead. Rendering the first real character through the actual camera showed
+> that at 15° a 1.75 m person is the top of a head and nothing else — unreadable. A body
+> resolves from about 25° and reads clearly at 35°.
+>
+> The cost is occlusion, and it grows as the camera drops: **cutaway roofs and wall-hiding
+> are load-bearing systems, not polish.**
+
+### What a movable camera means for authoring
+
+- **Every asset must read from all four sides and from above.** There is no "back you never
+  see". Backs may be simpler than fronts, but they may not be unfinished.
+- Author with the asset's front facing goxel **-Y** so orientation is consistent, but do not
+  treat the other five faces as throwaway.
+- **Nothing may depend on a single viewing angle** — no painted-on fake perspective, no
+  detail that only lines up at 35°.
+- Judge assets at the default 35° *and* at a low three-quarter angle before accepting them.
+  `tools/` renders any tilt; use it.
+
+Derived **at the default camera** (640 x 360, orthographic size 27, 55° below horizontal).
+These shift as the camera tilts, so treat them as the resting case, not as invariants:
 
 | | |
 |---|---|
@@ -64,19 +78,25 @@ Derived, at 640 x 360 with orthographic size 27 and 55° below horizontal:
 | 1 art voxel, top face | **~1.4 px** |
 | 1 art voxel, vertical face | **~1.0 px** |
 
-> **Detail on vertical faces is nearly invisible; top faces read almost 50% larger.**
-> Spend detail on what faces the sky. A 1-voxel feature on a wall is one screen pixel.
+> **At the default angle, top faces read almost 50% larger than vertical ones** — a
+> 1-voxel feature on a wall is one screen pixel. So the *first* place to spend detail is
+> what faces the sky. But the camera drops to 65° off vertical, where that reverses and
+> walls dominate the frame, so vertical faces still have to hold up. Cheap, readable
+> blocking on the sides; the expensive detail on top.
 
 ## 3. Level footprint
 
 | | Metres | Art voxels |
 |---|---|---|
 | Target first-level footprint | 48 x 27 | 384 x 216 |
-| Maximum that still fits the frame | 48 x 33 | 384 x 264 |
+| Maximum that fits the frame at the default angle | 48 x 33 | 384 x 264 |
 
 Width is the binding constraint: 48 m is exactly the screen width at orthographic size 27.
-The 35 degree tilt buys depth for free — 33 m of ground fits in the same 27 units of screen
-height — so a level may be deeper than it is wide-looking, but never wider than 48 m.
+The 35 degree default tilt buys depth for free — 33 m of ground fits in the same 27 units of
+screen height. A level may therefore be deeper than it looks wide, but never wider than 48 m.
+Tilting the camera down shows less ground depth, so a level sized to 33 m deep will not fit
+entirely on screen at low angles. That is acceptable: low angles are for looking *into*
+things, not for surveying the whole board.
 
 ## 4. Character scale
 

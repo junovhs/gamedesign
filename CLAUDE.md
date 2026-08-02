@@ -46,6 +46,11 @@ Never a per-voxel rigid-body simulation. This decision is settled; do not reopen
 **Author modularly, place as prefabs.** No house, room or yard is ever a single unique
 model. Walls take colour variants, not new meshes.
 
+**The camera moves.** 35 degrees off straight down is the *default resting* angle, not a
+lock — the player can orbit and tilt to roughly 20-65 degrees, and dollhouse angles are a
+wanted feature. Never author an asset, shader or system that assumes one viewing angle, and
+never describe the game as 2-D or as fixed top-down.
+
 **The concept image is a brief, not a blueprint.** `docs/concept/image-ref.png` says what
 *categories* of thing the game needs. It is never reproduced tile for tile, and its
 proportions are not production scale.

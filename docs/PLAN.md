@@ -23,6 +23,8 @@ readability and pacing, not for art.
 
 - **Roll our own game systems, asset pipeline, editor tooling and level format.
   Do not roll our own engine.** Godot 4, no royalties, no engine fork.
+- **This is 3-D viewed from above, not 2-D.** The camera orbits and tilts; dollhouse angles
+  are a wanted feature. No asset, shader or system may assume a fixed viewing angle.
 - **Voxels are a look, not a simulation.** Destruction is authored and event-based
   (`docs/SCALE.md` has the three tiers). We are not building a destruction engine.
 - **Author modularly, place as prefabs.** A house feels like one object in the editor and
@@ -62,8 +64,11 @@ at it in the lab.
 - [ ] Furniture does not overwhelm a 4 x 5 m room.
 - [ ] Individual voxels are still visible — it does not mush into smooth shapes.
 - [ ] Uniform colours are distinguishable at character size.
-- [x] **The camera tilt is decided: 35 degrees off straight down** (2026-08-02). Measured,
-      not chosen — at the brief's suggested 15 degrees a character is an unreadable blob.
+- [x] **The default camera tilt is decided: 35 degrees off straight down** (2026-08-02).
+      Measured, not chosen — at the brief's suggested 15 degrees a character is an
+      unreadable blob. The camera is *movable* (roughly 20-65 degrees, free yaw), so this
+      is a resting angle, not a lock, and assets must read from every side.
+- [ ] Assets still read at a low three-quarter "dollhouse" angle, not just at the default.
 - [ ] A 48 x 27 m boundary fits on screen and still reads.
 - [ ] Walls do not hide the activity behind them.
 - [ ] The intact/broken wall swap is convincing.

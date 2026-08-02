@@ -27,16 +27,21 @@ def open_asset(asset, reset=False):
         raise SystemExit(f"no guide at {guide} — run: python3 tools/make_guides.py")
 
     os.makedirs(manifest.SRC, exist_ok=True)
-    gox = os.path.join(manifest.SRC, asset["name"] + ".gox")
     fresh = os.path.join(manifest.SRC, asset["name"] + ".vox")
 
     # Guides are .vox because goxel crashes writing .gox, so a fresh working
     # copy must keep the .vox extension — goxel picks its parser by extension
     # and hands you a blank document if the name lies about the contents.
-    # Once Juno has saved real work as .gox, that becomes the file to reopen.
-    if reset or (not os.path.exists(gox) and not os.path.exists(fresh)):
+    if reset or not any(
+        os.path.exists(os.path.join(manifest.SRC, asset["name"] + e))
+        for e in manifest.SRC_EXTENSIONS
+    ):
         shutil.copyfile(guide, fresh)
-    src = gox if os.path.exists(gox) and not reset else fresh
+        src = fresh
+    else:
+        # Defer to the same newest-wins rule the build uses. Anything else
+        # reopens stale work — it reopened a pre-thicken .gox once already.
+        src = manifest.src_path(asset)
 
     # setsid so the window outlives this process. Without it goxel dies with the
     # shell that launched it. Note also: never `pkill -f "goxel art/"` to close
