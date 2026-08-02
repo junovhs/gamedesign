@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build authored .vox files into Godot-ready .gltf models.
+"""Build authored voxel files into Godot-ready .gltf models.
 
 For each asset with a file in art/src/ this:
 
-  1. reads the .vox,
+  1. reads the .gox or .vox,
   2. strips the reserved guide colours,
   3. checks the bounding box against the manifest and the colours against the
      palette,
@@ -12,7 +12,12 @@ For each asset with a file in art/src/ this:
   6. rewrites the glTF root transform so the model arrives in Godot at 1 unit =
      1 metre, Y-up, with the pivot the manifest asked for.
 
-Usage:  python3 tools/build.py [name ...] [--strict] [--quiet]
+Sources are goxel's own .gox (preferred — it is what Ctrl+S produces) or .vox.
+
+Usage:  python3 tools/build.py [name ...] [--strict] [--quiet] [--preview]
+
+--preview downgrades bounding-box failures to warnings, so work in progress can
+be rendered and looked at instead of merely rejected.
 """
 
 import json
@@ -57,7 +62,27 @@ class Problem(Exception):
     pass
 
 
-def check(asset, model, palette, strict):
+def load_source(path, tmpdir):
+    """Read an authored file, converting goxel's own .gox format on the way."""
+    if path.endswith(".vox"):
+        return vox.read(path)
+
+    converted = os.path.join(tmpdir, "converted.vox")
+    r = subprocess.run(
+        ["goxel", path, "-e", converted],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if r.returncode != 0 or not os.path.exists(converted):
+        raise Problem(
+            f"goxel could not convert {os.path.basename(path)}:\n"
+            f"{r.stderr.strip() or r.stdout.strip()}"
+        )
+    return vox.read(converted)
+
+
+def check(asset, model, palette, strict, preview=False):
     """Return a list of warnings; raise Problem on anything disqualifying."""
     warnings = []
     name = asset["name"]
@@ -69,9 +94,18 @@ def check(asset, model, palette, strict):
     want = tuple(asset["size"])
     axes = "XYZ"
 
+    def fail(message):
+        # In preview mode a wrong size is something to look at and talk about,
+        # not something to refuse. The asset still will not count as built,
+        # because that is decided by the exported model, not by this check.
+        if preview:
+            warnings.append(message)
+        else:
+            raise Problem(message)
+
     if asset["fit"] == "exact":
         if got != want:
-            raise Problem(
+            fail(
                 f"size is {got[0]}x{got[1]}x{got[2]}, manifest requires exactly "
                 f"{want[0]}x{want[1]}x{want[2]} (fit: exact). "
                 + ", ".join(
@@ -84,7 +118,7 @@ def check(asset, model, palette, strict):
     else:
         over = [i for i in range(3) if got[i] > want[i]]
         if over:
-            raise Problem(
+            fail(
                 f"size is {got[0]}x{got[1]}x{got[2]}, exceeds the manifest box "
                 f"{want[0]}x{want[1]}x{want[2]} on "
                 + ", ".join(f"{axes[i]} (by {got[i] - want[i]})" for i in over)
@@ -109,36 +143,75 @@ def check(asset, model, palette, strict):
         warnings.append(msg)
 
     if name == "char_civilian_base" and got[2] != 14:
-        raise Problem(f"character is {got[2]} voxels tall; it must be exactly 14")
+        fail(f"character is {got[2]} voxels tall; it must be exactly 14")
 
     return warnings
 
 
+# goxel already emits a root node whose matrix takes its Z-up mesh data to
+# glTF's Y-up: (x, y, z) -> (x, z, -y), column-major. We must NOT rotate again.
+GOXEL_AXIS_MATRIX = [1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1]
+
+
+def mesh_bounds(doc):
+    """AABB of the exported geometry in mesh space, which is goxel voxel space.
+
+    Derived from the file rather than assumed. goxel does not centre the mesh
+    predictably — an 8x8x1 slab came out spanning z 0..1 while an 8x12x6 block
+    came out centred — so anything that guesses the offset is wrong sooner or
+    later.
+    """
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    for mesh in doc.get("meshes", []):
+        for prim in mesh.get("primitives", []):
+            idx = prim.get("attributes", {}).get("POSITION")
+            if idx is None:
+                continue
+            acc = doc["accessors"][idx]
+            if "min" not in acc or "max" not in acc:
+                raise Problem("glTF POSITION accessor has no min/max")
+            for i in range(3):
+                lo[i] = min(lo[i], float(acc["min"][i]))
+                hi[i] = max(hi[i], float(acc["max"][i]))
+    if lo[0] == float("inf"):
+        raise Problem("glTF contains no positioned geometry")
+    return lo, hi
+
+
 def patch_gltf(path, asset, size):
-    """Wrap the exported scene in a root node carrying scale, axis fix and pivot."""
+    """Wrap the exported scene in a root node carrying scale and pivot."""
     with open(path) as f:
         doc = json.load(f)
-
-    w, d, h = size
-    centre = (w / 2.0, d / 2.0, h / 2.0)
-    p = pivot_offset(asset["pivot"], size)
-    # goxel centres the mesh on its bounding box, so a vertex at voxel v lands at
-    # (v - centre). We want (v - pivot) * SCALE, then the axis rotation.
-    delta = tuple((centre[i] - p[i]) * SCALE for i in range(3))
-    translation = list(rotate(delta))
 
     scene = doc.get("scene", 0)
     roots = doc["scenes"][scene].get("nodes", [])
 
+    # Bail loudly rather than silently mis-placing every asset in the game if a
+    # future goxel stops emitting the axis node we are compensating around.
+    if len(roots) != 1 or doc["nodes"][roots[0]].get("matrix") != GOXEL_AXIS_MATRIX:
+        raise Problem(
+            "unexpected glTF root from goxel — the axis-conversion node changed. "
+            "Re-derive GOXEL_AXIS_MATRIX before trusting any pivot."
+        )
+
+    lo, _ = mesh_bounds(doc)
+    px, py, pz = pivot_offset(asset["pivot"], size)
+
+    # Accessor bounds are in the mesh's own space, which is still goxel's voxel
+    # space — the axis node has not been applied to them. So locate the pivot
+    # there first...
+    pivot_mesh = (lo[0] + px, lo[1] + py, lo[2] + pz)
+    # ...then push it through the axis node's (x, y, z) -> (x, z, -y).
+    pivot_scene = (pivot_mesh[0], pivot_mesh[2], -pivot_mesh[1])
+    translation = [-SCALE * c for c in pivot_scene]
+
     root = {
         "name": asset["name"],
         "translation": translation,
-        "rotation": ROT_QUAT,
         "scale": [SCALE, SCALE, SCALE],
+        "children": roots,
     }
-    if roots:
-        root["children"] = roots
-
     doc.setdefault("nodes", []).append(root)
     doc["scenes"][scene]["nodes"] = [len(doc["nodes"]) - 1]
 
@@ -146,20 +219,20 @@ def patch_gltf(path, asset, size):
         json.dump(doc, f, indent=1)
 
 
-def build_one(asset, palette, strict, quiet):
+def build_one(asset, palette, strict, quiet, preview=False):
     src = manifest.src_path(asset)
     _, guides = manifest.load_palette()
 
-    model = vox.read(src)
-    model = model.without_colors(guides.values())
-    warnings = check(asset, model, palette, strict)
-    model = model.moved_to_origin()
-
-    out = manifest.model_path(asset)
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-
     tmpdir = tempfile.mkdtemp(prefix="gg-build-")
     try:
+        model = load_source(src, tmpdir)
+        model = model.without_colors(guides.values())
+        warnings = check(asset, model, palette, strict, preview)
+        model = model.moved_to_origin()
+
+        out = manifest.model_path(asset)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+
         clean = os.path.join(tmpdir, asset["name"] + ".vox")
         vox.write(clean, model)
         r = subprocess.run(
@@ -191,6 +264,7 @@ def build_one(asset, palette, strict, quiet):
 def main(argv):
     strict = "--strict" in argv
     quiet = "--quiet" in argv
+    preview = "--preview" in argv
     names = [a for a in argv if not a.startswith("--")]
 
     if not shutil.which("goxel"):
@@ -218,7 +292,7 @@ def main(argv):
             failed.append((a["name"], "no file at " + os.path.relpath(manifest.src_path(a), manifest.ROOT)))
             continue
         try:
-            build_one(a, palette, strict, quiet)
+            build_one(a, palette, strict, quiet, preview)
             ok += 1
         except (Problem, vox.VoxError) as e:
             failed.append((a["name"], str(e)))

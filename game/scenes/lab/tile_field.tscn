@@ -1,0 +1,38 @@
+[gd_scene load_steps=3 format=3 uid="uid://bgg0tilefield01"]
+
+[ext_resource type="Script" path="res://scripts/tile_field.gd" id="1_tf"]
+
+[sub_resource type="Environment" id="Env_tf"]
+background_mode = 1
+background_color = Color(0.13, 0.15, 0.18, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.62, 0.66, 0.78, 1)
+ambient_light_energy = 1.2
+tonemap_mode = 2
+ssao_enabled = true
+ssao_intensity = 0.9
+ssao_radius = 0.6
+
+[node name="TileField" type="Node3D"]
+script = ExtResource("1_tf")
+
+[node name="Field" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+projection = 1
+size = 14.0
+near = 0.05
+far = 400.0
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.81915, 0.00000, 0.57358, 0.49673, 0.50000, -0.70941, -0.28679, 0.86603, 0.40958, 0.00000, 25.00000, 0.00000)
+light_energy = 1.6
+shadow_enabled = true
+directional_shadow_mode = 0
+shadow_bias = 0.08
+shadow_normal_bias = 1.5
+shadow_blur = 0.4
+directional_shadow_max_distance = 40.0
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_tf")

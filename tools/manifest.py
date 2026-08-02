@@ -48,8 +48,19 @@ def load_assets():
     return data["batches"], assets
 
 
+## goxel's own format is what Ctrl+S naturally produces, so it is the preferred
+## source. It cannot be written by anything but goxel (`-e out.gox` crashes), so
+## guides are .vox and the build converts .gox -> .vox on the way through.
+SRC_EXTENSIONS = (".gox", ".vox")
+
+
 def src_path(a):
-    return os.path.join(SRC, a["name"] + ".vox")
+    """Where the artist's file lives — .gox if present, else the .vox guide copy."""
+    for ext in SRC_EXTENSIONS:
+        p = os.path.join(SRC, a["name"] + ext)
+        if os.path.exists(p):
+            return p
+    return os.path.join(SRC, a["name"] + SRC_EXTENSIONS[0])
 
 
 def guide_path(a):
@@ -61,23 +72,14 @@ def model_path(a):
 
 
 def is_built(a):
-    """True once real art exists — not merely because a file is present.
+    """True once the asset has passed the build and is in the game.
 
-    Claude opens each task by copying the guide to its final path in art/src/ so
-    Juno only ever has to press Ctrl+S. That means "the file exists" says nothing.
-    An asset counts as built when it holds voxels that are not guide colours.
+    Deliberately not "a source file exists": Claude opens each task by copying
+    the guide into art/src/ so Juno only has to press Ctrl+S, which means a file
+    is present before any art is. The exported model is the honest signal, and
+    checking it costs a stat rather than a goxel subprocess.
     """
-    path = src_path(a)
-    if not os.path.exists(path):
-        return False
-    import vox  # local import: manifest is imported by tools that never read .vox
-
-    try:
-        model = vox.read(path)
-    except (vox.VoxError, OSError):
-        return False
-    _, guides = load_palette()
-    return len(model.without_colors(guides.values())) > 0
+    return os.path.exists(model_path(a))
 
 
 def metres(size):
