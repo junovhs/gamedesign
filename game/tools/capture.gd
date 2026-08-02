@@ -20,6 +20,17 @@ func _initialize() -> void:
 	var out_path: String = args[1]
 	var frames: int = int(args[2]) if args.size() > 2 else DEFAULT_FRAMES
 
+	# GG_CAPTURE_RES overrides the project's internal render resolution, so the
+	# cost of 640x360 can be compared against alternatives without editing
+	# project.godot. Format: "1920x1080".
+	var override := OS.get_environment("GG_CAPTURE_RES")
+	if override.contains("x"):
+		var parts := override.split("x")
+		var size := Vector2i(int(parts[0]), int(parts[1]))
+		root.content_scale_size = size
+		root.size = size
+		print("render resolution overridden to %dx%d" % [size.x, size.y])
+
 	var packed: PackedScene = load(scene_path)
 	if packed == null:
 		push_error("could not load %s" % scene_path)
