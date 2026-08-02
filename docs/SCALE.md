@@ -166,7 +166,12 @@ Declare the class in the asset's `.spec` file (see `docs/PIPELINE.md`); the expo
 - Anything **gameplay-relevant** is at least **2 voxels thick** or carries strong colour contrast.
 - 1-voxel detail is fine for handles, trim, buttons, highlights, clothing accents, signs.
 - Do **not** cover surfaces in 1-voxel noise. At 1.6 screen px per voxel it becomes static.
-- Palette: **24–32 colours total, for the whole game.** See `art/palette.md` (built in Phase 1).
+- **Never put distinguishing detail inside a 1 m ground tile.** Measured 2026-08-02: four
+  dark voxels in an 8x8 grass tile stamped a plainly visible 1 m grid across a 12 x 12 m
+  field, and random 90-degree rotation did not break it up. A repeated tile can only carry
+  flat colour. Ground variety comes from **2-3 whole-tile variants placed randomly**, plus
+  scattered detail props and decals — never from detail within the repeating unit.
+- Palette: **~32 colours total, for the whole game.** See `art/palette.md` (built in Phase 1).
 - Material families: painted wood, bare wood, brick, concrete, asphalt, grass, foliage,
   water, glass, metal, fabric, skin. 8–12 total.
 - One sun, soft ambient, moderate AO, high roughness, minimal metal, restrained specular.

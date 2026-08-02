@@ -6,7 +6,7 @@ extends Node3D
 ## against it?". Those only have answers at 12 x 12 metres.
 ##
 ##   godot --path game -s res://tools/capture.gd -- \
-##       res://scenes/lab/tile_field.tscn out.png 40 <asset_name> [tilt_degrees]
+##       res://scenes/lab/tile_field.tscn out.png 40 <asset_name> [tilt] [rotate]
 
 const MODEL_DIR := "res://assets/models/"
 const FIELD := 12          ## tiles per side, and metres per side at 1 m tiles
@@ -14,11 +14,14 @@ const DEFAULT_TILT := 15.0
 
 @onready var _camera: Camera3D = $Camera3D
 
+var _random_rotation := false
+
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var asset_name: String = args[3] if args.size() > 3 else ""
 	var tilt: float = float(args[4]) if args.size() > 4 else DEFAULT_TILT
+	_random_rotation = args.size() > 5 and args[5] == "rotate" 
 
 	if asset_name.is_empty():
 		push_error("tile_field needs an asset name as the 4th user arg")
@@ -37,11 +40,22 @@ func _ready() -> void:
 
 func _lay_field(packed: PackedScene) -> void:
 	# Corner-pivoted tiles occupy x in [i, i+1] and z in [-j-1, -j].
+	# With random_rotation the tile is spun in 90-degree steps about its own
+	# centre, which is how ground actually gets placed in game. It is also the
+	# cheapest test of whether a tile's variation reads as texture or as a
+	# repeating stamp.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260802
 	for i in FIELD:
 		for j in FIELD:
 			var tile := packed.instantiate()
-			tile.position = Vector3(i, 0.0, -j)
-			$Field.add_child(tile)
+			var holder := Node3D.new()
+			holder.position = Vector3(i + 0.5, 0.0, -j - 0.5)
+			if _random_rotation:
+				holder.rotation_degrees = Vector3(0, 90 * rng.randi_range(0, 3), 0)
+			tile.position = Vector3(-0.5, 0.0, 0.5)
+			holder.add_child(tile)
+			$Field.add_child(holder)
 
 
 func _add_people() -> void:
