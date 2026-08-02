@@ -45,38 +45,31 @@ HUMAN = [
 GAP = 3  # voxels between the asset box and the mannequin
 
 
-def bracket_len(size):
-    """Corner brackets scale with the box so they never swallow a small asset."""
-    return max(1, min(3, min(size) // 3))
-
-
 def build_guide(size, guide_a, guide_b):
     w, d, h = size
     m = vox.Model((1, 1, 1), {})
-    n = bracket_len(size)
 
-    # Corner brackets: from each of the 8 corners, run n voxels along each axis.
-    for cx, ex in ((0, 1), (w - 1, -1)):
-        for cy, ey in ((0, 1), (d - 1, -1)):
-            for cz, ez in ((0, 1), (h - 1, -1)):
-                for i in range(n):
-                    for p in (
-                        (cx + ex * i, cy, cz),
-                        (cx, cy + ey * i, cz),
-                        (cx, cy, cz + ez * i),
-                    ):
-                        m.voxels[p] = guide_a
+    # A full wireframe cage, offset one voxel outside the box on every side.
+    # Offsetting outward matters: the cage can never collide with the art, so
+    # "fill it to the edges" is unambiguous, and a flat 8x8x2 tile gets just as
+    # visible a marker as a tall wall does. Corner brackets failed at this —
+    # on a 2-voxel-tall asset they collapsed to single invisible dots.
+    x0, y0, z0 = -1, -1, -1
+    x1, y1, z1 = w, d, h
+    for y in (y0, y1):
+        for z in (z0, z1):
+            for x in range(x0, x1 + 1):
+                m.voxels[(x, y, z)] = guide_a
+    for x in (x0, x1):
+        for z in (z0, z1):
+            for y in range(y0, y1 + 1):
+                m.voxels[(x, y, z)] = guide_a
+    for x in (x0, x1):
+        for y in (y0, y1):
+            for z in range(z0, z1 + 1):
+                m.voxels[(x, y, z)] = guide_a
 
-    # Metre grid on the floor plane, one level below the box, extending a little
-    # past it so the asset's footprint can be read against whole metres.
-    pad = manifest.VOXELS_PER_METRE
-    for x in range(-pad, w + pad):
-        for y in range(-pad, d + pad):
-            on_line = x % manifest.VOXELS_PER_METRE == 0 or y % manifest.VOXELS_PER_METRE == 0
-            if on_line:
-                m.voxels[(x, y, -1)] = guide_b
-
-    # Mannequin, standing on the same floor plane, clear of the box in +X.
+    # Mannequin, feet on the same floor level as the asset, clear of the cage.
     ox = w + GAP
     oy = max(0, d // 2 - 2)
     for row, line in enumerate(HUMAN):

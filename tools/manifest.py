@@ -61,7 +61,23 @@ def model_path(a):
 
 
 def is_built(a):
-    return os.path.exists(src_path(a))
+    """True once real art exists — not merely because a file is present.
+
+    Claude opens each task by copying the guide to its final path in art/src/ so
+    Juno only ever has to press Ctrl+S. That means "the file exists" says nothing.
+    An asset counts as built when it holds voxels that are not guide colours.
+    """
+    path = src_path(a)
+    if not os.path.exists(path):
+        return False
+    import vox  # local import: manifest is imported by tools that never read .vox
+
+    try:
+        model = vox.read(path)
+    except (vox.VoxError, OSError):
+        return False
+    _, guides = load_palette()
+    return len(model.without_colors(guides.values())) > 0
 
 
 def metres(size):

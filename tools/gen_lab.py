@@ -44,6 +44,14 @@ def main():
         json.dump(out, f, indent=1)
     print(f"wrote {os.path.relpath(path, manifest.ROOT)} ({len(assets)} assets)")
 
+    # The vignette scene paints its blockout with the real game palette.
+    with open(os.path.join(manifest.ART, "palette.json")) as f:
+        pal = json.load(f)
+    pal_path = os.path.join(manifest.ROOT, "game", "assets", "palette.json")
+    with open(pal_path, "w") as f:
+        json.dump(pal, f, indent=1)
+    print(f"wrote {os.path.relpath(pal_path, manifest.ROOT)}")
+
 
 if __name__ == "__main__":
     main()

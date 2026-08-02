@@ -1,9 +1,10 @@
 GOXEL_PALETTES := $(HOME)/.config/goxel/palettes
 
-.PHONY: help task list status guides build strict lab editor manifest palette shot check
+.PHONY: help task open list status guides build strict lab editor manifest palette shot check
 
 help:
 	@echo "  make task       what to build next, in full"
+	@echo "  make open       open that asset in goxel, ready to draw (A=<name>)"
 	@echo "  make list       the whole asset board with status"
 	@echo "  make build      verify and export every authored asset to Godot"
 	@echo "  make lab        open the scale lab"
@@ -18,6 +19,9 @@ help:
 
 task:
 	@python3 tools/task.py next
+
+open:
+	@python3 tools/open_task.py $(A)
 
 list:
 	@python3 tools/task.py list
