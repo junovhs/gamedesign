@@ -4,8 +4,8 @@
  "camera_tilt_degrees": 15.0,
  "batches": {
   "lab": "Phase 1 \u2014 the scale lab. Everything needed to answer 'does this scale read?' Nothing here is final art; it is production-quality blockout that we keep if it reads.",
-  "kit": "Phase 3 \u2014 the modular kit proper. Not started until the lab passes.",
-  "slice": "Phase 4 \u2014 one house, one yard, one street segment."
+  "kit": "Phase 2 \u2014 the minimum modular kit. Not started until the lab passes.",
+  "slice": "Phase 3 \u2014 one house, one yard, one street segment, made to actually play."
  },
  "assets": [
   {
