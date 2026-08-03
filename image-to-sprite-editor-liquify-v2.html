@@ -1,0 +1,2169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Image to Sprite Editor — Liquify Build</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d0f14;
+      --panel: #151922;
+      --panel-2: #1b202b;
+      --line: #2a3140;
+      --text: #f4f7fb;
+      --muted: #9aa5b5;
+      --accent: #7c9cff;
+      --transform: #55d6a9;
+      --liquify: #ffb454;
+      --danger: #ff6b7a;
+      --pixel-size: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #171b25 0, var(--bg) 45%);
+      color: var(--text);
+    }
+
+    button, input, select { font: inherit; }
+
+    .app {
+      width: min(1240px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 24px 0 40px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.55rem, 3vw, 2.25rem);
+      letter-spacing: -0.035em;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .header-badges {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .build-badge {
+      padding: 8px 11px;
+      border: 1px solid var(--liquify);
+      border-radius: 999px;
+      color: #ffd8a1;
+      background: rgba(255, 180, 84, .10);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .size-badge {
+      flex: 0 0 auto;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(21, 25, 34, 0.8);
+      color: #cbd4e4;
+      font-weight: 700;
+      letter-spacing: .04em;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(290px, 360px) 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: rgba(21, 25, 34, .92);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 16px 50px rgba(0, 0, 0, .25);
+      overflow: hidden;
+    }
+
+    .panel-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-section:last-child { border-bottom: 0; }
+
+    .section-title {
+      margin: 0 0 11px;
+      font-size: .82rem;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: #aab5c6;
+    }
+
+    .drop-zone {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 132px;
+      padding: 18px;
+      border: 1.5px dashed #3b465a;
+      border-radius: 13px;
+      background: #11151d;
+      text-align: center;
+      cursor: pointer;
+      transition: .16s ease;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.dragover {
+      border-color: var(--accent);
+      background: #151b29;
+      transform: translateY(-1px);
+    }
+
+    .drop-zone strong { display: block; margin-bottom: 5px; }
+    .drop-zone span { color: var(--muted); font-size: .91rem; }
+    .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+    .thumb {
+      display: none;
+      width: 100%;
+      max-height: 150px;
+      object-fit: contain;
+      border-radius: 8px;
+      margin-top: 11px;
+      background: #0b0e13;
+      image-rendering: pixelated;
+    }
+
+    .thumb.visible { display: block; }
+    .control-grid { display: grid; gap: 12px; }
+
+    label.control {
+      display: grid;
+      gap: 7px;
+      color: #d9e0eb;
+      font-size: .91rem;
+    }
+
+    select,
+    input[type="number"] {
+      width: 100%;
+      border: 1px solid #343d4e;
+      border-radius: 9px;
+      background: #0f131a;
+      color: var(--text);
+      padding: 9px 10px;
+      outline: none;
+    }
+
+    select:focus,
+    input[type="number"]:focus { border-color: var(--accent); }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button {
+      border: 1px solid #343d4e;
+      border-radius: 9px;
+      background: #202633;
+      color: var(--text);
+      padding: 9px 11px;
+      cursor: pointer;
+      transition: .14s ease;
+    }
+
+    button:hover:not(:disabled) {
+      background: #2a3242;
+      border-color: #4a5870;
+      transform: translateY(-1px);
+    }
+
+    button:active:not(:disabled) { transform: translateY(0); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0b1020;
+      font-weight: 800;
+    }
+
+    button.primary:hover:not(:disabled) { background: #91aaff; }
+    button.danger { color: #ffb2ba; }
+    button.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+    button.transform-active { border-color: var(--transform); box-shadow: inset 0 0 0 1px var(--transform); }
+    button.liquify-active { border-color: var(--liquify); box-shadow: inset 0 0 0 1px var(--liquify); }
+
+    .scale-presets button {
+      min-width: 43px;
+      padding-inline: 9px;
+    }
+
+    .scale-line {
+      display: grid;
+      grid-template-columns: 1fr 90px;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .output-size {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    .tool-row {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .tool-row button {
+      min-width: 0;
+      padding-inline: 5px;
+      font-size: .84rem;
+    }
+
+    .color-line {
+      display: grid;
+      grid-template-columns: 46px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-top: 11px;
+    }
+
+    input[type="color"] {
+      width: 46px;
+      height: 38px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .color-value {
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .88rem;
+    }
+
+    .check-line {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #d9e0eb;
+      font-size: .91rem;
+    }
+
+    .check-line input { accent-color: var(--accent); }
+
+    .hint {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.45;
+    }
+
+    .liquify-controls {
+      display: grid;
+      gap: 11px;
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #343d4e;
+      border-radius: 11px;
+      background: #10151d;
+    }
+
+    .liquify-controls.hidden { display: none; }
+
+    .range-control {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      align-items: center;
+      color: #d9e0eb;
+      font-size: .86rem;
+    }
+
+    .range-control output {
+      color: var(--muted);
+      font: 700 .78rem ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .range-control input[type="range"] {
+      grid-column: 1 / -1;
+      width: 100%;
+      accent-color: var(--liquify);
+      cursor: pointer;
+    }
+
+    .workspace {
+      min-height: 700px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .workspace-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(27, 32, 43, .85);
+    }
+
+    .dimension-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .dimension-controls .label {
+      color: var(--muted);
+      font-size: .85rem;
+      margin-right: 2px;
+    }
+
+    .dimension-field {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #343d4e;
+      border-radius: 9px;
+      background: #0f131a;
+      padding: 3px 8px;
+    }
+
+    .dimension-field span {
+      color: var(--muted);
+      font-size: .78rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .dimension-field input {
+      width: 54px;
+      border: 0;
+      background: transparent;
+      padding: 5px 2px;
+      text-align: right;
+    }
+
+    .dimension-cross { color: #6f7b8e; }
+    .workspace-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .canvas-stage {
+      min-height: 580px;
+      overflow: auto;
+      display: grid;
+      place-items: center;
+      padding: 42px;
+      background:
+        linear-gradient(45deg, #10141b 25%, transparent 25%),
+        linear-gradient(-45deg, #10141b 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #10141b 75%),
+        linear-gradient(-45deg, transparent 75%, #10141b 75%),
+        #0c0f14;
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+    }
+
+    .canvas-shell {
+      position: relative;
+      padding: 15px;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .sprite-wrap {
+      position: relative;
+      width: 256px;
+      height: 512px;
+      box-shadow: 0 12px 42px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.12);
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      user-select: none;
+      touch-action: none;
+      isolation: isolate;
+    }
+
+    .source-clip {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+      background: transparent;
+    }
+
+    .source-ghost {
+      position: absolute;
+      display: block;
+      max-width: none;
+      max-height: none;
+      opacity: 0;
+      image-rendering: auto;
+      pointer-events: none;
+      transition: opacity .15s ease;
+    }
+
+    #spriteCanvas {
+      position: relative;
+      z-index: 1;
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      cursor: crosshair;
+      transition: opacity .15s ease;
+    }
+
+    /* Transform mode manipulates the hidden source image, but keeps the
+       rendered sprite fully opaque so there is never a double-image preview. */
+    .sprite-wrap.transform-mode .source-ghost { opacity: 0; }
+    .sprite-wrap.transform-mode #spriteCanvas { opacity: 1; cursor: grab; }
+    .sprite-wrap.transform-mode.dragging #spriteCanvas { cursor: grabbing; }
+    .sprite-wrap.liquify-mode .source-ghost { opacity: 0; }
+    .sprite-wrap.liquify-mode #spriteCanvas { opacity: 1; cursor: none; }
+
+    .grid-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background-image:
+        repeating-linear-gradient(to right, rgba(255,255,255,.18) 0 1px, transparent 1px var(--pixel-size)),
+        repeating-linear-gradient(to bottom, rgba(255,255,255,.18) 0 1px, transparent 1px var(--pixel-size));
+      opacity: .72;
+    }
+
+    .grid-overlay.hidden { display: none; }
+
+    .transform-box {
+      position: absolute;
+      z-index: 4;
+      border: 2px solid var(--transform);
+      box-shadow: 0 0 0 1px rgba(0,0,0,.8), inset 0 0 0 1px rgba(255,255,255,.18);
+      pointer-events: none;
+      display: none;
+    }
+
+    .sprite-wrap.transform-mode .transform-box { display: block; }
+
+    .transform-handle {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #0c1312;
+      border-radius: 3px;
+      background: var(--transform);
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    .transform-handle:hover,
+    .transform-handle.active {
+      box-shadow: 0 0 0 4px rgba(85,214,169,.18);
+      filter: brightness(1.12);
+    }
+
+    .transform-handle[data-dir="nw"] { left: -7px; top: -7px; cursor: nwse-resize; }
+    .transform-handle[data-dir="ne"] { right: -7px; top: -7px; cursor: nesw-resize; }
+    .transform-handle[data-dir="se"] { right: -7px; bottom: -7px; cursor: nwse-resize; }
+    .transform-handle[data-dir="sw"] { left: -7px; bottom: -7px; cursor: nesw-resize; }
+
+    /* Long edge bars resize the source image, never the sprite canvas. */
+    .transform-handle[data-dir="n"],
+    .transform-handle[data-dir="s"] {
+      width: min(96px, 52%);
+      height: 10px;
+      left: 50%;
+      border-radius: 999px;
+    }
+
+    .transform-handle[data-dir="n"]  { top: -6px; transform: translateX(-50%); cursor: ns-resize; }
+    .transform-handle[data-dir="s"]  { bottom: -6px; transform: translateX(-50%); cursor: ns-resize; }
+
+    .transform-handle[data-dir="e"],
+    .transform-handle[data-dir="w"] {
+      width: 10px;
+      height: min(96px, 52%);
+      top: 50%;
+      border-radius: 999px;
+    }
+
+    .transform-handle[data-dir="e"]  { right: -6px; transform: translateY(-50%); cursor: ew-resize; }
+    .transform-handle[data-dir="w"]  { left: -6px; transform: translateY(-50%); cursor: ew-resize; }
+
+
+    .liquify-cursor {
+      position: absolute;
+      z-index: 6;
+      display: none;
+      border: 1.5px solid rgba(255,255,255,.95);
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.9), inset 0 0 0 1px rgba(0,0,0,.45);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+    }
+
+    .sprite-wrap.liquify-mode .liquify-cursor.visible { display: block; }
+
+    .liquify-cursor-inner {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      border: 1px dashed rgba(255,180,84,.95);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .transform-readout {
+      position: absolute;
+      z-index: 10;
+      left: 50%;
+      top: -22px;
+      transform: translateX(-50%);
+      padding: 5px 8px;
+      border: 1px solid #44516a;
+      border-radius: 7px;
+      background: #171d28;
+      color: #eaf0ff;
+      font: 700 .78rem ui-monospace, SFMono-Regular, Menlo, monospace;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .1s ease;
+      white-space: nowrap;
+    }
+
+    .transform-readout.visible { opacity: 1; }
+
+    .empty-note {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      text-align: center;
+      color: #9ba7b8;
+      background: rgba(14, 18, 25, .78);
+      pointer-events: none;
+      line-height: 1.5;
+    }
+
+    .empty-note.hidden { display: none; }
+
+    .workspace-bottom {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 14px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .85rem;
+      background: rgba(27, 32, 43, .85);
+    }
+
+    .kbd {
+      border: 1px solid #3a4354;
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #d3dae6;
+      background: #151a23;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .78rem;
+    }
+
+    .toast {
+      position: fixed;
+      z-index: 100;
+      left: 50%;
+      bottom: 24px;
+      transform: translate(-50%, 18px);
+      padding: 10px 14px;
+      border: 1px solid #3d485d;
+      border-radius: 10px;
+      background: #1d2430;
+      color: #f5f8ff;
+      opacity: 0;
+      pointer-events: none;
+      transition: .2s ease;
+      box-shadow: 0 12px 36px rgba(0,0,0,.36);
+    }
+
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 860px) {
+      header { align-items: start; }
+      .layout { grid-template-columns: 1fr; }
+      .workspace { min-height: 600px; }
+      .canvas-stage { min-height: 480px; padding: 34px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>Image to Sprite Editor</h1>
+        <p class="subtitle">Set the sprite grid with the size controls, then pan and stretch the source image underneath the live pixel preview.</p>
+      </div>
+      <div class="header-badges">
+        <div class="build-badge">Liquify build</div>
+        <div id="sizeBadge" class="size-badge">16 × 32 pixels</div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="panel" aria-label="Sprite controls">
+        <section class="panel-section">
+          <h2 class="section-title">1. Load image</h2>
+          <label class="drop-zone" id="dropZone">
+            <div>
+              <strong>Drop an image here</strong>
+              <span>or click to choose PNG, JPG, GIF, or WebP</span>
+            </div>
+            <input id="imageInput" type="file" accept="image/*" />
+          </label>
+          <img id="sourceThumb" class="thumb" alt="Loaded source preview" />
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-title">2. Sampling</h2>
+          <div class="control-grid">
+            <label class="control">
+              Initial image fit
+              <select id="fitMode">
+                <option value="cover">Cover — fill and crop</option>
+                <option value="contain">Contain — fit whole image</option>
+                <option value="stretch" selected>Stretch — fill exactly</option>
+              </select>
+            </label>
+            <label class="control">
+              Palette size
+              <input id="paletteSize" type="number" min="2" max="64" value="16" />
+            </label>
+            <label class="control">
+              Transparent below alpha
+              <input id="alphaThreshold" type="number" min="0" max="255" value="24" />
+            </label>
+            <label class="control">
+              Margin / empty-cell color
+              <span class="color-line" style="margin-top:0">
+                <input id="marginColor" type="color" value="#ffffff" aria-label="Margin color" />
+                <span id="marginColorValue" class="color-value">#FFFFFF</span>
+              </span>
+            </label>
+            <label class="check-line">
+              <input id="transparentMargin" type="checkbox" />
+              Transparent margin instead
+            </label>
+          </div>
+          <div class="button-row" style="margin-top:12px">
+            <button id="sampleButton" class="primary" disabled>Sample dominant colors</button>
+            <button id="rederiveButton" disabled>Re-derive palette</button>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-title">3. Edit, transform & liquify</h2>
+          <div class="tool-row">
+            <button id="pencilTool" class="active" title="Pencil (B)">Pencil</button>
+            <button id="pickerTool" title="Eyedropper (I)">Pick</button>
+            <button id="eraserTool" title="Eraser (E)">Erase</button>
+            <button id="transformTool" title="Transform source (T)">Transform</button>
+            <button id="liquifyTool" title="Push-warp source (L)">Liquify</button>
+          </div>
+          <div class="color-line">
+            <input id="paintColor" type="color" value="#ff4f8b" aria-label="Paint color" />
+            <div id="colorValue" class="color-value">#FF4F8B</div>
+          </div>
+          <div id="liquifyControls" class="liquify-controls hidden">
+            <label class="range-control">
+              <span>Brush size</span>
+              <output id="liquifySizeValue">8 px</output>
+              <input id="liquifySize" type="range" min="1" max="128" step="1" value="8" />
+            </label>
+            <label class="range-control">
+              <span>Hardness</span>
+              <output id="liquifyHardnessValue">60%</output>
+              <input id="liquifyHardness" type="range" min="0" max="100" step="1" value="60" />
+            </label>
+            <label class="range-control">
+              <span>Strength</span>
+              <output id="liquifyStrengthValue">65%</output>
+              <input id="liquifyStrength" type="range" min="1" max="100" step="1" value="65" />
+            </label>
+          </div>
+          <div class="button-row" style="margin-top:12px">
+            <button id="resetTransformButton" disabled>Reset image fit</button>
+            <button id="resetLiquifyButton" disabled>Reset liquify</button>
+            <button id="undoButton" disabled>Undo</button>
+            <button id="redoButton" disabled>Redo</button>
+            <button id="clearButton" class="danger">Fill margin</button>
+          </div>
+          <p id="toolHint" class="hint">Paint cells directly. Alt-click picks a color; right-click erases.</p>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-title">4. Render & export</h2>
+          <div class="scale-line">
+            <label class="control">
+              Pixel scale
+              <input id="scaleInput" type="number" min="1" max="64" value="16" />
+            </label>
+            <button id="gridButton" class="active">Grid on</button>
+          </div>
+          <div class="button-row scale-presets" style="margin-top:9px">
+            <button data-scale="1">1×</button>
+            <button data-scale="2">2×</button>
+            <button data-scale="4">4×</button>
+            <button data-scale="8">8×</button>
+            <button data-scale="16" class="active">16×</button>
+            <button data-scale="32">32×</button>
+          </div>
+          <div id="outputSize" class="output-size">Export size: 256 × 512 px</div>
+          <div class="button-row" style="margin-top:12px">
+            <button id="downloadButton" class="primary">Download PNG</button>
+            <button id="copyButton">Copy PNG</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="panel workspace" aria-label="Sprite editor workspace">
+        <div class="workspace-top">
+          <div class="dimension-controls" aria-label="Sprite dimensions">
+            <span class="label">Sprite size</span>
+            <label class="dimension-field">
+              <span>W</span>
+              <input id="widthInput" type="number" min="1" max="128" value="16" aria-label="Sprite width in pixels" />
+            </label>
+            <span class="dimension-cross">×</span>
+            <label class="dimension-field">
+              <span>H</span>
+              <input id="heightInput" type="number" min="1" max="128" value="32" aria-label="Sprite height in pixels" />
+            </label>
+          </div>
+          <div class="workspace-actions">
+            <button id="resampleButton" disabled>Resample</button>
+          </div>
+        </div>
+
+        <div class="canvas-stage">
+          <div id="canvasShell" class="canvas-shell">
+            <div id="transformReadout" class="transform-readout">Image 16 × 32</div>
+
+            <div class="sprite-wrap" id="spriteWrap">
+              <div class="source-clip" id="sourceClip">
+                <img id="sourceGhost" class="source-ghost" alt="" />
+              </div>
+              <canvas id="spriteCanvas" width="16" height="32" aria-label="Editable sprite canvas"></canvas>
+              <div id="gridOverlay" class="grid-overlay"></div>
+              <div id="transformBox" class="transform-box" aria-hidden="true">
+                <span class="transform-handle" data-dir="nw" title="Resize source from top-left"></span>
+                <span class="transform-handle" data-dir="n" title="Resize source height from top"></span>
+                <span class="transform-handle" data-dir="ne" title="Resize source from top-right"></span>
+                <span class="transform-handle" data-dir="e" title="Resize source width from right"></span>
+                <span class="transform-handle" data-dir="se" title="Resize source from bottom-right"></span>
+                <span class="transform-handle" data-dir="s" title="Resize source height from bottom"></span>
+                <span class="transform-handle" data-dir="sw" title="Resize source from bottom-left"></span>
+                <span class="transform-handle" data-dir="w" title="Resize source width from left"></span>
+              </div>
+              <div id="liquifyCursor" class="liquify-cursor" aria-hidden="true">
+                <span id="liquifyCursorInner" class="liquify-cursor-inner"></span>
+              </div>
+              <div id="emptyNote" class="empty-note">Your sprite will appear here.<br />Load an image, then use Transform to pan or stretch it beneath the pixel grid.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="workspace-bottom">
+          <span id="cursorInfo">Pixel: —</span>
+          <span id="interactionHelp"><span class="kbd">Alt</span> + click picks color · right-click erases</span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const SAMPLE_DENSITY = 12;
+      const MAX_HISTORY = 80;
+      const MIN_DIMENSION = 1;
+      const MAX_DIMENSION = 128;
+      const MIN_SOURCE_SIZE = 0.25;
+      const MAX_WARP_AXIS = 49;
+
+      const $ = (id) => document.getElementById(id);
+      const imageInput = $('imageInput');
+      const dropZone = $('dropZone');
+      const sourceThumb = $('sourceThumb');
+      const fitMode = $('fitMode');
+      const paletteSize = $('paletteSize');
+      const rederiveButton = $('rederiveButton');
+      const alphaThreshold = $('alphaThreshold');
+      const marginColor = $('marginColor');
+      const marginColorValue = $('marginColorValue');
+      const transparentMargin = $('transparentMargin');
+      const sampleButton = $('sampleButton');
+      const resampleButton = $('resampleButton');
+      const resetTransformButton = $('resetTransformButton');
+      const resetLiquifyButton = $('resetLiquifyButton');
+      const spriteCanvas = $('spriteCanvas');
+      let ctx = spriteCanvas.getContext('2d', { willReadFrequently: true });
+      const canvasShell = $('canvasShell');
+      const spriteWrap = $('spriteWrap');
+      const sourceClip = $('sourceClip');
+      const sourceGhost = $('sourceGhost');
+      const transformBox = $('transformBox');
+      const gridOverlay = $('gridOverlay');
+      const emptyNote = $('emptyNote');
+      const transformReadout = $('transformReadout');
+      const paintColor = $('paintColor');
+      const colorValue = $('colorValue');
+      const pencilTool = $('pencilTool');
+      const pickerTool = $('pickerTool');
+      const eraserTool = $('eraserTool');
+      const transformTool = $('transformTool');
+      const liquifyTool = $('liquifyTool');
+      const liquifyControls = $('liquifyControls');
+      const liquifySize = $('liquifySize');
+      const liquifyHardness = $('liquifyHardness');
+      const liquifyStrength = $('liquifyStrength');
+      const liquifySizeValue = $('liquifySizeValue');
+      const liquifyHardnessValue = $('liquifyHardnessValue');
+      const liquifyStrengthValue = $('liquifyStrengthValue');
+      const liquifyCursor = $('liquifyCursor');
+      const liquifyCursorInner = $('liquifyCursorInner');
+      const undoButton = $('undoButton');
+      const redoButton = $('redoButton');
+      const clearButton = $('clearButton');
+      const scaleInput = $('scaleInput');
+      const gridButton = $('gridButton');
+      const outputSize = $('outputSize');
+      const downloadButton = $('downloadButton');
+      const copyButton = $('copyButton');
+      const cursorInfo = $('cursorInfo');
+      const interactionHelp = $('interactionHelp');
+      const toolHint = $('toolHint');
+      const widthInput = $('widthInput');
+      const heightInput = $('heightInput');
+      const sizeBadge = $('sizeBadge');
+      const statusText = null;
+      const toast = $('toast');
+
+      let spriteW = 16;
+      let spriteH = 32;
+      // The document's colour set. Derived once from the source and then held,
+      // so re-sampling after a nudge or a liquify stroke cannot quietly shift
+      // every colour in the sprite. Cleared to force a fresh derivation.
+      let palette = [];
+      let sourceImage = null;
+      let sourceUrl = '';
+      let sourceName = '';
+      let sourceTransform = { x: 0, y: 0, w: 16, h: 32 };
+      let warpMesh = createWarpMeshForDimensions(16, 32);
+      let currentTool = 'pencil';
+      let isDrawing = false;
+      let lastPaintedIndex = -1;
+      let history = [];
+      let future = [];
+      let gridVisible = true;
+      let toastTimer = null;
+      let sampleFrame = 0;
+      let activeTransformGesture = null;
+      let activeLiquifyGesture = null;
+      let paintBeforeState = null;
+      let marginGestureBefore = null;
+      let lastTransparentMargin = transparentMargin.checked;
+
+      ctx.imageSmoothingEnabled = false;
+      fillCanvasWithMargin();
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+
+      function clampInt(value, min, max, fallback) {
+        const parsed = Number.parseInt(value, 10);
+        if (!Number.isFinite(parsed)) return fallback;
+        return Math.min(max, Math.max(min, parsed));
+      }
+
+      function magneticSnap(value, threshold = 0.16) {
+        const rounded = Math.round(value);
+        return Math.abs(value - rounded) <= threshold ? rounded : value;
+      }
+
+      function desiredWarpAxis(cellCount) {
+        return Math.max(3, Math.min(MAX_WARP_AXIS, cellCount + 1));
+      }
+
+      function createWarpMeshForDimensions(width, height) {
+        const cols = desiredWarpAxis(width);
+        const rows = desiredWarpAxis(height);
+        return { cols, rows, offsets: new Float32Array(cols * rows * 2) };
+      }
+
+      function cloneWarpMesh(mesh = warpMesh) {
+        return {
+          cols: mesh.cols,
+          rows: mesh.rows,
+          offsets: new Float32Array(mesh.offsets)
+        };
+      }
+
+      function sampleWarpOffset(mesh, u, v) {
+        if (!mesh || !mesh.offsets.length) return { x: 0, y: 0 };
+        const gx = clamp(u, 0, 1) * (mesh.cols - 1);
+        const gy = clamp(v, 0, 1) * (mesh.rows - 1);
+        const x0 = Math.floor(gx);
+        const y0 = Math.floor(gy);
+        const x1 = Math.min(mesh.cols - 1, x0 + 1);
+        const y1 = Math.min(mesh.rows - 1, y0 + 1);
+        const tx = gx - x0;
+        const ty = gy - y0;
+        const read = (x, y, axis) => mesh.offsets[(y * mesh.cols + x) * 2 + axis];
+        const lerp = (a, b, t) => a + (b - a) * t;
+        return {
+          x: lerp(lerp(read(x0, y0, 0), read(x1, y0, 0), tx), lerp(read(x0, y1, 0), read(x1, y1, 0), tx), ty),
+          y: lerp(lerp(read(x0, y0, 1), read(x1, y0, 1), tx), lerp(read(x0, y1, 1), read(x1, y1, 1), tx), ty)
+        };
+      }
+
+      function rebuildWarpMesh(preserve = true) {
+        const next = createWarpMeshForDimensions(spriteW, spriteH);
+        if (preserve && warpMesh) {
+          for (let row = 0; row < next.rows; row += 1) {
+            const v = row / (next.rows - 1);
+            for (let col = 0; col < next.cols; col += 1) {
+              const u = col / (next.cols - 1);
+              const sampled = sampleWarpOffset(warpMesh, u, v);
+              const index = (row * next.cols + col) * 2;
+              next.offsets[index] = sampled.x;
+              next.offsets[index + 1] = sampled.y;
+            }
+          }
+        }
+        warpMesh = next;
+      }
+
+      function warpIsActive() {
+        for (let i = 0; i < warpMesh.offsets.length; i += 1) {
+          if (Math.abs(warpMesh.offsets[i]) > 0.00001) return true;
+        }
+        return false;
+      }
+
+      function cloneTransform(transform = sourceTransform) {
+        return { x: transform.x, y: transform.y, w: transform.w, h: transform.h };
+      }
+
+      function snapshotState() {
+        return {
+          w: spriteW,
+          h: spriteH,
+          pixels: new Uint8ClampedArray(ctx.getImageData(0, 0, spriteW, spriteH).data),
+          transform: cloneTransform(),
+          warp: cloneWarpMesh(),
+          margin: marginColor.value,
+          transparentMargin: transparentMargin.checked,
+          palette: palette.map((entry) => ({ ...entry }))
+        };
+      }
+
+      function sameState(a, b) {
+        if (!a || !b || a.w !== b.w || a.h !== b.h) return false;
+        if (a.margin !== b.margin || a.transparentMargin !== b.transparentMargin) return false;
+        const ta = a.transform;
+        const tb = b.transform;
+        if (Math.abs(ta.x - tb.x) > 0.0001 || Math.abs(ta.y - tb.y) > 0.0001 ||
+            Math.abs(ta.w - tb.w) > 0.0001 || Math.abs(ta.h - tb.h) > 0.0001) return false;
+        if (!a.warp || !b.warp || a.warp.cols !== b.warp.cols || a.warp.rows !== b.warp.rows || a.warp.offsets.length !== b.warp.offsets.length) return false;
+        for (let i = 0; i < a.warp.offsets.length; i += 1) {
+          if (Math.abs(a.warp.offsets[i] - b.warp.offsets[i]) > 0.000001) return false;
+        }
+        const pa = a.palette || [];
+        const pb = b.palette || [];
+        if (pa.length !== pb.length) return false;
+        for (let i = 0; i < pa.length; i += 1) {
+          if (pa[i].r !== pb[i].r || pa[i].g !== pb[i].g || pa[i].b !== pb[i].b) return false;
+        }
+        if (a.pixels.length !== b.pixels.length) return false;
+        for (let i = 0; i < a.pixels.length; i += 1) {
+          if (a.pixels[i] !== b.pixels[i]) return false;
+        }
+        return true;
+      }
+
+      function pushHistory(before) {
+        const after = snapshotState();
+        if (!before || sameState(before, after)) return;
+        history.push(before);
+        if (history.length > MAX_HISTORY) history.shift();
+        future = [];
+        updateHistoryButtons();
+      }
+
+      function restoreState(state) {
+        spriteW = state.w;
+        spriteH = state.h;
+        sourceTransform = cloneTransform(state.transform);
+        warpMesh = state.warp ? cloneWarpMesh(state.warp) : createWarpMeshForDimensions(state.w, state.h);
+        palette = (state.palette || []).map((entry) => ({ ...entry }));
+        marginColor.value = state.margin;
+        marginColorValue.textContent = state.margin.toUpperCase();
+        transparentMargin.checked = state.transparentMargin;
+        lastTransparentMargin = state.transparentMargin;
+
+        spriteCanvas.width = spriteW;
+        spriteCanvas.height = spriteH;
+        ctx = spriteCanvas.getContext('2d', { willReadFrequently: true });
+        ctx.imageSmoothingEnabled = false;
+        const imageData = ctx.createImageData(spriteW, spriteH);
+        imageData.data.set(state.pixels);
+        ctx.putImageData(imageData, 0, 0);
+        updateLayout();
+        updateTransformVisual();
+        markCanvasUsed();
+      }
+
+      function updateHistoryButtons() {
+        undoButton.disabled = history.length === 0;
+        redoButton.disabled = future.length === 0;
+      }
+
+      function undo() {
+        if (!history.length) return;
+        future.push(snapshotState());
+        restoreState(history.pop());
+        updateHistoryButtons();
+      }
+
+      function redo() {
+        if (!future.length) return;
+        history.push(snapshotState());
+        restoreState(future.pop());
+        updateHistoryButtons();
+      }
+
+      function markCanvasUsed() {
+        emptyNote.classList.add('hidden');
+      }
+
+      function setTool(tool) {
+        currentTool = tool;
+        pencilTool.classList.toggle('active', tool === 'pencil');
+        pickerTool.classList.toggle('active', tool === 'picker');
+        eraserTool.classList.toggle('active', tool === 'eraser');
+        transformTool.classList.toggle('transform-active', tool === 'transform');
+        liquifyTool.classList.toggle('liquify-active', tool === 'liquify');
+        spriteWrap.classList.toggle('transform-mode', tool === 'transform' && Boolean(sourceImage));
+        spriteWrap.classList.toggle('liquify-mode', tool === 'liquify' && Boolean(sourceImage));
+        liquifyControls.classList.toggle('hidden', tool !== 'liquify');
+
+        if ((tool === 'transform' || tool === 'liquify') && !sourceImage) {
+          showToast(`Load an image before using ${tool === 'transform' ? 'Transform' : 'Liquify'}.`);
+          currentTool = 'pencil';
+          pencilTool.classList.add('active');
+          transformTool.classList.remove('transform-active');
+          liquifyTool.classList.remove('liquify-active');
+          spriteWrap.classList.remove('transform-mode', 'liquify-mode');
+          liquifyControls.classList.add('hidden');
+        } else if (tool === 'transform') {
+          toolHint.textContent = 'Drag the image to pan it. Drag the green handles to stretch it. Sampling updates live.';
+          interactionHelp.innerHTML = 'Drag image to pan · drag the green edge bars or corner handles to stretch the source';
+        } else if (tool === 'liquify') {
+          toolHint.textContent = 'Drag through the sprite to push the source image. Brush size, hardness, and strength update the deformation live.';
+          interactionHelp.innerHTML = 'Drag to push pixels · use the brush controls to change the falloff';
+        } else {
+          toolHint.textContent = 'Paint cells directly. Alt-click picks a color; right-click erases.';
+          interactionHelp.innerHTML = '<span class="kbd">Alt</span> + click picks color · right-click erases';
+        }
+
+        if (currentTool !== 'liquify') liquifyCursor.classList.remove('visible');
+      }
+
+      function hexToRgba(hex) {
+        const clean = hex.replace('#', '');
+        return {
+          r: Number.parseInt(clean.slice(0, 2), 16),
+          g: Number.parseInt(clean.slice(2, 4), 16),
+          b: Number.parseInt(clean.slice(4, 6), 16),
+          a: 255
+        };
+      }
+
+      function rgbToHex(r, g, b) {
+        return '#' + [r, g, b]
+          .map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0'))
+          .join('')
+          .toUpperCase();
+      }
+
+      function getEditorScale() {
+        return clampInt(scaleInput.value, 1, 64, 16);
+      }
+
+      function getPixelFromEvent(event) {
+        const rect = spriteCanvas.getBoundingClientRect();
+        const x = Math.floor((event.clientX - rect.left) / rect.width * spriteW);
+        const y = Math.floor((event.clientY - rect.top) / rect.height * spriteH);
+        if (x < 0 || x >= spriteW || y < 0 || y >= spriteH) return null;
+        return { x, y, index: y * spriteW + x };
+      }
+
+      function getSpritePoint(event) {
+        const rect = spriteCanvas.getBoundingClientRect();
+        return {
+          x: (event.clientX - rect.left) / rect.width * spriteW,
+          y: (event.clientY - rect.top) / rect.height * spriteH
+        };
+      }
+
+      function updateLiquifyCursor(event) {
+        if (currentTool !== 'liquify' || !sourceImage) return;
+        const rect = spriteCanvas.getBoundingClientRect();
+        const inside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+        if (!inside && !activeLiquifyGesture) {
+          liquifyCursor.classList.remove('visible');
+          return;
+        }
+        const point = getSpritePoint(event);
+        const scale = getEditorScale();
+        const size = clamp(Number(liquifySize.value) || 8, 1, 128);
+        const hardness = clamp(Number(liquifyHardness.value) || 0, 0, 100) / 100;
+        liquifyCursor.style.left = `${point.x * scale}px`;
+        liquifyCursor.style.top = `${point.y * scale}px`;
+        liquifyCursor.style.width = `${size * scale}px`;
+        liquifyCursor.style.height = `${size * scale}px`;
+        liquifyCursorInner.style.width = `${hardness * 100}%`;
+        liquifyCursorInner.style.height = `${hardness * 100}%`;
+        liquifyCursor.classList.add('visible');
+      }
+
+      function readPixel(x, y) {
+        return ctx.getImageData(x, y, 1, 1).data;
+      }
+
+      function writePixel(x, y, rgba) {
+        const image = ctx.createImageData(1, 1);
+        image.data[0] = rgba.r;
+        image.data[1] = rgba.g;
+        image.data[2] = rgba.b;
+        image.data[3] = rgba.a;
+        ctx.putImageData(image, x, y);
+      }
+
+      function pickPixel(x, y) {
+        const data = readPixel(x, y);
+        if (data[3] === 0) {
+          showToast('That pixel is transparent.');
+          return;
+        }
+        const hex = rgbToHex(data[0], data[1], data[2]);
+        paintColor.value = hex;
+        colorValue.textContent = hex;
+        setTool('pencil');
+      }
+
+      function paintAt(event, forceErase = false) {
+        const pixel = getPixelFromEvent(event);
+        if (!pixel || pixel.index === lastPaintedIndex) return;
+
+        if (event.altKey || currentTool === 'picker') {
+          pickPixel(pixel.x, pixel.y);
+          isDrawing = false;
+          return;
+        }
+
+        const erase = forceErase || currentTool === 'eraser';
+        writePixel(pixel.x, pixel.y, erase ? { r: 0, g: 0, b: 0, a: 0 } : hexToRgba(paintColor.value));
+        lastPaintedIndex = pixel.index;
+        markCanvasUsed();
+      }
+
+      function updateCursorInfo(event) {
+        if (currentTool === 'liquify') {
+          const point = getSpritePoint(event);
+          cursorInfo.textContent = `Liquify: ${point.x.toFixed(1)}, ${point.y.toFixed(1)} · brush ${liquifySize.value}px`;
+          return;
+        }
+        const pixel = getPixelFromEvent(event);
+        if (!pixel) {
+          cursorInfo.textContent = 'Pixel: —';
+          return;
+        }
+        const data = readPixel(pixel.x, pixel.y);
+        const color = data[3] === 0 ? 'transparent' : rgbToHex(data[0], data[1], data[2]);
+        cursorInfo.textContent = `Pixel: ${pixel.x}, ${pixel.y} · ${color}`;
+      }
+
+      function loadFile(file) {
+        if (!file || !file.type.startsWith('image/')) {
+          showToast('Choose a valid image file.');
+          return;
+        }
+
+        if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+        sourceUrl = URL.createObjectURL(file);
+        sourceName = file.name;
+        const image = new Image();
+        image.onload = () => {
+          sourceImage = image;
+          sourceThumb.src = sourceUrl;
+          sourceGhost.src = sourceUrl;
+          sourceThumb.classList.add('visible');
+          sampleButton.disabled = false;
+          resampleButton.disabled = false;
+          rederiveButton.disabled = false;
+          // A new source is a new character; its colours are not the old one's.
+          palette = [];
+          resetTransformButton.disabled = false;
+          resetLiquifyButton.disabled = false;
+          history = [];
+          future = [];
+          updateHistoryButtons();
+          rebuildWarpMesh(false);
+          resetTransformToFit({ record: false, notify: false });
+          showToast(`${file.name} loaded.`);
+        };
+        image.onerror = () => showToast('Could not load that image.');
+        image.src = sourceUrl;
+      }
+
+      function calculateFitTransform(mode = fitMode.value) {
+        if (!sourceImage) return { x: 0, y: 0, w: spriteW, h: spriteH };
+        const sw = sourceImage.naturalWidth;
+        const sh = sourceImage.naturalHeight;
+
+        if (mode === 'stretch') return { x: 0, y: 0, w: spriteW, h: spriteH };
+
+        const scale = mode === 'cover'
+          ? Math.max(spriteW / sw, spriteH / sh)
+          : Math.min(spriteW / sw, spriteH / sh);
+        const w = sw * scale;
+        const h = sh * scale;
+        return { x: (spriteW - w) / 2, y: (spriteH - h) / 2, w, h };
+      }
+
+      function resetTransformToFit({ record = true, notify = true } = {}) {
+        if (!sourceImage) return;
+        const before = record ? snapshotState() : null;
+        sourceTransform = calculateFitTransform();
+        updateTransformVisual();
+        renderSample();
+        if (record) pushHistory(before);
+        if (notify) showToast(`Image fit reset to ${fitMode.value}.`);
+      }
+
+      function fillSamplingBackground(sampleCtx, canvasWidth, canvasHeight) {
+        sampleCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+        if (!transparentMargin.checked) {
+          sampleCtx.fillStyle = marginColor.value;
+          sampleCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+        }
+      }
+
+      function getWarpVertex(col, row, densityX = 1, densityY = 1) {
+        const u = col / (warpMesh.cols - 1);
+        const v = row / (warpMesh.rows - 1);
+        const index = (row * warpMesh.cols + col) * 2;
+        return {
+          x: (sourceTransform.x + u * sourceTransform.w + warpMesh.offsets[index] * sourceTransform.w) * densityX,
+          y: (sourceTransform.y + v * sourceTransform.h + warpMesh.offsets[index + 1] * sourceTransform.h) * densityY
+        };
+      }
+
+      function expandedTriangle(points, amount = 0.65) {
+        const cx = (points[0].x + points[1].x + points[2].x) / 3;
+        const cy = (points[0].y + points[1].y + points[2].y) / 3;
+        return points.map((point) => {
+          const dx = point.x - cx;
+          const dy = point.y - cy;
+          const length = Math.hypot(dx, dy) || 1;
+          return { x: point.x + dx / length * amount, y: point.y + dy / length * amount };
+        });
+      }
+
+      function drawTexturedTriangle(targetCtx, source, sourcePoints, destinationPoints) {
+        const [s0, s1, s2] = sourcePoints;
+        const [d0, d1, d2] = destinationPoints;
+        const denominator = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
+        if (Math.abs(denominator) < 0.000001) return;
+        const area = (d1.x - d0.x) * (d2.y - d0.y) - (d1.y - d0.y) * (d2.x - d0.x);
+        if (Math.abs(area) < 0.000001) return;
+
+        const a = (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + d2.x * (s0.y - s1.y)) / denominator;
+        const c = (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + d2.x * (s1.x - s0.x)) / denominator;
+        const e = (d0.x * (s1.x * s2.y - s2.x * s1.y) + d1.x * (s2.x * s0.y - s0.x * s2.y) + d2.x * (s0.x * s1.y - s1.x * s0.y)) / denominator;
+        const b = (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + d2.y * (s0.y - s1.y)) / denominator;
+        const d = (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + d2.y * (s1.x - s0.x)) / denominator;
+        const f = (d0.y * (s1.x * s2.y - s2.x * s1.y) + d1.y * (s2.x * s0.y - s0.x * s2.y) + d2.y * (s0.x * s1.y - s1.x * s0.y)) / denominator;
+
+        const clipPoints = expandedTriangle(destinationPoints);
+        targetCtx.save();
+        targetCtx.beginPath();
+        targetCtx.moveTo(clipPoints[0].x, clipPoints[0].y);
+        targetCtx.lineTo(clipPoints[1].x, clipPoints[1].y);
+        targetCtx.lineTo(clipPoints[2].x, clipPoints[2].y);
+        targetCtx.closePath();
+        targetCtx.clip();
+        targetCtx.setTransform(a, b, c, d, e, f);
+        targetCtx.drawImage(source, 0, 0);
+        targetCtx.restore();
+      }
+
+      function drawWarpedSource(sampleCtx, densityX, densityY) {
+        const sw = sourceImage.naturalWidth;
+        const sh = sourceImage.naturalHeight;
+        const sourcePoint = (col, row) => ({
+          x: col / (warpMesh.cols - 1) * sw,
+          y: row / (warpMesh.rows - 1) * sh
+        });
+
+        for (let row = 0; row < warpMesh.rows - 1; row += 1) {
+          for (let col = 0; col < warpMesh.cols - 1; col += 1) {
+            const s00 = sourcePoint(col, row);
+            const s10 = sourcePoint(col + 1, row);
+            const s01 = sourcePoint(col, row + 1);
+            const s11 = sourcePoint(col + 1, row + 1);
+            const d00 = getWarpVertex(col, row, densityX, densityY);
+            const d10 = getWarpVertex(col + 1, row, densityX, densityY);
+            const d01 = getWarpVertex(col, row + 1, densityX, densityY);
+            const d11 = getWarpVertex(col + 1, row + 1, densityX, densityY);
+
+            drawTexturedTriangle(sampleCtx, sourceImage, [s00, s10, s11], [d00, d10, d11]);
+            drawTexturedTriangle(sampleCtx, sourceImage, [s00, s11, s01], [d00, d11, d01]);
+          }
+        }
+      }
+
+      function drawSourceToSamplingCanvas(sampleCtx, canvasWidth, canvasHeight) {
+        fillSamplingBackground(sampleCtx, canvasWidth, canvasHeight);
+        if (!sourceImage) return;
+        sampleCtx.imageSmoothingEnabled = true;
+        sampleCtx.imageSmoothingQuality = 'high';
+        const densityX = canvasWidth / spriteW;
+        const densityY = canvasHeight / spriteH;
+        if (warpIsActive()) {
+          drawWarpedSource(sampleCtx, densityX, densityY);
+        } else {
+          sampleCtx.drawImage(
+            sourceImage,
+            sourceTransform.x * densityX,
+            sourceTransform.y * densityY,
+            sourceTransform.w * densityX,
+            sourceTransform.h * densityY
+          );
+        }
+      }
+
+      // Median cut over the opaque source pixels. The point is not fidelity —
+      // it is that the sprite ends up with a countable, editable set of colours
+      // instead of an average per cell, which is what produced 800-odd colours
+      // in a 32x64 character.
+      function derivePalette(data, canvasWidth, canvasHeight, count, alphaCutoff) {
+        const pixels = [];
+        // Every third pixel is plenty to characterise the colour distribution
+        // and keeps a 384x768 sampling canvas well under a frame.
+        for (let i = 0; i < data.length; i += 4 * 3) {
+          if (data[i + 3] < alphaCutoff) continue;
+          pixels.push([data[i], data[i + 1], data[i + 2]]);
+        }
+        if (!pixels.length) return [];
+
+        let boxes = [pixels];
+        while (boxes.length < count) {
+          let target = -1;
+          let widestRange = -1;
+          let widestAxis = 0;
+          boxes.forEach((box, index) => {
+            if (box.length < 2) return;
+            for (let axis = 0; axis < 3; axis += 1) {
+              let lo = 255;
+              let hi = 0;
+              for (const p of box) {
+                if (p[axis] < lo) lo = p[axis];
+                if (p[axis] > hi) hi = p[axis];
+              }
+              if (hi - lo > widestRange) {
+                widestRange = hi - lo;
+                widestAxis = axis;
+                target = index;
+              }
+            }
+          });
+          if (target < 0 || widestRange <= 0) break;
+
+          const box = boxes[target];
+          box.sort((a, b) => a[widestAxis] - b[widestAxis]);
+          const mid = box.length >> 1;
+          boxes.splice(target, 1, box.slice(0, mid), box.slice(mid));
+        }
+
+        return boxes.filter((box) => box.length).map((box) => {
+          let r = 0;
+          let g = 0;
+          let b = 0;
+          for (const p of box) {
+            r += p[0];
+            g += p[1];
+            b += p[2];
+          }
+          return {
+            r: Math.round(r / box.length),
+            g: Math.round(g / box.length),
+            b: Math.round(b / box.length)
+          };
+        });
+      }
+
+      function nearestPaletteColor(r, g, b) {
+        let best = palette[0];
+        let bestDistance = Infinity;
+        for (const entry of palette) {
+          const dr = entry.r - r;
+          const dg = entry.g - g;
+          const db = entry.b - b;
+          const distance = dr * dr + dg * dg + db * db;
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            best = entry;
+          }
+        }
+        return best;
+      }
+
+      function dominantColorForCell(data, startX, startY, density, canvasWidth, bits, alphaCutoff) {
+        const shift = 8 - bits;
+        const bins = new Map();
+
+        for (let y = 0; y < density; y += 1) {
+          for (let x = 0; x < density; x += 1) {
+            const index = ((startY + y) * canvasWidth + (startX + x)) * 4;
+            const a = data[index + 3];
+            if (a < alphaCutoff) continue;
+
+            const r = data[index];
+            const g = data[index + 1];
+            const b = data[index + 2];
+            const qr = r >> shift;
+            const qg = g >> shift;
+            const qb = b >> shift;
+            const key = (qr << (bits * 2)) | (qg << bits) | qb;
+            const current = bins.get(key) || { count: 0, r: 0, g: 0, b: 0, a: 0 };
+            current.count += 1;
+            current.r += r;
+            current.g += g;
+            current.b += b;
+            current.a += a;
+            bins.set(key, current);
+          }
+        }
+
+        if (!bins.size) return { r: 0, g: 0, b: 0, a: 0 };
+
+        let winner = null;
+        for (const bin of bins.values()) {
+          if (!winner || bin.count > winner.count || (bin.count === winner.count && bin.a > winner.a)) {
+            winner = bin;
+          }
+        }
+
+        return {
+          r: Math.round(winner.r / winner.count),
+          g: Math.round(winner.g / winner.count),
+          b: Math.round(winner.b / winner.count),
+          a: Math.round(winner.a / winner.count)
+        };
+      }
+
+      function renderSample() {
+        if (!sourceImage) {
+          fillCanvasWithMargin();
+          return;
+        }
+
+        const density = SAMPLE_DENSITY;
+        const sampleCanvas = document.createElement('canvas');
+        sampleCanvas.width = spriteW * density;
+        sampleCanvas.height = spriteH * density;
+        const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+        drawSourceToSamplingCanvas(sampleCtx, sampleCanvas.width, sampleCanvas.height);
+
+        const sampleData = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height).data;
+        // Grouping within a cell stays fine-grained; constraining the output is
+        // the palette's job, not the bin's.
+        const bits = 5;
+        const alphaCutoff = clampInt(alphaThreshold.value, 0, 255, 24);
+        const wanted = clampInt(paletteSize.value, 2, 64, 16);
+        if (palette.length !== wanted) {
+          palette = derivePalette(sampleData, sampleCanvas.width, sampleCanvas.height, wanted, alphaCutoff);
+        }
+        const output = ctx.createImageData(spriteW, spriteH);
+
+        for (let cellY = 0; cellY < spriteH; cellY += 1) {
+          for (let cellX = 0; cellX < spriteW; cellX += 1) {
+            const color = dominantColorForCell(
+              sampleData,
+              cellX * density,
+              cellY * density,
+              density,
+              sampleCanvas.width,
+              bits,
+              alphaCutoff
+            );
+            const outIndex = (cellY * spriteW + cellX) * 4;
+            // Alpha is binary: a half-transparent pixel is a colour the palette
+            // does not contain, and pixel art has no use for one.
+            const opaque = color.a >= alphaCutoff && palette.length > 0;
+            const snapped = opaque ? nearestPaletteColor(color.r, color.g, color.b) : null;
+            output.data[outIndex] = snapped ? snapped.r : 0;
+            output.data[outIndex + 1] = snapped ? snapped.g : 0;
+            output.data[outIndex + 2] = snapped ? snapped.b : 0;
+            output.data[outIndex + 3] = opaque ? 255 : 0;
+          }
+        }
+
+        ctx.putImageData(output, 0, 0);
+        markCanvasUsed();
+      }
+
+      function sampleDominantColors({ record = true, notify = true } = {}) {
+        if (!sourceImage) return;
+        const before = record ? snapshotState() : null;
+        renderSample();
+        if (record) pushHistory(before);
+        if (notify) showToast(`Sampled at ${spriteW} × ${spriteH}.`);
+      }
+
+      function scheduleSample() {
+        if (sampleFrame) return;
+        sampleFrame = requestAnimationFrame(() => {
+          sampleFrame = 0;
+          renderSample();
+        });
+      }
+
+      function flushScheduledSample() {
+        if (sampleFrame) {
+          cancelAnimationFrame(sampleFrame);
+          sampleFrame = 0;
+        }
+        renderSample();
+      }
+
+      function fillCanvasWithMargin() {
+        ctx.clearRect(0, 0, spriteW, spriteH);
+        if (!transparentMargin.checked) {
+          ctx.fillStyle = marginColor.value;
+          ctx.fillRect(0, 0, spriteW, spriteH);
+        }
+      }
+
+      function clearSprite() {
+        const before = snapshotState();
+        fillCanvasWithMargin();
+        pushHistory(before);
+        markCanvasUsed();
+        showToast(transparentMargin.checked ? 'Canvas made transparent.' : 'Canvas filled with margin color.');
+      }
+
+      function updateLayout() {
+        const scale = getEditorScale();
+        scaleInput.value = scale;
+        document.documentElement.style.setProperty('--pixel-size', `${scale}px`);
+        spriteWrap.style.width = `${spriteW * scale}px`;
+        spriteWrap.style.height = `${spriteH * scale}px`;
+        widthInput.value = spriteW;
+        heightInput.value = spriteH;
+        sizeBadge.textContent = `${spriteW} × ${spriteH} pixels`;
+        outputSize.textContent = `Export size: ${spriteW * scale} × ${spriteH * scale} px`;
+        spriteCanvas.setAttribute('aria-label', `Editable ${spriteW} by ${spriteH} sprite canvas`);
+        updateTransformReadout();
+        document.querySelectorAll('[data-scale]').forEach((button) => {
+          button.classList.toggle('active', Number(button.dataset.scale) === scale);
+        });
+
+        if (scale < 4 && gridVisible) {
+          gridOverlay.classList.add('hidden');
+        } else if (gridVisible) {
+          gridOverlay.classList.remove('hidden');
+        }
+        updateTransformVisual();
+      }
+
+      function setScale(value) {
+        scaleInput.value = clampInt(value, 1, 64, 16);
+        updateLayout();
+      }
+
+      function formatTransformNumber(value) {
+        const rounded = Math.round(value);
+        return Math.abs(value - rounded) < 0.001 ? String(rounded) : value.toFixed(1);
+      }
+
+      function updateTransformReadout() {
+        transformReadout.textContent = `Image ${formatTransformNumber(sourceTransform.w)} × ${formatTransformNumber(sourceTransform.h)} · x ${formatTransformNumber(sourceTransform.x)}, y ${formatTransformNumber(sourceTransform.y)}`;
+      }
+
+      function updateTransformVisual() {
+        const scale = getEditorScale();
+        sourceClip.style.background = transparentMargin.checked ? 'transparent' : marginColor.value;
+        sourceGhost.style.left = `${sourceTransform.x * scale}px`;
+        sourceGhost.style.top = `${sourceTransform.y * scale}px`;
+        sourceGhost.style.width = `${sourceTransform.w * scale}px`;
+        sourceGhost.style.height = `${sourceTransform.h * scale}px`;
+        transformBox.style.left = `${sourceTransform.x * scale}px`;
+        transformBox.style.top = `${sourceTransform.y * scale}px`;
+        transformBox.style.width = `${sourceTransform.w * scale}px`;
+        transformBox.style.height = `${sourceTransform.h * scale}px`;
+        updateTransformReadout();
+      }
+
+      function resizeCanvasPixels(newW, newH, side = 'numeric') {
+        newW = clampInt(newW, MIN_DIMENSION, MAX_DIMENSION, spriteW);
+        newH = clampInt(newH, MIN_DIMENSION, MAX_DIMENSION, spriteH);
+        if (newW === spriteW && newH === spriteH) return false;
+
+        const oldW = spriteW;
+        const oldH = spriteH;
+        const oldCanvas = document.createElement('canvas');
+        oldCanvas.width = oldW;
+        oldCanvas.height = oldH;
+        oldCanvas.getContext('2d').drawImage(spriteCanvas, 0, 0);
+
+        const ratioX = newW / oldW;
+        const ratioY = newH / oldH;
+        sourceTransform = {
+          x: sourceTransform.x * ratioX,
+          y: sourceTransform.y * ratioY,
+          w: sourceTransform.w * ratioX,
+          h: sourceTransform.h * ratioY
+        };
+
+        spriteW = newW;
+        spriteH = newH;
+        rebuildWarpMesh(true);
+        spriteCanvas.width = spriteW;
+        spriteCanvas.height = spriteH;
+        ctx = spriteCanvas.getContext('2d', { willReadFrequently: true });
+        ctx.imageSmoothingEnabled = false;
+
+        if (sourceImage) {
+          renderSample();
+        } else {
+          fillCanvasWithMargin();
+          const dx = side === 'left' ? newW - oldW : 0;
+          const dy = side === 'top' ? newH - oldH : 0;
+          ctx.drawImage(oldCanvas, dx, dy);
+        }
+
+        updateLayout();
+        markCanvasUsed();
+        return true;
+      }
+
+      function applyDimensionInputs() {
+        const before = snapshotState();
+        const changed = resizeCanvasPixels(widthInput.value, heightInput.value, 'numeric');
+        if (changed) pushHistory(before);
+      }
+
+      function createExportCanvas() {
+        const scale = getEditorScale();
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = spriteW * scale;
+        exportCanvas.height = spriteH * scale;
+        const exportCtx = exportCanvas.getContext('2d');
+        exportCtx.imageSmoothingEnabled = false;
+        exportCtx.drawImage(spriteCanvas, 0, 0, exportCanvas.width, exportCanvas.height);
+        return exportCanvas;
+      }
+
+      function downloadPng() {
+        const exportCanvas = createExportCanvas();
+        const link = document.createElement('a');
+        link.download = `sprite-${spriteW}x${spriteH}-${getEditorScale()}x.png`;
+        link.href = exportCanvas.toDataURL('image/png');
+        link.click();
+      }
+
+      async function copyPng() {
+        if (!navigator.clipboard || !window.ClipboardItem) {
+          showToast('PNG clipboard is not supported in this browser.');
+          return;
+        }
+        try {
+          const blob = await new Promise((resolve) => createExportCanvas().toBlob(resolve, 'image/png'));
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          showToast('PNG copied to clipboard.');
+        } catch (error) {
+          console.error(error);
+          showToast('Could not copy PNG. Try Download instead.');
+        }
+      }
+
+      function updateLiquifyControlLabels() {
+        liquifySizeValue.textContent = `${liquifySize.value} px`;
+        liquifyHardnessValue.textContent = `${liquifyHardness.value}%`;
+        liquifyStrengthValue.textContent = `${liquifyStrength.value}%`;
+      }
+
+      function resetLiquify({ record = true, notify = true } = {}) {
+        if (!sourceImage) return;
+        const before = record ? snapshotState() : null;
+        rebuildWarpMesh(false);
+        renderSample();
+        if (record) pushHistory(before);
+        if (notify) showToast('Liquify deformation reset.');
+      }
+
+      function liquifyWeight(distance, radius, hardness) {
+        if (distance >= radius) return 0;
+        const hardRadius = radius * hardness;
+        if (distance <= hardRadius || radius <= hardRadius + 0.0001) return 1;
+        const t = clamp((radius - distance) / (radius - hardRadius), 0, 1);
+        return t * t * (3 - 2 * t);
+      }
+
+      function applyLiquifyDab(center, dx, dy) {
+        const size = clamp(Number(liquifySize.value) || 8, 1, 128);
+        const radius = Math.max(0.5, size / 2);
+        const hardness = clamp(Number(liquifyHardness.value) || 0, 0, 100) / 100;
+        const strength = clamp(Number(liquifyStrength.value) || 65, 1, 100) / 100;
+        const width = Math.max(MIN_SOURCE_SIZE, sourceTransform.w);
+        const height = Math.max(MIN_SOURCE_SIZE, sourceTransform.h);
+        let changed = false;
+
+        for (let row = 0; row < warpMesh.rows; row += 1) {
+          const v = row / (warpMesh.rows - 1);
+          for (let col = 0; col < warpMesh.cols; col += 1) {
+            const u = col / (warpMesh.cols - 1);
+            const index = (row * warpMesh.cols + col) * 2;
+            const vertexX = sourceTransform.x + u * width + warpMesh.offsets[index] * width;
+            const vertexY = sourceTransform.y + v * height + warpMesh.offsets[index + 1] * height;
+            const distance = Math.hypot(vertexX - center.x, vertexY - center.y);
+            const weight = liquifyWeight(distance, radius, hardness);
+            if (weight <= 0) continue;
+            warpMesh.offsets[index] += dx * strength * weight / width;
+            warpMesh.offsets[index + 1] += dy * strength * weight / height;
+            changed = true;
+          }
+        }
+        return changed;
+      }
+
+      function applyLiquifyStroke(from, to) {
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance < 0.0001) return false;
+        const radius = Math.max(0.5, (Number(liquifySize.value) || 8) / 2);
+        const spacing = Math.max(0.12, radius * 0.18);
+        const steps = Math.max(1, Math.ceil(distance / spacing));
+        let changed = false;
+        for (let step = 1; step <= steps; step += 1) {
+          const t = step / steps;
+          const center = { x: from.x + dx * t, y: from.y + dy * t };
+          changed = applyLiquifyDab(center, dx / steps, dy / steps) || changed;
+        }
+        return changed;
+      }
+
+      function beginLiquifyGesture(event) {
+        event.preventDefault();
+        spriteCanvas.setPointerCapture(event.pointerId);
+        const point = getSpritePoint(event);
+        activeLiquifyGesture = {
+          pointerId: event.pointerId,
+          lastPoint: point,
+          before: snapshotState(),
+          target: spriteCanvas,
+          changed: false
+        };
+        spriteWrap.classList.add('liquifying');
+        updateLiquifyCursor(event);
+      }
+
+      function moveLiquifyGesture(event) {
+        updateLiquifyCursor(event);
+        const gesture = activeLiquifyGesture;
+        if (!gesture || event.pointerId !== gesture.pointerId) return;
+        const point = getSpritePoint(event);
+        if (applyLiquifyStroke(gesture.lastPoint, point)) {
+          gesture.changed = true;
+          scheduleSample();
+        }
+        gesture.lastPoint = point;
+      }
+
+      function endLiquifyGesture(event) {
+        const gesture = activeLiquifyGesture;
+        if (!gesture || event.pointerId !== gesture.pointerId) return;
+        if (gesture.target.hasPointerCapture(event.pointerId)) gesture.target.releasePointerCapture(event.pointerId);
+        activeLiquifyGesture = null;
+        spriteWrap.classList.remove('liquifying');
+        if (gesture.changed) {
+          flushScheduledSample();
+          pushHistory(gesture.before);
+        }
+        updateLiquifyCursor(event);
+      }
+
+      function beginTransformPan(event) {
+        event.preventDefault();
+        spriteCanvas.setPointerCapture(event.pointerId);
+        spriteWrap.classList.add('dragging');
+        transformReadout.classList.add('visible');
+        activeTransformGesture = {
+          type: 'pan',
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          startTransform: cloneTransform(),
+          before: snapshotState(),
+          target: spriteCanvas
+        };
+      }
+
+      function beginTransformResize(event, handle, dir) {
+        event.preventDefault();
+        event.stopPropagation();
+        handle.setPointerCapture(event.pointerId);
+        handle.classList.add('active');
+        transformReadout.classList.add('visible');
+        activeTransformGesture = {
+          type: 'resize',
+          dir,
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          startTransform: cloneTransform(),
+          before: snapshotState(),
+          target: handle
+        };
+      }
+
+      function moveTransformGesture(event) {
+        const gesture = activeTransformGesture;
+        if (!gesture || event.pointerId !== gesture.pointerId) return;
+        const scale = getEditorScale();
+        const dx = (event.clientX - gesture.startX) / scale;
+        const dy = (event.clientY - gesture.startY) / scale;
+        const start = gesture.startTransform;
+
+        if (gesture.type === 'pan') {
+          sourceTransform = {
+            x: magneticSnap(start.x + dx),
+            y: magneticSnap(start.y + dy),
+            w: start.w,
+            h: start.h
+          };
+        } else {
+          let x = start.x;
+          let y = start.y;
+          let w = start.w;
+          let h = start.h;
+          const dir = gesture.dir;
+
+          if (dir.includes('e')) w = Math.max(MIN_SOURCE_SIZE, magneticSnap(start.w + dx));
+          if (dir.includes('s')) h = Math.max(MIN_SOURCE_SIZE, magneticSnap(start.h + dy));
+          if (dir.includes('w')) {
+            const proposedW = Math.max(MIN_SOURCE_SIZE, magneticSnap(start.w - dx));
+            x = start.x + (start.w - proposedW);
+            w = proposedW;
+          }
+          if (dir.includes('n')) {
+            const proposedH = Math.max(MIN_SOURCE_SIZE, magneticSnap(start.h - dy));
+            y = start.y + (start.h - proposedH);
+            h = proposedH;
+          }
+          sourceTransform = { x, y, w, h };
+        }
+
+        updateTransformVisual();
+        scheduleSample();
+      }
+
+      function endTransformGesture(event) {
+        const gesture = activeTransformGesture;
+        if (!gesture || event.pointerId !== gesture.pointerId) return;
+        if (gesture.target.hasPointerCapture(event.pointerId)) gesture.target.releasePointerCapture(event.pointerId);
+        gesture.target.classList?.remove('active');
+        spriteWrap.classList.remove('dragging');
+        transformReadout.classList.remove('visible');
+        activeTransformGesture = null;
+        flushScheduledSample();
+        pushHistory(gesture.before);
+      }
+
+      imageInput.addEventListener('change', () => loadFile(imageInput.files[0]));
+
+      ['dragenter', 'dragover'].forEach((type) => {
+        dropZone.addEventListener(type, (event) => {
+          event.preventDefault();
+          dropZone.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach((type) => {
+        dropZone.addEventListener(type, (event) => {
+          event.preventDefault();
+          dropZone.classList.remove('dragover');
+        });
+      });
+
+      dropZone.addEventListener('drop', (event) => loadFile(event.dataTransfer.files[0]));
+      sampleButton.addEventListener('click', () => sampleDominantColors());
+      resampleButton.addEventListener('click', () => sampleDominantColors());
+      resetTransformButton.addEventListener('click', () => resetTransformToFit());
+      resetLiquifyButton.addEventListener('click', () => resetLiquify());
+
+      fitMode.addEventListener('change', () => sourceImage && resetTransformToFit({ record: true, notify: false }));
+      paletteSize.addEventListener('change', () => sourceImage && sampleDominantColors({ record: true, notify: false }));
+      rederiveButton.addEventListener('click', () => {
+        if (!sourceImage) return;
+        palette = [];
+        sampleDominantColors();
+      });
+      alphaThreshold.addEventListener('change', () => sourceImage && sampleDominantColors({ record: true, notify: false }));
+
+      const rememberMarginBefore = () => {
+        if (!marginGestureBefore) marginGestureBefore = snapshotState();
+      };
+
+      marginColor.addEventListener('pointerdown', rememberMarginBefore);
+      marginColor.addEventListener('focus', rememberMarginBefore);
+      marginColor.addEventListener('input', () => {
+        marginColorValue.textContent = marginColor.value.toUpperCase();
+        updateTransformVisual();
+        if (sourceImage) scheduleSample();
+        else fillCanvasWithMargin();
+      });
+
+      marginColor.addEventListener('change', () => {
+        if (sourceImage) flushScheduledSample();
+        else fillCanvasWithMargin();
+        if (marginGestureBefore) pushHistory(marginGestureBefore);
+        marginGestureBefore = null;
+      });
+
+      transparentMargin.addEventListener('change', () => {
+        const nextValue = transparentMargin.checked;
+        transparentMargin.checked = lastTransparentMargin;
+        const before = snapshotState();
+        transparentMargin.checked = nextValue;
+        lastTransparentMargin = nextValue;
+        updateTransformVisual();
+        if (sourceImage) renderSample();
+        else fillCanvasWithMargin();
+        pushHistory(before);
+      });
+
+      paintColor.addEventListener('input', () => {
+        colorValue.textContent = paintColor.value.toUpperCase();
+        setTool('pencil');
+      });
+
+      pencilTool.addEventListener('click', () => setTool('pencil'));
+      pickerTool.addEventListener('click', () => setTool('picker'));
+      eraserTool.addEventListener('click', () => setTool('eraser'));
+      transformTool.addEventListener('click', () => setTool('transform'));
+      liquifyTool.addEventListener('click', () => setTool('liquify'));
+      [liquifySize, liquifyHardness, liquifyStrength].forEach((control) => {
+        control.addEventListener('input', () => {
+          updateLiquifyControlLabels();
+        });
+      });
+      undoButton.addEventListener('click', undo);
+      redoButton.addEventListener('click', redo);
+      clearButton.addEventListener('click', clearSprite);
+
+      spriteCanvas.addEventListener('pointerdown', (event) => {
+        if (currentTool === 'transform' && sourceImage) {
+          beginTransformPan(event);
+          return;
+        }
+        if (currentTool === 'liquify' && sourceImage) {
+          beginLiquifyGesture(event);
+          return;
+        }
+
+        event.preventDefault();
+        spriteCanvas.setPointerCapture(event.pointerId);
+        paintBeforeState = snapshotState();
+        isDrawing = true;
+        lastPaintedIndex = -1;
+        paintAt(event, event.button === 2);
+      });
+
+      spriteCanvas.addEventListener('pointermove', (event) => {
+        updateCursorInfo(event);
+        if (currentTool === 'liquify') updateLiquifyCursor(event);
+        if (activeTransformGesture) {
+          moveTransformGesture(event);
+        } else if (activeLiquifyGesture) {
+          moveLiquifyGesture(event);
+        } else if (isDrawing && (event.buttons & 1)) {
+          paintAt(event);
+        }
+      });
+
+      spriteCanvas.addEventListener('pointerup', (event) => {
+        if (activeTransformGesture) {
+          endTransformGesture(event);
+          return;
+        }
+        if (activeLiquifyGesture) {
+          endLiquifyGesture(event);
+          return;
+        }
+        if (spriteCanvas.hasPointerCapture(event.pointerId)) spriteCanvas.releasePointerCapture(event.pointerId);
+        if (isDrawing && paintBeforeState) pushHistory(paintBeforeState);
+        paintBeforeState = null;
+        isDrawing = false;
+        lastPaintedIndex = -1;
+      });
+
+      spriteCanvas.addEventListener('pointercancel', (event) => {
+        if (activeTransformGesture) endTransformGesture(event);
+        if (activeLiquifyGesture) endLiquifyGesture(event);
+        isDrawing = false;
+        lastPaintedIndex = -1;
+        paintBeforeState = null;
+      });
+
+      spriteCanvas.addEventListener('pointerleave', () => {
+        if (!isDrawing && !activeTransformGesture && !activeLiquifyGesture) cursorInfo.textContent = 'Pixel: —';
+        if (!activeLiquifyGesture) liquifyCursor.classList.remove('visible');
+      });
+
+      spriteCanvas.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        if (currentTool === 'transform' || currentTool === 'liquify') return;
+        const pixel = getPixelFromEvent(event);
+        if (!pixel) return;
+        const before = snapshotState();
+        writePixel(pixel.x, pixel.y, { r: 0, g: 0, b: 0, a: 0 });
+        pushHistory(before);
+        markCanvasUsed();
+      });
+
+      document.querySelectorAll('.transform-handle').forEach((handle) => {
+        handle.addEventListener('pointerdown', (event) => beginTransformResize(event, handle, handle.dataset.dir));
+        handle.addEventListener('pointermove', moveTransformGesture);
+        handle.addEventListener('pointerup', endTransformGesture);
+        handle.addEventListener('pointercancel', endTransformGesture);
+      });
+
+      widthInput.addEventListener('change', applyDimensionInputs);
+      heightInput.addEventListener('change', applyDimensionInputs);
+      [widthInput, heightInput].forEach((input) => {
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            applyDimensionInputs();
+            input.blur();
+          }
+        });
+      });
+
+      scaleInput.addEventListener('input', () => setScale(scaleInput.value));
+      document.querySelectorAll('[data-scale]').forEach((button) => {
+        button.addEventListener('click', () => setScale(button.dataset.scale));
+      });
+
+      gridButton.addEventListener('click', () => {
+        gridVisible = !gridVisible;
+        gridButton.classList.toggle('active', gridVisible);
+        gridButton.textContent = gridVisible ? 'Grid on' : 'Grid off';
+        gridOverlay.classList.toggle('hidden', !gridVisible || getEditorScale() < 4);
+      });
+
+      downloadButton.addEventListener('click', downloadPng);
+      copyButton.addEventListener('click', copyPng);
+
+      window.addEventListener('pointermove', (event) => {
+        if (activeTransformGesture) moveTransformGesture(event);
+        if (activeLiquifyGesture) moveLiquifyGesture(event);
+      });
+
+      window.addEventListener('pointerup', (event) => {
+        if (activeTransformGesture) endTransformGesture(event);
+        if (activeLiquifyGesture) endLiquifyGesture(event);
+      });
+
+      window.addEventListener('keydown', (event) => {
+        const mod = event.ctrlKey || event.metaKey;
+        if (mod && event.key.toLowerCase() === 'z') {
+          event.preventDefault();
+          event.shiftKey ? redo() : undo();
+        } else if (mod && event.key.toLowerCase() === 'y') {
+          event.preventDefault();
+          redo();
+        } else if (event.key.toLowerCase() === 'b') {
+          setTool('pencil');
+        } else if (event.key.toLowerCase() === 'i') {
+          setTool('picker');
+        } else if (event.key.toLowerCase() === 'e') {
+          setTool('eraser');
+        } else if (event.key.toLowerCase() === 't') {
+          setTool('transform');
+        } else if (event.key.toLowerCase() === 'l') {
+          setTool('liquify');
+        }
+      });
+
+      updateLiquifyControlLabels();
+      updateLayout();
+      updateTransformVisual();
+      updateHistoryButtons();
+    })();
+  </script>
+</body>
+</html>
