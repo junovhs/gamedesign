@@ -1,4 +1,4 @@
 * text=auto eol=lf
-*.vox binary
-*.gox binary
 *.png binary
+*.ishoo binary
+.ishoo/** binary

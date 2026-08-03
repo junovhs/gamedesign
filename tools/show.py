@@ -19,11 +19,8 @@ import subprocess
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-import manifest
-
-RENDERS = os.path.join(manifest.ROOT, "renders")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RENDERS = os.path.join(ROOT, "renders")
 BG = "#0f1115"
 PANEL = "#1a1c22"
 
@@ -31,7 +28,10 @@ PANEL = "#1a1c22"
 def _label(path, caption, workdir, index):
     """One panel: the image, bordered, with its caption underneath."""
     out = os.path.join(workdir, f"panel{index}.png")
-    cmd = ["convert", path, "-resize", "900x900>", "-bordercolor", PANEL, "-border", "6"]
+    # Point filter, and a cap high enough that a 2x pixel-art render is never
+    # touched — any resampling of pixel art makes it impossible to judge.
+    cmd = ["convert", path, "-filter", "point", "-resize", "1000x1000>",
+           "-bordercolor", PANEL, "-border", "6"]
     if caption:
         cmd += [
             "-background", PANEL, "-fill", "white", "-pointsize", "22",
@@ -101,7 +101,7 @@ def main(argv):
         stderr=subprocess.DEVNULL,
         env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":1")},
     )
-    print(f"showing {len(items)} image(s) -> {os.path.relpath(final, manifest.ROOT)}")
+    print(f"showing {len(items)} image(s) -> {os.path.relpath(final, ROOT)}")
 
 
 if __name__ == "__main__":

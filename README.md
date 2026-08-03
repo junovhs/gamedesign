@@ -1,20 +1,19 @@
 # Grapeghost
 
-Top-down orthographic social stealth. Voxel art, 640 x 360, one screen per level.
-Godot 4. No engine fork, no royalties, no dependencies beyond goxel, Godot and Python 3.
+Top-down social stealth in 2-D pixel art. One compact, dense neighbourhood; a contract
+killer; the loop is observe, gain access, manipulate routines, create an opening, escape.
+Godot 4. No engine fork, no royalties.
 
 **Read [`docs/PLAN.md`](docs/PLAN.md) first.** It says what phase we are in and what is
-frozen. Then [`docs/SCALE.md`](docs/SCALE.md), which is the numbers everything obeys.
+frozen. Then [`docs/SCALE.md`](docs/SCALE.md), which is the numbers everything obeys, and
+`ishoo status` for the decisions that govern the work.
 
-## Start working
+## How art gets made
 
-```
-make task     # your next job, fully specified
-make build    # verify and export everything you have authored
-make lab      # look at it at the real camera and resolution
-```
-
-`make help` lists the rest.
+Juno prompts an image generator for a character, drops the result into our own sprite
+editor, and works it into real pixel art — fit to the grid, snapped to a 16-colour palette,
+then transformed, liquified and painted. **A generation is reference; the pixels that ship
+are authored in the editor.** Goxel and Aseprite are retired.
 
 ## Where things are
 
@@ -22,18 +21,18 @@ make lab      # look at it at the real camera and resolution
 |---|---|
 | `docs/PLAN.md` | current phase, what is frozen, what comes next |
 | `docs/SCALE.md` | every dimension in the game. the authority. |
-| `docs/PIPELINE.md` | goxel → glTF → Godot, and what does not work |
 | `docs/concept/` | the source brief and the reference mockup |
 | `reference/` | the original browser prototype, kept for tone |
-| `art/assets.json` | every asset, its size, its brief — source of truth |
-| `art/palette.json` | 32 colours, the whole game |
-| `art/templates/` | generated goxel starting files (do not edit by hand) |
-| `art/src/` | your authored `.vox` files |
-| `tools/` | the pipeline |
+| `image-to-sprite-editor-liquify-v2.html` | the sprite editor, until TOOL-03 makes it a real app |
+| `tools/show.py` | put a picture on Juno's screen |
 | `game/` | the Godot project |
 
 ## History
 
-This repo was a testing ground before this pivot. Everything from before lives on the
-`archive/downshaft-and-earlier` branch and the `archive/pre-pivot-2026-08-02` tag. None of
-it is current; do not mine it for design decisions.
+This repo was a testing ground before the pivot to Grapeghost. Everything from before lives
+on the `archive/downshaft-and-earlier` branch and the `archive/pre-pivot-2026-08-02` tag,
+and the pre-pivot issue store is archived at `refs/ishoo-archive/downshaft`. None of it is
+current; do not mine it for design decisions.
+
+The voxel pipeline — goxel, `.vox` sources, glTF export — was retired on 2026-08-02 and is
+recoverable from history before commit `c4a83e3`.
